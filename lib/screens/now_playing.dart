@@ -13,6 +13,7 @@ import '../services/youtube/youtube_web_player.dart';
 import '../theme.dart';
 import '../utils/cover_color.dart';
 import '../widgets/add_to_playlist.dart';
+import '../widgets/download_sheet.dart';
 import '../widgets/covers.dart';
 import '../widgets/tag_sheet.dart';
 import '../widgets/track_swiper.dart';
@@ -604,6 +605,15 @@ void _showMore(BuildContext context, Track track) {
                 onTap: () {
                   Navigator.of(sheet).pop();
                   showTagSheet(context, track);
+                },
+              ),
+            if (track is YouTubeTrack)
+              ListTile(
+                leading: const Icon(Icons.download_rounded),
+                title: const Text('Download'),
+                onTap: () {
+                  Navigator.of(sheet).pop();
+                  downloadWithPicker(context, track);
                 },
               ),
             ListTile(

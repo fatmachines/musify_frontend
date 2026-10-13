@@ -7,6 +7,7 @@ import '../services/player_service.dart';
 import '../theme.dart';
 import 'add_to_playlist.dart';
 import 'covers.dart';
+import 'download_sheet.dart';
 import 'tag_sheet.dart';
 import 'toast.dart';
 
@@ -100,6 +101,13 @@ Future<void> showSongMenu(
                   leading: const Icon(Icons.sell_outlined),
                   title: const Text('Tag'),
                   onTap: () => then(() => showTagSheet(context, track)),
+                ),
+              if (track is YouTubeTrack)
+                ListTile(
+                  leading: const Icon(Icons.download_rounded),
+                  title: const Text('Download'),
+                  subtitle: const Text('Save to a folder on this phone'),
+                  onTap: () => then(() => downloadWithPicker(context, track)),
                 ),
               if (from != null && from.isCustom)
                 ListTile(
