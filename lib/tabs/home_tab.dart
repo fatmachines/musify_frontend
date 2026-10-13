@@ -11,8 +11,8 @@ import '../widgets/playlist_actions.dart';
 import '../widgets/server_key_dialog.dart';
 
 /// Spotify's home: a greeting, the playlists and folders pinned here as
-/// tiles (two to a row, one tap away), then YouTube's charts and what's
-/// trending, from Musify's server.
+/// tiles (two to a row, one tap away), then YouTube Music's charts as a
+/// grid, from Musify's server.
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
 
@@ -215,58 +215,26 @@ extension on _HomeTabState {
       ];
     }
     // Where the user is (India), else the first chart.
-    final trending =
-        charts.where((c) => _region(c) == 'India').firstOrNull ??
-        charts.firstOrNull;
     return [
       const _SectionTitle('Charts'),
-      SliverToBoxAdapter(
-        child: SizedBox(
-          height: 196,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: charts.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 14),
-            itemBuilder: (context, i) => _ChartCard(
-              chart: charts[i],
-              color: _chartColors[i % _chartColors.length],
-              onTap: () => _open(charts[i]),
-            ),
+      SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        sliver: SliverGrid.builder(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            mainAxisSpacing: 16,
+            crossAxisSpacing: 14,
+            // A square card and a line of text under it.
+            childAspectRatio: 0.84,
+          ),
+          itemCount: charts.length,
+          itemBuilder: (context, i) => _ChartCard(
+            chart: charts[i],
+            color: _chartColors[i % _chartColors.length],
+            onTap: () => _open(charts[i]),
           ),
         ),
       ),
-      if (trending != null && trending.tracks.isNotEmpty) ...[
-        _SectionTitle('Trending in ${_region(trending)}'),
-        SliverToBoxAdapter(
-          child: SizedBox(
-            height: 196,
-            child: StreamBuilder(
-              // The playing song's title turns green.
-              stream: PlayerService.instance.player.sequenceStateStream,
-              builder: (context, _) => ListView.separated(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: trending.tracks.length.clamp(0, 20),
-                separatorBuilder: (_, _) => const SizedBox(width: 14),
-                itemBuilder: (context, i) {
-                  final track = trending.tracks[i];
-                  return _SongCard(
-                    track: track,
-                    current:
-                        PlayerService.instance.currentTrack?.path == track.path,
-                    onTap: () => PlayerService.instance.play(
-                      trending,
-                      shuffle: false,
-                      startIndex: i,
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-        ),
-      ],
     ];
   }
 }
@@ -291,7 +259,7 @@ class _SectionTitle extends StatelessWidget {
 }
 
 /// A chart: a coloured square with "Top 100" and the region, the first
-/// song's cover in the corner, and the chart's name under it.
+/// song's cover in the corner, and how many songs under it.
 class _ChartCard extends StatelessWidget {
   final Playlist chart;
   final Color color;
@@ -309,14 +277,13 @@ class _ChartCard extends StatelessWidget {
     final first = chart.tracks.firstOrNull;
     return GestureDetector(
       onTap: onTap,
-      child: SizedBox(
-        width: 150,
-        child: Column(
+      child: LayoutBuilder(
+        builder: (context, box) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              width: 150,
-              height: 150,
+              width: box.maxWidth,
+              height: box.maxWidth,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
@@ -334,7 +301,10 @@ class _ChartCard extends StatelessWidget {
                       bottom: -12,
                       child: Opacity(
                         opacity: 0.9,
-                        child: TrackCover(track: first, size: 76),
+                        child: TrackCover(
+                          track: first,
+                          size: box.maxWidth * 0.5,
+                        ),
                       ),
                     ),
                   Padding(
@@ -366,56 +336,9 @@ class _ChartCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
+            // The card names the chart already.
             Text(
-              chart.name,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: AppColors.subtle, fontSize: 13),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// A song in a shelf: its cover, title and channel.
-class _SongCard extends StatelessWidget {
-  final Track track;
-  final bool current;
-  final VoidCallback onTap;
-
-  const _SongCard({
-    required this.track,
-    required this.current,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final youtube = track is YouTubeTrack ? track as YouTubeTrack : null;
-    return GestureDetector(
-      onTap: onTap,
-      child: SizedBox(
-        width: 140,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TrackCover(track: track, size: 140),
-            const SizedBox(height: 8),
-            Text(
-              youtube?.name ?? track.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: current ? AppColors.green : AppColors.text,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              youtube?.channel ?? '',
+              '${chart.tracks.length} songs',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(color: AppColors.subtle, fontSize: 13),
