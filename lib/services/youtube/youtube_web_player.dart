@@ -46,17 +46,27 @@ class YouTubeWebPlayer {
   Duration _lastVideoTime = Duration.zero;
   DateTime _ignoreSeeksUntil = DateTime.fromMillisecondsSinceEpoch(0);
 
-  /// When the video last played on (or showed an ad), and when it was last
-  /// loaded: how a stall is noticed.
+  /// When the video's clock (or an ad's) last moved on, and to what; and
+  /// when it was last loaded: how a stall is noticed.
   DateTime _lastProgress = DateTime.now();
+  Duration _progressTime = Duration.zero;
   DateTime _lastLoad = DateTime.now();
   DateTime? _lastTick;
   bool _videoPlaying = false;
 
+  /// Whether this stall was already met with a pause-and-play.
+  bool _kicked = false;
+
+  /// Ticks still to log after coming back on screen.
+  int _logTicks = 0;
+  DateTime _lastPlayFailLog = DateTime.fromMillisecondsSinceEpoch(0);
+
   /// How far the current video has loaded ahead, for the seek bar.
   final buffered = ValueNotifier<Duration>(Duration.zero);
 
-  /// A song playing whose video hasn't moved for this long gets reloaded.
+  /// A song playing whose video hasn't moved for [_kickAfter] gets paused
+  /// and played again; after [_stallLimit], reloaded.
+  static const _kickAfter = Duration(seconds: 3);
   static const _stallLimit = Duration(seconds: 8);
 
   WebViewController get controller => _controller ??= _create();
@@ -117,7 +127,7 @@ class YouTubeWebPlayer {
         player.playingStream.listen((playing) {
           if (_current == null) return;
           // Give the video a moment to start before calling it stalled.
-          if (playing) _lastProgress = DateTime.now();
+          if (playing) _markProgress(_lastVideoTime);
           AppLog.add('youtube web: ${playing ? 'play' : 'pause'}');
           _command(playing ? 'play' : 'pause');
         }),
@@ -138,21 +148,34 @@ class YouTubeWebPlayer {
       onResume: () {
         if (_current == null || !_player.playing) return;
         AppLog.add('youtube web: back on screen');
+        _logTicks = 4;
         _command('play');
         Future.delayed(
-          const Duration(seconds: 3),
-          () => _check(limit: const Duration(seconds: 3)),
+          const Duration(seconds: 4),
+          () => _check(limit: const Duration(seconds: 4)),
         );
       },
     );
   }
 
-  /// Reloads the video if the song is playing but the video hasn't moved
-  /// for [limit].
+  void _markProgress(Duration time) {
+    _lastProgress = DateTime.now();
+    _progressTime = time;
+    _kicked = false;
+  }
+
+  /// Pauses and plays the video, then reloads it, if the song is playing
+  /// but the video hasn't moved for a while.
   void _check({Duration limit = _stallLimit}) {
     if (_current == null || !_player.playing) return;
     final now = DateTime.now();
-    if (now.difference(_lastProgress) < limit) return;
+    final still = now.difference(_lastProgress);
+    if (still >= _kickAfter && !_kicked) {
+      _kicked = true;
+      AppLog.add('youtube web: video still for ${still.inSeconds}s, kicking');
+      _command('kick');
+    }
+    if (still < limit) return;
     if (now.difference(_lastLoad) < limit * 2) return;
     final tick = _lastTick;
     _reload(
@@ -194,7 +217,8 @@ class YouTubeWebPlayer {
     _lastTick = null;
     _videoPlaying = false;
     buffered.value = Duration.zero;
-    _lastLoad = _lastProgress = DateTime.now();
+    _lastLoad = DateTime.now();
+    _markProgress(from);
     controller.loadRequest(
       Uri.parse('https://m.youtube.com/watch?v=${track.videoId}'),
     );
@@ -230,11 +254,18 @@ class YouTubeWebPlayer {
         final time = Duration(
           milliseconds: (((data['t'] as num?) ?? 0) * 1000).round(),
         );
-        final now = DateTime.now();
-        _lastTick = now;
+        _lastTick = DateTime.now();
         _videoPlaying = data['p'] == true;
-        if (ad || (_videoPlaying && time != _lastVideoTime)) {
-          _lastProgress = now;
+        // Moved on by more than jitter: an ad running counts too.
+        if ((time - _progressTime).abs() >= const Duration(milliseconds: 250)) {
+          _markProgress(time);
+        }
+        if (_logTicks > 0) {
+          _logTicks--;
+          AppLog.add(
+            'youtube web: tick t=${data['t']} playing=${data['p']} '
+            'ad=$ad ready=${data['r']} net=${data['n']} err=${data['x']}',
+          );
         }
         if (ad) {
           // Hold the stand-in where the song was while the ad runs.
@@ -254,6 +285,14 @@ class YouTubeWebPlayer {
         }
       case 'paused':
         AppLog.add('youtube web: video paused itself, resuming');
+      case 'playfail':
+        final now = DateTime.now();
+        if (now.difference(_lastPlayFailLog) > const Duration(seconds: 5)) {
+          _lastPlayFailLog = now;
+          AppLog.add('youtube web: video refused to play: ${data['m']}');
+        }
+      case 'media':
+        AppLog.add('youtube web: video ${data['m']}');
       case 'ended':
         AppLog.add('youtube web: ${track.videoId} ended');
         if (_player.loopMode == LoopMode.one) {
@@ -292,9 +331,15 @@ class YouTubeWebPlayer {
     return !!(p && p.classList.contains('ad-showing'));
   };
 
+  const play = v => v.play().catch(e => send({ e: 'playfail', m: String(e) }));
+
   window.__musifyCmd = (cmd, arg) => {
     const v = video();
-    if (cmd === 'play') { want = 'play'; if (v) v.play().catch(() => {}); }
+    if (cmd === 'play') { want = 'play'; if (v) play(v); }
+    else if (cmd === 'kick') {
+      want = 'play';
+      if (v) { v.pause(); setTimeout(() => play(v), 250); }
+    }
     else if (cmd === 'pause') { want = 'pause'; if (v) v.pause(); }
     else if (cmd === 'seek') {
       if (ready(v)) v.currentTime = arg; else seekTo = arg;
@@ -308,17 +353,20 @@ class YouTubeWebPlayer {
     if (hooked !== v) {
       hooked = v;
       v.addEventListener('ended', () => { if (!isAd()) send({ e: 'ended' }); });
+      for (const name of ['stalled', 'error', 'emptied']) {
+        v.addEventListener(name, () => send({ e: 'media', m: name }));
+      }
       // The system pauses video when the app leaves the screen: resume.
       v.addEventListener('pause', () => {
         if (want === 'play' && !v.ended && !isAd()) {
           send({ e: 'paused' });
-          setTimeout(() => v.play().catch(() => {}), 300);
+          setTimeout(() => play(v), 300);
         }
       });
     }
     if (want === 'play') {
       if (v.muted) v.muted = false;
-      if (v.paused && !v.ended) v.play().catch(() => {});
+      if (v.paused && !v.ended) play(v);
     }
     const skip = document.querySelector(
       '.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button');
@@ -334,7 +382,10 @@ class YouTubeWebPlayer {
     for (let i = 0; i < v.buffered.length; i++) {
       if (v.buffered.start(i) <= v.currentTime + 1) b = Math.max(b, v.buffered.end(i));
     }
-    send({ e: 'tick', t: v.currentTime, d: v.duration || 0, b, p: !v.paused, ad: isAd() });
+    send({
+      e: 'tick', t: v.currentTime, d: v.duration || 0, b, p: !v.paused, ad: isAd(),
+      r: v.readyState, n: v.networkState, x: v.error ? v.error.code : null,
+    });
   }, 500);
 })();
 ''';
