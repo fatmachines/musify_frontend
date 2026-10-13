@@ -143,7 +143,9 @@ class _Body extends StatelessWidget {
           // Like sits between the cover and the title.
           Align(
             alignment: Alignment.centerRight,
-            child: _LikeButton(track: track),
+            child: track is YouTubeTrack
+                ? const SizedBox(width: 48, height: 44)
+                : _LikeButton(track: track),
           ),
           Row(
             children: [
@@ -523,7 +525,11 @@ Future<void> _share(BuildContext context, Track track) async {
   try {
     await SharePlus.instance.share(
       ShareParams(
-        files: [XFile(track.path)],
+        // A YouTube song is shared as its link.
+        uri: track is YouTubeTrack
+            ? Uri.parse('https://youtu.be/${track.videoId}')
+            : null,
+        files: track is YouTubeTrack ? null : [XFile(track.path)],
         // iPad anchors the share popover here.
         sharePositionOrigin: box == null
             ? null
@@ -566,22 +572,24 @@ void _showMore(BuildContext context, Track track) {
           children: [
             _sheetHeader(track),
             const Divider(color: Colors.white12, height: 16),
-            ListTile(
-              leading: const Icon(Icons.add_circle_outline),
-              title: const Text('Add to playlist'),
-              onTap: () {
-                Navigator.of(sheet).pop();
-                showAddToPlaylist(context, track);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.sell_outlined),
-              title: const Text('Tag'),
-              onTap: () {
-                Navigator.of(sheet).pop();
-                showTagSheet(context, track);
-              },
-            ),
+            if (track is! YouTubeTrack) ...[
+              ListTile(
+                leading: const Icon(Icons.add_circle_outline),
+                title: const Text('Add to playlist'),
+                onTap: () {
+                  Navigator.of(sheet).pop();
+                  showAddToPlaylist(context, track);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.sell_outlined),
+                title: const Text('Tag'),
+                onTap: () {
+                  Navigator.of(sheet).pop();
+                  showTagSheet(context, track);
+                },
+              ),
+            ],
             ListTile(
               leading: const Icon(Icons.ios_share),
               title: const Text('Share'),

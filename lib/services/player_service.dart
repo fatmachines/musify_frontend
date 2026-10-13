@@ -9,7 +9,6 @@ import '../models/playlist.dart';
 import 'app_log.dart';
 import 'equalizer_service.dart';
 import 'library.dart';
-import 'youtube/youtube_media.dart';
 
 /// An active sleep timer: either a time to stop at, or the end of the
 /// current song.
@@ -112,9 +111,24 @@ class PlayerService {
     return tag is Track ? tag : null;
   }
 
-  static AudioSource _source(Track track) => track is YouTubeTrack
-      ? YouTubeAudioSource(track)
-      : AudioSource.file(track.path, tag: track);
+  /// A YouTube song is a silent stand-in of its length (plus a moment, so
+  /// it's the video's own end that moves on); YouTubeWebPlayer plays the
+  /// real thing.
+  static AudioSource _source(Track track) {
+    if (track is! YouTubeTrack) return AudioSource.file(track.path, tag: track);
+    final length =
+        (track.length ?? const Duration(minutes: 10)) +
+        const Duration(seconds: 2);
+    return ClippingAudioSource(
+      child: AudioSource.asset('assets/audio/silence.m4a'),
+      start: Duration.zero,
+      // The silent file is two hours long.
+      end: length > const Duration(hours: 2)
+          ? const Duration(hours: 2)
+          : length,
+      tag: track,
+    );
+  }
 
   /// Songs queued after the current one, in the order they will play.
   List<QueuedTrack> get upcomingQueue {
@@ -190,6 +204,14 @@ class PlayerService {
     );
     return true;
   }
+
+  /// Plays YouTube search results from [index], carrying on through the
+  /// rest of them.
+  Future<void> playYouTube(List<YouTubeTrack> results, int index) => play(
+    Playlist(id: 'youtube:search', name: 'YouTube', tracks: results),
+    shuffle: false,
+    startIndex: index,
+  );
 
   /// Reorders the rest of the playlist, shuffled or back in playlist order,
   /// without interrupting the current song or the queue after it.

@@ -23,6 +23,8 @@ Future<void> showSongMenu(
   final player = PlayerService.instance;
   final info = MetadataService.cachedInfo(track);
   final liked = library.isLiked(track);
+  // YouTube songs aren't in the library: no liking, tagging or playlists.
+  final youtube = track is YouTubeTrack;
   return showModalBottomSheet<void>(
     context: context,
     useRootNavigator: true,
@@ -48,7 +50,11 @@ Future<void> showSongMenu(
                   overflow: TextOverflow.ellipsis,
                 ),
                 subtitle: Text(
-                  [info?.artist, info?.album].whereType<String>().join(' • '),
+                  [
+                    if (youtube) 'YouTube',
+                    info?.artist,
+                    info?.album,
+                  ].whereType<String>().join(' • '),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -76,24 +82,26 @@ Future<void> showSongMenu(
                   showToast(context, 'Added to queue');
                 }),
               ),
-              ListTile(
-                leading: Icon(
-                  liked ? Icons.favorite : Icons.favorite_border,
-                  color: liked ? AppColors.green : null,
+              if (!youtube) ...[
+                ListTile(
+                  leading: Icon(
+                    liked ? Icons.favorite : Icons.favorite_border,
+                    color: liked ? AppColors.green : null,
+                  ),
+                  title: Text(liked ? 'Remove from Liked Songs' : 'Like'),
+                  onTap: () => then(() => library.toggleLike(track)),
                 ),
-                title: Text(liked ? 'Remove from Liked Songs' : 'Like'),
-                onTap: () => then(() => library.toggleLike(track)),
-              ),
-              ListTile(
-                leading: const Icon(Icons.add_circle_outline),
-                title: const Text('Add to playlist'),
-                onTap: () => then(() => showAddToPlaylist(context, track)),
-              ),
-              ListTile(
-                leading: const Icon(Icons.sell_outlined),
-                title: const Text('Tag'),
-                onTap: () => then(() => showTagSheet(context, track)),
-              ),
+                ListTile(
+                  leading: const Icon(Icons.add_circle_outline),
+                  title: const Text('Add to playlist'),
+                  onTap: () => then(() => showAddToPlaylist(context, track)),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.sell_outlined),
+                  title: const Text('Tag'),
+                  onTap: () => then(() => showTagSheet(context, track)),
+                ),
+              ],
               if (from != null && from.isCustom)
                 ListTile(
                   leading: const Icon(Icons.remove_circle_outline),
@@ -103,15 +111,16 @@ Future<void> showSongMenu(
                     showToast(context, 'Removed from ${from.name}');
                   }),
                 ),
-              ListTile(
-                leading: const Icon(Icons.insert_drive_file_outlined),
-                title: const Text('File'),
-                subtitle: Text(
-                  '${track.title}.${track.extension.toLowerCase()}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+              if (!youtube)
+                ListTile(
+                  leading: const Icon(Icons.insert_drive_file_outlined),
+                  title: const Text('File'),
+                  subtitle: Text(
+                    '${track.title}.${track.extension.toLowerCase()}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
             ],
           ),
         ),

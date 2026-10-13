@@ -58,6 +58,7 @@ class SongTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final info = MetadataService.cachedInfo(track);
+    final youtube = track is YouTubeTrack;
     final firstTag = Library.instance.tags.firstOrNull;
     return SwipeActions(
       rightIcon: Icons.queue_music,
@@ -67,7 +68,8 @@ class SongTile extends StatelessWidget {
       },
       leftIcon: Icons.sell_outlined,
       leftColor: firstTag?.color ?? AppColors.subtle,
-      onSwipeLeft: () => _quickTag(context),
+      // YouTube songs aren't in the library, so they can't be tagged.
+      onSwipeLeft: youtube ? null : () => _quickTag(context),
       child: InkWell(
         onTap: onTap,
         child: Padding(
@@ -100,8 +102,12 @@ class SongTile extends StatelessWidget {
                           ),
                           const SizedBox(width: 4),
                         ],
-                        TagDots(track: track),
-                        const OfflineBadge(),
+                        if (youtube)
+                          const YouTubeBadge()
+                        else ...[
+                          TagDots(track: track),
+                          const OfflineBadge(),
+                        ],
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(

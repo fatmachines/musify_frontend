@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import '../services/library.dart';
 import '../services/library_search.dart';
 import '../services/metadata_service.dart';
 import '../services/player_service.dart';
+import '../services/youtube/youtube_media.dart';
 import '../theme.dart';
 import '../widgets/covers.dart';
 import '../widgets/song_menu.dart';
@@ -32,7 +34,8 @@ const _cardColors = [
 final searchFocusRequests = ValueNotifier<int>(0);
 
 /// Finds songs (by title, artist, album or file name) and playlists across
-/// every added folder. Before typing it shows the library as cards.
+/// every added folder, then songs on YouTube. Before typing it shows the
+/// library as cards.
 class SearchTab extends StatefulWidget {
   const SearchTab({super.key});
 
@@ -50,11 +53,20 @@ class _SearchTabState extends State<SearchTab> {
   /// drop the keyboard.
   final _fieldKey = GlobalKey();
 
+  /// YouTube results, fetched once typing pauses.
+  Timer? _youtubeSoon;
+  String _youtubeQuery = '';
+  List<YouTubeTrack>? _youtube;
+  bool _youtubeFailed = false;
+
   @override
   void initState() {
     super.initState();
     _library.addListener(_onLibraryChanged);
-    _query.addListener(() => setState(() {}));
+    _query.addListener(() {
+      setState(() {});
+      _searchYouTubeSoon();
+    });
     _focus.addListener(() => setState(() {}));
     _library.ensureLoaded().then((_) => _onLibraryChanged());
     searchFocusRequests.addListener(_focus.requestFocus);
@@ -64,6 +76,7 @@ class _SearchTabState extends State<SearchTab> {
   void dispose() {
     _library.removeListener(_onLibraryChanged);
     searchFocusRequests.removeListener(_focus.requestFocus);
+    _youtubeSoon?.cancel();
     _query.dispose();
     _focus.dispose();
     super.dispose();
@@ -75,6 +88,26 @@ class _SearchTabState extends State<SearchTab> {
     setState(() {});
     MetadataService.loadInfo(_library.allSongs).then((_) {
       if (mounted) setState(() {});
+    });
+  }
+
+  void _searchYouTubeSoon() {
+    final query = LibrarySearch.words(_query.text).join(' ');
+    if (query == _youtubeQuery) return;
+    _youtubeSoon?.cancel();
+    _youtubeQuery = query;
+    _youtube = null;
+    _youtubeFailed = false;
+    if (query.isEmpty) return;
+    _youtubeSoon = Timer(const Duration(milliseconds: 500), () async {
+      try {
+        final results = await YouTubeMedia.instance.search(query);
+        if (!mounted || query != _youtubeQuery) return;
+        setState(() => _youtube = results);
+      } catch (e) {
+        if (!mounted || query != _youtubeQuery) return;
+        setState(() => _youtubeFailed = true);
+      }
     });
   }
 
@@ -227,17 +260,25 @@ class _SearchTabState extends State<SearchTab> {
     if (LibrarySearch.words(_query.text).isEmpty) {
       return const _Hint(
         title: 'Search your music',
-        message: 'Find songs by title, artist or album in all your folders.',
+        message: 'Find songs by title, artist or album in your folders and on YouTube.',
       );
     }
     final playlists = LibrarySearch.playlists(_query.text);
     final songs = LibrarySearch.songs(_query.text);
-    if (playlists.isEmpty && songs.isEmpty) {
+    final youtube = _youtube;
+    final searching = youtube == null && !_youtubeFailed;
+    if (playlists.isEmpty &&
+        songs.isEmpty &&
+        !searching &&
+        (youtube?.isEmpty ?? true)) {
       return _Hint(
         title: "Couldn't find \"${_query.text.trim()}\"",
-        message: 'Try different words, or check the spelling.',
+        message: _youtubeFailed
+            ? "Try different words. YouTube couldn't be reached."
+            : 'Try different words, or check the spelling.',
       );
     }
+    final local = playlists.length + songs.length;
     final player = PlayerService.instance;
     return StreamBuilder(
       // Rebuilds rows when the playing song changes.
@@ -247,8 +288,30 @@ class _SearchTabState extends State<SearchTab> {
         padding: EdgeInsets.only(
           bottom: MediaQuery.paddingOf(context).bottom + 16,
         ),
-        itemCount: playlists.length + songs.length,
+        // Your music, then a "YouTube" heading and what YouTube found.
+        itemCount: local + 1 + (youtube?.length ?? 0),
         itemBuilder: (context, i) {
+          if (i == local) {
+            return _YouTubeHeading(
+              searching: searching,
+              failed: _youtubeFailed,
+              empty: youtube?.isEmpty ?? false,
+            );
+          }
+          if (i > local) {
+            final index = i - local - 1;
+            final track = youtube![index];
+            final current = player.currentTrack?.path == track.path;
+            void play() => player.playYouTube(youtube, index);
+            return SongTile(
+              track: track,
+              subtitlePrefix: 'Song • ',
+              current: current,
+              playing: current && player.player.playing,
+              onTap: play,
+              onMore: () => showSongMenu(context, track, onPlay: play),
+            );
+          }
           if (i < playlists.length) {
             return _PlaylistRow(
               playlist: playlists[i],
@@ -466,6 +529,52 @@ class _LikeToggle extends StatelessWidget {
       icon: Icon(
         liked ? Icons.check_circle : Icons.add_circle_outline,
         color: liked ? AppColors.green : AppColors.subtle,
+      ),
+    );
+  }
+}
+
+class _YouTubeHeading extends StatelessWidget {
+  final bool searching;
+  final bool failed;
+  final bool empty;
+
+  const _YouTubeHeading({
+    required this.searching,
+    required this.failed,
+    required this.empty,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final note = failed
+        ? "Couldn't reach YouTube"
+        : empty
+        ? 'Nothing found'
+        : null;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+      child: Row(
+        children: [
+          const Text(
+            'YouTube',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(width: 12),
+          if (searching)
+            const SizedBox.square(
+              dimension: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.subtle,
+              ),
+            )
+          else if (note != null)
+            Text(
+              note,
+              style: const TextStyle(color: AppColors.subtle, fontSize: 14),
+            ),
+        ],
       ),
     );
   }

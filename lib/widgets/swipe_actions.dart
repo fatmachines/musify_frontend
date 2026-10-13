@@ -13,10 +13,11 @@ class SwipeActions extends StatefulWidget {
   final IconData rightIcon;
   final VoidCallback onSwipeRight;
 
-  /// Swiping left (right to left).
+  /// Swiping left (right to left). Without [onSwipeLeft], the row only
+  /// swipes right.
   final IconData leftIcon;
   final Color leftColor;
-  final VoidCallback onSwipeLeft;
+  final VoidCallback? onSwipeLeft;
 
   const SwipeActions({
     super.key,
@@ -25,7 +26,7 @@ class SwipeActions extends StatefulWidget {
     required this.onSwipeRight,
     required this.leftIcon,
     required this.leftColor,
-    required this.onSwipeLeft,
+    this.onSwipeLeft,
   });
 
   @override
@@ -57,7 +58,10 @@ class _SwipeActionsState extends State<SwipeActions>
     // Past the trigger point the row moves with some resistance.
     final delta = details.primaryDelta ?? 0;
     final damped = _dx.abs() > _trigger ? delta * 0.4 : delta;
-    final dx = (_dx + damped).clamp(-_max, _max);
+    final dx = (_dx + damped).clamp(
+      widget.onSwipeLeft == null ? 0.0 : -_max,
+      _max,
+    );
     final armed = dx.abs() >= _trigger;
     if (armed && !_armed) HapticFeedback.selectionClick();
     setState(() {
@@ -68,7 +72,7 @@ class _SwipeActionsState extends State<SwipeActions>
 
   void _onEnd(DragEndDetails details) {
     if (_armed) {
-      _dx > 0 ? widget.onSwipeRight() : widget.onSwipeLeft();
+      _dx > 0 ? widget.onSwipeRight() : widget.onSwipeLeft?.call();
     }
     _armed = false;
     _from = _dx;

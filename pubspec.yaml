@@ -46,6 +46,9 @@ dependencies:
   path_provider: ^2.1.6
   youtube_explode_dart: ^3.1.0
   http: ^1.6.0
+  webview_flutter: ^4.14.1
+  webview_flutter_android: ^4.14.1
+  webview_flutter_wkwebview: ^3.27.0
 
 # just_audio with Musify's iOS equalizer added (see packages/just_audio).
 dependency_overrides:
@@ -76,6 +79,11 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    # Two hours of silence: the stand-in Musify's player plays for a
+    # YouTube song while YouTube's own player has the sound.
+    - assets/audio/silence.m4a
 
   # Figtree (SIL OFL, see assets/fonts/Figtree-OFL.txt): bundled so the app
   # looks the same offline.
