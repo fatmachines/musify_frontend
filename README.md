@@ -26,8 +26,8 @@ works without it.
 
 ## Build
 
-You need [Flutter](https://docs.flutter.dev/get-started/install) 3.38 or
-newer, and Xcode for iPhone or Android Studio / the Android SDK for Android.
+You need [Flutter](https://docs.flutter.dev/get-started/install) 3.47 or
+newer (Dart 3.13), and Xcode for iPhone or Android Studio / the Android SDK for Android.
 
 ```sh
 git clone https://github.com/fatmachines/musify_frontend.git
