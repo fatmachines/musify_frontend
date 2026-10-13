@@ -9,13 +9,10 @@ import '../services/metadata_service.dart';
 import '../services/player_service.dart';
 import '../theme.dart';
 import '../utils/cover_color.dart';
-import '../widgets/add_to_playlist.dart';
 import '../widgets/covers.dart';
-import '../widgets/offline_badge.dart';
 import '../widgets/playlist_actions.dart';
-import '../widgets/swipe_actions.dart';
-import '../widgets/tag_sheet.dart';
-import '../widgets/toast.dart';
+import '../widgets/song_menu.dart';
+import '../widgets/song_tile.dart';
 
 const _searchDuration = Duration(milliseconds: 220);
 const _findBarHeight = 38.0;
@@ -300,8 +297,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   ),
                 ),
               ),
-              if (_playlist.id == Library.likedId)
-                // Liked Songs can't be renamed or deleted.
+              if (Library.isSystem(_playlist))
+                // Liked Songs and tags can't be renamed or deleted.
                 const SizedBox(width: 48)
               else
                 IconButton(
@@ -531,20 +528,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     );
   }
 
-  /// Swiping a song left toggles the first tag; with no tags yet it opens
-  /// the tag sheet to make one.
-  void _quickTag(Track track) {
-    final library = Library.instance;
-    final tag = library.tags.firstOrNull;
-    if (tag == null) {
-      showTagSheet(context, track);
-      return;
-    }
-    final had = library.hasTag(track, tag);
-    library.toggleTag(track, tag);
-    showToast(context, had ? 'Removed ${tag.name}' : 'Tagged ${tag.name}');
-  }
-
   Widget _buildSearch(BuildContext context) {
     final matches = _matches();
     final query = _query.text.trim();
@@ -632,194 +615,17 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   Widget _buildTrack(int index) {
     final track = _playlist.tracks[index];
-    final info = MetadataService.cachedInfo(track);
-    final isCurrentTrack = _isCurrent && track.path == _currentPath;
-    final firstTag = Library.instance.tags.firstOrNull;
-    return SwipeActions(
-      rightIcon: Icons.queue_music,
-      onSwipeRight: () {
-        _player.addToQueue(track);
-        showToast(context, 'Added to queue');
-      },
-      leftIcon: Icons.sell_outlined,
-      leftColor: firstTag?.color ?? AppColors.subtle,
-      onSwipeLeft: () => _quickTag(track),
-      child: InkWell(
-        onTap: () => _onTrack(index),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
-          child: Row(
-            children: [
-              TrackCover(track: track, size: 52),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      info?.title ?? track.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: isCurrentTrack
-                            ? AppColors.green
-                            : AppColors.text,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        if (isCurrentTrack && _playing) ...[
-                          const Icon(
-                            Icons.graphic_eq,
-                            size: 14,
-                            color: AppColors.green,
-                          ),
-                          const SizedBox(width: 4),
-                        ],
-                        TagDots(track: track),
-                        const OfflineBadge(),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            info?.artist ?? 'Unknown artist',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: AppColors.subtle,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                tooltip: 'More',
-                icon: const Icon(Icons.more_horiz, color: AppColors.subtle),
-                onPressed: () => _showTrackSheet(index),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showTrackSheet(int index) {
-    final track = _playlist.tracks[index];
-    final info = MetadataService.cachedInfo(track);
-    showModalBottomSheet<void>(
-      context: context,
-      useRootNavigator: true,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (sheetContext) => SafeArea(
-        // Sized to its content, scrolling on screens too short for it.
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: TrackCover(track: track, size: 48),
-                title: Text(
-                  info?.title ?? track.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                subtitle: Text(
-                  [info?.artist, info?.album].whereType<String>().join(' • '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const Divider(color: Colors.white12, height: 16),
-              ListTile(
-                leading: const Icon(Icons.play_circle_outline),
-                title: const Text('Play'),
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  _onTrack(index);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.playlist_play),
-                title: const Text('Play next'),
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  _player.playNext(track);
-                  showToast(context, 'Playing next');
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.queue_music),
-                title: const Text('Add to queue'),
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  _player.addToQueue(track);
-                  showToast(context, 'Added to queue');
-                },
-              ),
-              ListTile(
-                leading: Icon(
-                  Library.instance.isLiked(track)
-                      ? Icons.favorite
-                      : Icons.favorite_border,
-                  color: Library.instance.isLiked(track)
-                      ? AppColors.green
-                      : null,
-                ),
-                title: Text(
-                  Library.instance.isLiked(track)
-                      ? 'Remove from Liked Songs'
-                      : 'Like',
-                ),
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  Library.instance.toggleLike(track);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.add_circle_outline),
-                title: const Text('Add to playlist'),
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  showAddToPlaylist(context, track);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.sell_outlined),
-                title: const Text('Tag'),
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  showTagSheet(context, track);
-                },
-              ),
-              if (_playlist.isCustom)
-                ListTile(
-                  leading: const Icon(Icons.remove_circle_outline),
-                  title: const Text('Remove from this playlist'),
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    Library.instance.removeTrack(_playlist, track);
-                    showToast(context, 'Removed from ${_playlist.name}');
-                  },
-                ),
-              ListTile(
-                leading: const Icon(Icons.insert_drive_file_outlined),
-                title: const Text('File'),
-                subtitle: Text(
-                  '${track.title}.${track.extension.toLowerCase()}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
+    final current = _isCurrent && track.path == _currentPath;
+    return SongTile(
+      track: track,
+      current: current,
+      playing: current && _playing,
+      onTap: () => _onTrack(index),
+      onMore: () => showSongMenu(
+        context,
+        track,
+        onPlay: () => _onTrack(index),
+        from: _playlist,
       ),
     );
   }

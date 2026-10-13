@@ -14,6 +14,7 @@ import 'library_store.dart';
 import 'player_service.dart';
 
 const _customPrefix = 'custom:';
+const _tagPrefix = 'tag:';
 
 /// Offered on first launch for the main use of tags: marking songs whose
 /// file should be swapped for a better version.
@@ -94,7 +95,38 @@ class Library extends ChangeNotifier {
 
   List<Playlist> get custom => List.unmodifiable(_custom);
 
+  /// Every song in the library folders, once each (hidden folders left
+  /// out), by title.
+  List<Track> get allSongs {
+    final seen = <String>{};
+    return [
+      for (final playlist in all)
+        if (!playlist.isCustom)
+          for (final track in playlist.tracks)
+            if (seen.add(track.path)) track,
+    ];
+  }
+
+  /// Liked Songs and tag playlists: made by Musify, not renamed or deleted.
+  static bool isSystem(Playlist playlist) =>
+      playlist.id == likedId || playlist.id.startsWith(_tagPrefix);
+
+  /// Every song with [tag], across the whole library, as a playlist.
+  Playlist tagPlaylist(SongTag tag) => Playlist(
+    id: '$_tagPrefix${tag.id}',
+    name: tag.name,
+    tracks: [
+      for (final track in allSongs)
+        if (hasTag(track, tag)) track,
+    ],
+  );
+
   Playlist? byId(String id) {
+    if (id.startsWith(_tagPrefix)) {
+      final tagId = id.substring(_tagPrefix.length);
+      final tag = _tags.where((t) => t.id == tagId).firstOrNull;
+      return tag == null ? null : tagPlaylist(tag);
+    }
     for (final playlist in all) {
       if (playlist.id == id) return playlist;
     }
@@ -335,6 +367,13 @@ class Library extends ChangeNotifier {
   }
 
   void removeTrack(Playlist playlist, Track track) {
+    if (playlist.id.startsWith(_tagPrefix)) {
+      final tag = _tags
+          .where((t) => '$_tagPrefix${t.id}' == playlist.id)
+          .firstOrNull;
+      if (tag != null && hasTag(track, tag)) toggleTag(track, tag);
+      return;
+    }
     if (playlist.id == likedId) {
       if (isLiked(track)) toggleLike(track);
       return;
