@@ -375,39 +375,60 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          const Row(
+          // Who and how much on the left, shuffle and play beside it.
+          Row(
             children: [
-              CircleAvatar(
-                radius: 12,
-                backgroundColor: AppColors.green,
-                child: Icon(Icons.music_note, size: 15, color: Colors.black),
-              ),
-              SizedBox(width: 8),
-              Text(
-                'Musify',
-                style: TextStyle(
-                  color: AppColors.text,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 12,
+                          backgroundColor: AppColors.green,
+                          child: Icon(
+                            Icons.music_note,
+                            size: 15,
+                            color: Colors.black,
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'Musify',
+                          style: TextStyle(
+                            color: AppColors.text,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.phone_iphone,
+                          size: 16,
+                          color: AppColors.subtle,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            _summary(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColors.subtle,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const Icon(Icons.phone_iphone, size: 16, color: AppColors.subtle),
-              const SizedBox(width: 6),
-              Text(
-                _summary(),
-                style: const TextStyle(color: AppColors.subtle, fontSize: 13),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              const Spacer(),
               _ShuffleButton(active: current && _shuffle, onTap: _onShuffle),
               const SizedBox(width: 16),
               Opacity(
@@ -420,6 +441,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 8),
         ],
       ),
     );
