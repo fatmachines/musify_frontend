@@ -96,6 +96,13 @@ class PlayerService {
     if (enabled) await player.shuffle();
   }
 
+  /// Stops and empties the queue, e.g. before its songs are deleted.
+  Future<void> stop() async {
+    await player.stop();
+    await player.clearAudioSources();
+    _loaded = null;
+  }
+
   Future<void> togglePlayback() =>
       player.playing ? player.pause() : player.play();
 

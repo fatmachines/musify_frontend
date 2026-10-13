@@ -9,6 +9,7 @@ import 'app_log.dart';
 import 'folder_access.dart';
 import 'library_scanner.dart';
 import 'library_store.dart';
+import 'player_service.dart';
 
 const _customPrefix = 'custom:';
 
@@ -49,7 +50,24 @@ class Library extends ChangeNotifier {
   bool get loaded => _ready;
 
   /// The user's playlists first, then folder playlists.
-  List<Playlist> get all => [..._custom, ..._folderPlaylists];
+  List<Playlist> get all => [
+    ..._custom,
+    for (final p in _folderPlaylists)
+      if (!_hidden.contains(_hideKeys[p.id])) p,
+  ];
+
+  /// Folder playlists the user hid from the library.
+  List<Playlist> get hidden => [
+    for (final p in _folderPlaylists)
+      if (_hidden.contains(_hideKeys[p.id])) p,
+  ];
+
+  /// Hidden folder playlists, as `<folder id>|<location>`: stable even if
+  /// iOS moves the folder's path.
+  Set<String> _hidden = {};
+
+  /// Each folder playlist's key in [_hidden], by playlist id.
+  final _hideKeys = <String, String>{};
 
   List<Playlist> get custom => List.unmodifiable(_custom);
 
@@ -65,6 +83,7 @@ class Library extends ChangeNotifier {
   Future<void> _load() async {
     _folders = await FolderAccess.restoreAll();
     _saved = await LibraryStore.loadPlaylists();
+    _hidden = await LibraryStore.loadHidden();
     await rescan();
   }
 
@@ -73,10 +92,14 @@ class Library extends ChangeNotifier {
     notifyListeners();
     final playlists = <Playlist>[];
     folderErrors.clear();
+    _hideKeys.clear();
     for (final folder in _folders) {
       final result = await LibraryScanner.scan(folder.path);
       AppLog.addAll(result.log);
       if (result.rootError != null) folderErrors[folder.id] = result.rootError!;
+      for (final playlist in result.playlists) {
+        _hideKeys[playlist.id] = '${folder.id}|${playlist.location}';
+      }
       playlists.addAll(result.playlists);
     }
     playlists.sort(
@@ -109,6 +132,61 @@ class Library extends ChangeNotifier {
         if (f.id != folder.id) f,
     ];
     await rescan();
+  }
+
+  // Hiding and deleting folder playlists --------------------------------------
+
+  void hidePlaylist(Playlist playlist) => _setHidden(playlist, true);
+
+  void unhidePlaylist(Playlist playlist) => _setHidden(playlist, false);
+
+  void _setHidden(Playlist playlist, bool hide) {
+    final key = _hideKeys[playlist.id];
+    if (key == null) return;
+    _hidden = {..._hidden};
+    hide ? _hidden.add(key) : _hidden.remove(key);
+    LibraryStore.saveHidden(_hidden);
+    notifyListeners();
+  }
+
+  /// Deletes a folder playlist's songs from the device, then its folder if
+  /// nothing else is left in it. Subfolders (their own playlists) and other
+  /// files are kept, and so is a folder the user added to the library.
+  /// Returns how many songs were deleted.
+  Future<int> deleteFromDevice(Playlist playlist) async {
+    final player = PlayerService.instance;
+    final playing = player.currentTrack;
+    if (player.current?.id == playlist.id ||
+        (playing != null &&
+            playlist.tracks.any((t) => t.path == playing.path))) {
+      await player.stop();
+    }
+
+    var deleted = 0;
+    for (final track in playlist.tracks) {
+      try {
+        await File(track.path).delete();
+        deleted++;
+      } on FileSystemException catch (e) {
+        AppLog.add('delete: ${track.path} failed: ${e.message}');
+      }
+    }
+
+    final dir = Directory(playlist.id);
+    final isLibraryFolder = _folders.any((f) => p.equals(f.path, playlist.id));
+    if (!isLibraryFolder && await dir.exists()) {
+      try {
+        final left = dir.listSync().where(
+          (e) => !p.basename(e.path).startsWith('.'),
+        );
+        if (left.isEmpty) await dir.delete(recursive: true);
+      } on FileSystemException catch (e) {
+        AppLog.add('delete: folder ${dir.path} failed: ${e.message}');
+      }
+    }
+    AppLog.add('delete: ${playlist.name}, $deleted songs');
+    await rescan();
+    return deleted;
   }
 
   // The user's playlists ------------------------------------------------------

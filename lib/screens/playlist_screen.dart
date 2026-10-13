@@ -12,8 +12,8 @@ import '../utils/cover_color.dart';
 import '../widgets/add_to_playlist.dart';
 import '../widgets/covers.dart';
 import '../widgets/offline_badge.dart';
+import '../widgets/playlist_actions.dart';
 import '../widgets/toast.dart';
-import 'name_playlist_screen.dart';
 
 const _searchDuration = Duration(milliseconds: 220);
 const _findBarHeight = 38.0;
@@ -95,9 +95,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   void _onLibraryChanged() {
     if (!mounted) return;
-    if (widget.playlist.isCustom &&
+    if (!Library.instance.scanning &&
         Library.instance.byId(widget.playlist.id) == null) {
-      // Deleted.
+      // Deleted or hidden.
       Navigator.of(context).maybePop();
       return;
     }
@@ -398,18 +398,17 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           const SizedBox(height: 4),
           Row(
             children: [
-              if (_playlist.isCustom)
-                IconButton(
-                  tooltip: 'More',
-                  padding: EdgeInsets.zero,
-                  alignment: Alignment.centerLeft,
-                  onPressed: _showPlaylistMenu,
-                  icon: const Icon(
-                    Icons.more_horiz,
-                    size: 28,
-                    color: AppColors.subtle,
-                  ),
+              IconButton(
+                tooltip: 'More',
+                padding: EdgeInsets.zero,
+                alignment: Alignment.centerLeft,
+                onPressed: () => showPlaylistActions(context, _playlist),
+                icon: const Icon(
+                  Icons.more_horiz,
+                  size: 28,
+                  color: AppColors.subtle,
                 ),
+              ),
               const Spacer(),
               _ShuffleButton(active: current && _shuffle, onTap: _onShuffle),
               const SizedBox(width: 16),
@@ -576,78 +575,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         ),
       ),
     );
-  }
-
-  void _showPlaylistMenu() {
-    showModalBottomSheet<void>(
-      context: context,
-      useRootNavigator: true,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (sheet) => SafeArea(
-        // Sized to its content, scrolling on screens too short for it.
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: PlaylistCover(playlist: _playlist, size: 48),
-                title: Text(_playlist.name),
-                subtitle: Text(_summary()),
-              ),
-              const Divider(color: Colors.white12, height: 16),
-              ListTile(
-                leading: const Icon(Icons.edit_outlined),
-                title: const Text('Rename'),
-                onTap: () async {
-                  Navigator.of(sheet).pop();
-                  final name = await askPlaylistName(
-                    context,
-                    title: 'Rename playlist',
-                    initial: _playlist.name,
-                    action: 'Save',
-                  );
-                  if (name != null) {
-                    Library.instance.renamePlaylist(_playlist, name);
-                  }
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.delete_outline),
-                title: const Text('Delete playlist'),
-                onTap: () {
-                  Navigator.of(sheet).pop();
-                  _confirmDelete();
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _confirmDelete() async {
-    final delete = await showDialog<bool>(
-      context: context,
-      useRootNavigator: true,
-      builder: (dialog) => AlertDialog(
-        backgroundColor: AppColors.elevated,
-        title: Text('Delete "${_playlist.name}"?'),
-        content: const Text('The songs stay in your folders.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialog).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialog).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (delete == true) Library.instance.deletePlaylist(_playlist);
   }
 
   void _showTrackSheet(int index) {

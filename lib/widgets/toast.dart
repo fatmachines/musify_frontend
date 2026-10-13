@@ -4,8 +4,13 @@ import '../theme.dart';
 
 /// A short message near the bottom of the screen, above everything (the
 /// full player too, which covers the app's own snack bars).
-void showToast(BuildContext context, String message) {
-  final overlay = Overlay.of(context, rootOverlay: true);
+void showToast(BuildContext context, String message) =>
+    showToastOn(Overlay.of(context, rootOverlay: true), message);
+
+/// For when the calling screen may be gone by the time the message shows
+/// (look the overlay up first, while it's still mounted).
+void showToastOn(OverlayState overlay, String message) {
+  if (!overlay.mounted) return;
   late final OverlayEntry entry;
   entry = OverlayEntry(
     builder: (context) =>

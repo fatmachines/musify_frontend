@@ -8,6 +8,9 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  // Deleting checks the player, which needs Flutter's bindings.
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late Directory first;
   late Directory second;
 
@@ -102,5 +105,59 @@ void main() {
     await File(song.path).delete();
     await library.rescan();
     expect(library.byId(mix.id)!.tracks, isEmpty);
+  });
+
+  test('hidden folder playlists stay hidden until shown again', () async {
+    SharedPreferences.setMockInitialValues({
+      'library_folders': [first.path],
+    });
+    final library = Library.fresh();
+    await library.ensureLoaded();
+    final rock = library.all.firstWhere((pl) => pl.name == 'Rock');
+    library.hidePlaylist(rock);
+    expect(library.all.map((pl) => pl.name), ['Pop']);
+    expect(library.hidden.map((pl) => pl.name), ['Rock']);
+    expect(library.byId(rock.id), isNull);
+
+    // Remembered across launches and rescans.
+    final reloaded = Library.fresh();
+    await reloaded.ensureLoaded();
+    expect(reloaded.all.map((pl) => pl.name), ['Pop']);
+
+    reloaded.unhidePlaylist(reloaded.hidden.single);
+    expect(reloaded.all.map((pl) => pl.name), ['Pop', 'Rock']);
+  });
+
+  test('deleting a folder playlist from the device', () async {
+    await touch(first, 'Rock/Classic/d.mp3');
+    await touch(first, 'Pop/cover.jpg');
+    SharedPreferences.setMockInitialValues({
+      'library_folders': [first.path, second.path],
+    });
+    final library = Library.fresh();
+    await library.ensureLoaded();
+    Playlist named(String name) =>
+        library.all.firstWhere((pl) => pl.name == name);
+
+    // Rock's song goes, but Rock stays: its subfolder is another playlist.
+    expect(await library.deleteFromDevice(named('Rock')), 1);
+    expect(File(p.join(first.path, 'Rock/a.mp3')).existsSync(), isFalse);
+    expect(Directory(p.join(first.path, 'Rock')).existsSync(), isTrue);
+    expect(library.all.map((pl) => pl.name), contains('Classic'));
+    expect(library.all.map((pl) => pl.name), isNot(contains('Rock')));
+
+    // Nothing left in Classic, so the folder goes too.
+    await library.deleteFromDevice(named('Classic'));
+    expect(Directory(p.join(first.path, 'Rock/Classic')).existsSync(), isFalse);
+
+    // Other files keep a folder.
+    await library.deleteFromDevice(named('Pop'));
+    expect(File(p.join(first.path, 'Pop/cover.jpg')).existsSync(), isTrue);
+
+    // A folder added to the library itself is never removed.
+    await library.deleteFromDevice(named(p.basename(second.path)));
+    expect(second.existsSync(), isTrue);
+    expect(library.folders.map((f) => f.path), contains(second.path));
+    expect(library.all, isEmpty);
   });
 }

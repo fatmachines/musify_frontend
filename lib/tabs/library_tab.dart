@@ -14,6 +14,7 @@ import '../services/player_service.dart';
 import '../theme.dart';
 import '../widgets/covers.dart';
 import '../widgets/offline_badge.dart';
+import '../widgets/playlist_actions.dart';
 
 class LibraryTab extends StatefulWidget {
   const LibraryTab({super.key});
@@ -165,6 +166,39 @@ class _LibraryTabState extends State<LibraryTab> {
                     _addFolder();
                   },
                 ),
+                if (_library.hidden.isNotEmpty) ...[
+                  const Divider(color: Colors.white12, height: 24),
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      'Hidden playlists',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  for (final playlist in _library.hidden)
+                    ListTile(
+                      leading: const Icon(Icons.visibility_off_outlined),
+                      title: Text(playlist.name),
+                      // Only nested folders need their path.
+                      subtitle: playlist.location == playlist.name
+                          ? null
+                          : Text(
+                              playlist.location ?? '',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                      trailing: TextButton(
+                        onPressed: () => _library.unhidePlaylist(playlist),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.text,
+                        ),
+                        child: const Text('Show'),
+                      ),
+                    ),
+                ],
               ],
             ),
           ),
@@ -364,6 +398,7 @@ class _PlaylistTile extends StatelessWidget {
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => PlaylistScreen(playlist: playlist)),
       ),
+      onLongPress: () => showPlaylistActions(context, playlist),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(

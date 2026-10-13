@@ -51,6 +51,7 @@ class LibraryStore {
   static const _legacyRootKey = 'library_root_path';
   static const _foldersKey = 'library_folders';
   static const _playlistsKey = 'custom_playlists_v1';
+  static const _hiddenKey = 'hidden_folder_playlists';
 
   /// Library folder paths (Android; iOS keeps bookmarks natively).
   static Future<List<String>> loadFolderPaths() async {
@@ -65,6 +66,17 @@ class LibraryStore {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_foldersKey, paths);
     await prefs.remove(_legacyRootKey);
+  }
+
+  /// Folder playlists the user hid, as `<folder id>|<location>`.
+  static Future<Set<String>> loadHidden() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getStringList(_hiddenKey) ?? const []).toSet();
+  }
+
+  static Future<void> saveHidden(Set<String> hidden) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_hiddenKey, hidden.toList());
   }
 
   static Future<List<SavedPlaylist>> loadPlaylists() async {
