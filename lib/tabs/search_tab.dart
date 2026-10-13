@@ -44,6 +44,11 @@ class _SearchTabState extends State<SearchTab> {
   final _query = TextEditingController();
   final _focus = FocusNode();
 
+  /// Keeps the same text field when the layout around it changes (the
+  /// header goes away once searching). A rebuilt field would keep focus but
+  /// drop the keyboard.
+  final _fieldKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
@@ -167,6 +172,7 @@ class _SearchTabState extends State<SearchTab> {
                     ],
                     Expanded(
                       child: TextField(
+                        key: _fieldKey,
                         controller: _query,
                         focusNode: _focus,
                         cursorColor: AppColors.green,

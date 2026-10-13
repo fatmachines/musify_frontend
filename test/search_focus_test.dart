@@ -22,6 +22,7 @@ void main() {
     await tester.tap(find.text('Search').last);
     await tester.pumpAndSettle();
     expect(searchFocused(tester), isTrue);
+    expect(tester.testTextInput.isVisible, isTrue, reason: 'keyboard shown');
     expect(find.text('Cancel'), findsOneWidget);
   });
 
@@ -40,5 +41,6 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(searchFocused(tester), isTrue);
+    expect(tester.testTextInput.isVisible, isTrue, reason: 'keyboard shown');
   });
 }
