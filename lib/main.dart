@@ -145,27 +145,30 @@ class _HomeShellState extends State<HomeShell>
         children: [
           // YouTube songs play in here, out of sight behind the app.
           const Positioned(left: 0, top: 0, child: YouTubeWebHost()),
-          Scaffold(
-            // The bar fades over the content, so content runs underneath it.
-            extendBody: true,
-            body: IndexedStack(
-              index: _index,
-              children: [
-                for (var i = 0; i < _tabs.length; i++)
-                  Navigator(
-                    key: _navigatorKeys[i],
-                    onGenerateRoute: (_) =>
-                        MaterialPageRoute(builder: (_) => _tabs[i]),
-                  ),
-              ],
-            ),
-            bottomNavigationBar: BottomBar(
-              index: _index,
-              onSelect: _onSelect,
-              header: MiniPlayer(
-                onOpen: _openPlayer,
-                onDragUpdate: _dragPlayer,
-                onDragEnd: _releasePlayer,
+          // While songs download, a banner at the top pushes the app down.
+          DownloadBannerLayout(
+            child: Scaffold(
+              // The bar fades over the content, so content runs underneath it.
+              extendBody: true,
+              body: IndexedStack(
+                index: _index,
+                children: [
+                  for (var i = 0; i < _tabs.length; i++)
+                    Navigator(
+                      key: _navigatorKeys[i],
+                      onGenerateRoute: (_) =>
+                          MaterialPageRoute(builder: (_) => _tabs[i]),
+                    ),
+                ],
+              ),
+              bottomNavigationBar: BottomBar(
+                index: _index,
+                onSelect: _onSelect,
+                header: MiniPlayer(
+                  onOpen: _openPlayer,
+                  onDragUpdate: _dragPlayer,
+                  onDragEnd: _releasePlayer,
+                ),
               ),
             ),
           ),
@@ -185,12 +188,6 @@ class _HomeShellState extends State<HomeShell>
               onVerticalDragEnd: _releasePlayer,
               child: NowPlaying(onClose: _closePlayer),
             ),
-          ),
-          const Positioned(
-            left: 0,
-            right: 0,
-            top: 0,
-            child: DownloadProgressBar(),
           ),
         ],
       ),

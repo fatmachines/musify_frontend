@@ -154,7 +154,18 @@ class _HomeTabState extends State<HomeTab> {
 }
 
 /// Card colours for the charts, Spotify-style.
-const _chartColors = [Color(0xFF8D67AB), Color(0xFF1E3264), Color(0xFFE8115B)];
+const _chartColors = [
+  Color(0xFF1E3264),
+  Color(0xFFE8115B),
+  Color(0xFF8D67AB),
+  Color(0xFF148A08),
+  Color(0xFFBC5900),
+  Color(0xFF509BF5),
+];
+
+/// "Top 100 Songs United Kingdom" -> "United Kingdom".
+String _region(Playlist chart) =>
+    chart.name.replaceFirst(RegExp(r'^Top 100 (Songs )?'), '');
 
 extension on _HomeTabState {
   List<Widget> _buildCharts() {
@@ -196,7 +207,10 @@ extension on _HomeTabState {
         ),
       ];
     }
-    final trending = charts.firstOrNull;
+    // Where the user is (India), else the first chart.
+    final trending =
+        charts.where((c) => _region(c) == 'India').firstOrNull ??
+        charts.firstOrNull;
     return [
       const _SectionTitle('Charts'),
       SliverToBoxAdapter(
@@ -216,7 +230,7 @@ extension on _HomeTabState {
         ),
       ),
       if (trending != null && trending.tracks.isNotEmpty) ...[
-        _SectionTitle('Trending in ${trending.name.split(' ').last}'),
+        _SectionTitle('Trending in ${_region(trending)}'),
         SliverToBoxAdapter(
           child: SizedBox(
             height: 196,
@@ -284,7 +298,7 @@ class _ChartCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final region = chart.name.split(' ').last;
+    final region = _region(chart);
     final first = chart.tracks.firstOrNull;
     return GestureDetector(
       onTap: onTap,

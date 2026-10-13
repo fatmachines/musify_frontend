@@ -6,7 +6,8 @@ reinstalls the newest on every start and restarts once a day when idle).
 
 - `GET /audio/<video id>.m4a`: the song as M4A (AAC as YouTube has it, not
   re-encoded) with title, artist and cover.
-- `GET /charts`: YouTube Music's Top 100 India and Global.
+- `GET /charts`: YouTube Music's Top 100 Global, US, UK, Canada, Australia
+  and India.
 - `GET /playlist?id=<playlist id>`: any public playlist's tracks.
 - `GET /health`
 

@@ -81,8 +81,8 @@ class MusifyServer extends ChangeNotifier {
   List<Playlist>? _charts;
   DateTime? _chartsAt;
 
-  /// YouTube Music's Top 100 India and Global, as playlists of YouTube
-  /// songs. Fetched at most every half hour.
+  /// YouTube Music's Top 100 Global, US, UK, Canada, Australia and India,
+  /// as playlists of YouTube songs. Fetched at most every half hour.
   Future<List<Playlist>> charts({bool refresh = false}) async {
     final at = _chartsAt;
     if (!refresh &&

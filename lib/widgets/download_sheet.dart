@@ -122,10 +122,75 @@ Future<void> downloadWithPicker(
   );
 }
 
-/// While songs download: a green loading bar across the top of the app
-/// and, under it, "1/3 downloading…" with the song and how far it is.
-class DownloadProgressBar extends StatelessWidget {
-  const DownloadProgressBar({super.key});
+/// Puts the download banner above [child] while songs download, pushing it
+/// down (it slides in and back out), instead of covering it.
+class DownloadBannerLayout extends StatelessWidget {
+  final Widget child;
+
+  const DownloadBannerLayout({super.key, required this.child});
+
+  /// The banner below the status bar: its text and the green bar.
+  static const _height = 34.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final downloads = Downloads.instance;
+    final media = MediaQuery.of(context);
+    final top = media.padding.top;
+    return ListenableBuilder(
+      listenable: downloads,
+      builder: (context, child) => TweenAnimationBuilder<double>(
+        tween: Tween(end: downloads.current == null ? 0 : 1),
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
+        builder: (context, shown, child) => Column(
+          children: [
+            // The banner takes the status bar's place along with its own,
+            // so the app below starts just under it.
+            ClipRect(
+              child: SizedBox(
+                height: (top + _height) * shown,
+                child: OverflowBox(
+                  alignment: Alignment.bottomCenter,
+                  minHeight: top + _height,
+                  maxHeight: top + _height,
+                  child: const _DownloadBanner(),
+                ),
+              ),
+            ),
+            Expanded(
+              child: MediaQuery(
+                data: media.copyWith(
+                  padding: media.padding.copyWith(top: top * (1 - shown)),
+                  viewPadding: media.viewPadding.copyWith(
+                    top: media.viewPadding.top * (1 - shown),
+                  ),
+                ),
+                child: child!,
+              ),
+            ),
+          ],
+        ),
+        child: child,
+      ),
+      child: child,
+    );
+  }
+}
+
+/// "1/3 downloading…", the song and how far it is, over a green loading
+/// bar. Keeps showing the last song while it slides away.
+class _DownloadBanner extends StatefulWidget {
+  const _DownloadBanner();
+
+  @override
+  State<_DownloadBanner> createState() => _DownloadBannerState();
+}
+
+class _DownloadBannerState extends State<_DownloadBanner> {
+  String _count = '';
+  String _name = '';
+  double _progress = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -134,74 +199,60 @@ class DownloadProgressBar extends StatelessWidget {
       listenable: downloads,
       builder: (context, _) {
         final track = downloads.current;
-        if (track == null) return const SizedBox.shrink();
-        final progress = downloads.progressOf(track) ?? 0;
-        // Above the Scaffold, so it brings its own text style.
-        return IgnorePointer(
-          child: Material(
-            type: MaterialType.transparency,
-            child: Padding(
-              padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  LinearProgressIndicator(
-                    value: progress > 0 ? progress : null,
-                    minHeight: 3,
-                    color: AppColors.green,
-                    backgroundColor: Colors.white12,
-                  ),
-                  const SizedBox(height: 6),
-                  Padding(
+        if (track != null) {
+          _count =
+              '${downloads.batchDone + 1}/${downloads.batchTotal} '
+              'downloading…';
+          _name = track.name;
+          _progress = downloads.progressOf(track) ?? 0;
+        }
+        return Material(
+          color: AppColors.surface,
+          child: SafeArea(
+            bottom: false,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: AppColors.elevated.withValues(alpha: 0.95),
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: const [
-                          BoxShadow(color: Colors.black45, blurRadius: 8),
-                        ],
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 5,
+                    child: Row(
+                      children: [
+                        Text(
+                          _count,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.green,
+                          ),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              '${downloads.batchDone + 1}/${downloads.batchTotal} '
-                              'downloading…',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.green,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Flexible(
-                              child: Text(
-                                track.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                            ),
-                            Text(
-                              '  ${(progress * 100).round()}%',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.subtle,
-                              ),
-                            ),
-                          ],
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 13),
+                          ),
                         ),
-                      ),
+                        Text(
+                          '${(_progress * 100).round()}%',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.subtle,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                ),
+                LinearProgressIndicator(
+                  value: _progress > 0 ? _progress : null,
+                  minHeight: 3,
+                  color: AppColors.green,
+                  backgroundColor: Colors.white12,
+                ),
+              ],
             ),
           ),
         );

@@ -9,7 +9,8 @@ Every request needs the key from MUSIFY_KEY, as an X-Musify-Key header or
 ?key=. Endpoints:
 
   GET /health                     -> {"ok": true, "ytdlp": "<version>"}
-  GET /charts                     -> {"charts": [playlist, ...]}
+  GET /charts                     -> {"charts": [playlist, ...]}: Global,
+                                     US, UK, Canada, Australia, India
   GET /playlist?id=<playlist id>  -> playlist
   GET /audio/<video id>.m4a       -> the song: AAC as YouTube has it, not
                                      re-encoded, with title, artist and cover
@@ -29,6 +30,8 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from concurrent.futures import ThreadPoolExecutor
+
 import yt_dlp
 
 KEY = os.environ["MUSIFY_KEY"]
@@ -44,9 +47,14 @@ PLAYLIST_TTL = 60 * 60
 # yt-dlp (see entrypoint.sh).
 RESTART_AFTER = 24 * 60 * 60
 
+# YouTube Music's own charts (channel "YouTube Music Global Charts").
 CHARTS = [
-    ("PL4fGSI1pDJn4pTWyM3t61lOyZ6_4jcNOw", "Top 100 Songs India"),
     ("PL4fGSI1pDJn6puJdseH2Rt9sMvt9E2M4i", "Top 100 Songs Global"),
+    ("PL4fGSI1pDJn6O1LS0XSdF3RyO0Rq_LDeI", "Top 100 Songs United States"),
+    ("PL4fGSI1pDJn6_f5P3MnzXg9l3GDfnSlXa", "Top 100 Songs United Kingdom"),
+    ("PL4fGSI1pDJn57Q7WbODbmXjyjgXi0BTyD", "Top 100 Songs Canada"),
+    ("PL4fGSI1pDJn7xvYy-bP6UFeG5tITQgScd", "Top 100 Songs Australia"),
+    ("PL4fGSI1pDJn4pTWyM3t61lOyZ6_4jcNOw", "Top 100 Songs India"),
 ]
 
 VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
@@ -70,11 +78,12 @@ _playlists = {}
 _playlists_lock = threading.Lock()
 
 
-def playlist(playlist_id, title=None):
-    """The playlist's tracks, fetched at most once an hour."""
+def playlist(playlist_id, title=None, fresh=False):
+    """The playlist's tracks, fetched at most once an hour (or now, if
+    [fresh])."""
     with _playlists_lock:
         cached = _playlists.get(playlist_id)
-    if cached and time.time() - cached[0] < PLAYLIST_TTL:
+    if not fresh and cached and time.time() - cached[0] < PLAYLIST_TTL:
         return cached[1]
     options = base_options() | {"extract_flat": "in_playlist"}
     with yt_dlp.YoutubeDL(options) as ydl:
@@ -102,6 +111,22 @@ def playlist(playlist_id, title=None):
         _playlists[playlist_id] = (time.time(), result)
     log("playlist", playlist_id, len(tracks), "tracks")
     return result
+
+
+def charts(fresh=False):
+    # All at once: one by one takes a few seconds each.
+    with ThreadPoolExecutor(len(CHARTS)) as pool:
+        return list(pool.map(lambda c: playlist(*c, fresh=fresh), CHARTS))
+
+
+def keep_charts_warm():
+    """Refreshes the charts before they expire, so the app never waits."""
+    while True:
+        try:
+            charts(fresh=True)
+        except Exception as e:  # noqa: BLE001 - try again next time
+            log("charts refresh failed:", repr(e))
+        time.sleep(PLAYLIST_TTL - 10 * 60)
 
 
 # Songs ----------------------------------------------------------------------
@@ -201,8 +226,7 @@ class Handler(BaseHTTPRequestHandler):
                     200, {"ok": True, "ytdlp": yt_dlp.version.__version__}
                 )
             if url.path == "/charts":
-                charts = [playlist(i, title) for i, title in CHARTS]
-                return self._send_json(200, {"charts": charts})
+                return self._send_json(200, {"charts": charts()})
             if url.path == "/playlist":
                 playlist_id = query.get("id", [""])[0]
                 if not PLAYLIST_ID.match(playlist_id):
@@ -250,6 +274,7 @@ def main():
     log("musify server on %s:%d, yt-dlp %s, node %s"
         % (HOST, PORT, yt_dlp.version.__version__, NODE))
     threading.Thread(target=restart_daily, daemon=True).start()
+    threading.Thread(target=keep_charts_warm, daemon=True).start()
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
 
 
