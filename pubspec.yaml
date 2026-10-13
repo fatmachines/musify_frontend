@@ -62,6 +62,7 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   just_audio_platform_interface: ^4.6.0
   plugin_platform_interface: ^2.1.8
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -117,3 +118,17 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# App icon: run `dart run flutter_launcher_icons` after changing the images in
+# assets/icon (icon.png full bleed; foreground/background for Android's
+# adaptive icon, bars inside its safe zone). It also rewrites an unrelated
+# setting in ios/Runner.xcodeproj/project.pbxproj; discard that change.
+flutter_launcher_icons:
+  image_path: assets/icon/icon.png
+  ios: true
+  remove_alpha_ios: true
+  android: true
+  adaptive_icon_foreground: assets/icon/foreground.png
+  adaptive_icon_background: assets/icon/background.png
+  # foreground.png is already sized to the safe zone.
+  adaptive_icon_foreground_inset: 0
