@@ -1,5 +1,0 @@
-# ── Musify (YouTube songs and charts for the Musify app) ─────────────────────
-# ~/musify (musify-api). Every request needs the app's key.
-musify.fatmachines.com {
-	reverse_proxy musify-api:8790
-}
