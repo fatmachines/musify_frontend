@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../services/equalizer_service.dart';
@@ -37,62 +38,78 @@ class EqualizerTab extends StatelessWidget {
             const SizedBox(width: 8),
           ],
         ),
-        body: ListView(
-          padding: EdgeInsets.fromLTRB(
-            16,
-            8,
-            16,
-            MediaQuery.paddingOf(context).bottom + 16,
-          ),
+        // The graph stays put (dragging its points never scrolls the
+        // page); only the presets below it scroll.
+        body: Column(
           children: [
-            AnimatedOpacity(
-              duration: const Duration(milliseconds: 200),
-              opacity: eq.enabled ? 1 : 0.45,
-              child: const _EqGraph(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 200),
+                opacity: eq.enabled ? 1 : 0.45,
+                child: const _EqGraph(),
+              ),
             ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                const Text(
-                  'Presets',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  16,
+                  16,
+                  MediaQuery.paddingOf(context).bottom + 16,
                 ),
-                const Spacer(),
-                TextButton(
-                  onPressed: eq.reset,
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColors.subtle,
+                children: [
+                  Row(
+                    children: [
+                      const Text(
+                        'Presets',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: eq.reset,
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.subtle,
+                        ),
+                        child: const Text('Reset'),
+                      ),
+                    ],
                   ),
-                  child: const Text('Reset'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final preset in eqPresets)
-                  _PresetChip(
-                    label: preset.name,
-                    selected: eq.enabled && eq.preset == preset.name,
-                    onTap: () => eq.choosePreset(preset),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final preset in eqPresets)
+                        _PresetChip(
+                          label: preset.name,
+                          selected: eq.enabled && eq.preset == preset.name,
+                          onTap: () => eq.choosePreset(preset),
+                        ),
+                      if (eq.preset == customPreset)
+                        _PresetChip(
+                          label: customPreset,
+                          selected: eq.enabled,
+                          onTap: () => eq.setEnabled(true),
+                        ),
+                    ],
                   ),
-                if (eq.preset == customPreset)
-                  _PresetChip(
-                    label: customPreset,
-                    selected: eq.enabled,
-                    onTap: () => eq.setEnabled(true),
+                  const SizedBox(height: 24),
+                  Text(
+                    Platform.isAndroid
+                        ? 'Uses your phone\'s built-in equalizer.'
+                        : 'Drag a point up or down to shape the sound. Changes '
+                              'apply straight away, to every song.',
+                    style: const TextStyle(
+                      color: AppColors.subtle,
+                      fontSize: 13,
+                    ),
                   ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            Text(
-              Platform.isAndroid
-                  ? 'Uses your phone\'s built-in equalizer.'
-                  : 'Drag a point up or down to shape the sound. Changes '
-                        'apply straight away, to every song.',
-              style: const TextStyle(color: AppColors.subtle, fontSize: 13),
+                ],
+              ),
             ),
           ],
         ),
@@ -146,6 +163,9 @@ class _EqGraphState extends State<_EqGraph> {
 
   int? _dragging;
 
+  /// The dragged band's gain before snapping, so small moves add up.
+  double _dragDb = 0;
+
   EqualizerService get _eq => EqualizerService.instance;
 
   int _bandAt(double x, double width) {
@@ -154,21 +174,49 @@ class _EqGraphState extends State<_EqGraph> {
     return (x / step).floor().clamp(0, count - 1);
   }
 
+  double get _dbPerPixel => (_eq.maxDb - _eq.minDb) / (_height - _labelsHeight);
+
   double _dbAt(double y) {
     final t = (y / (_height - _labelsHeight)).clamp(0.0, 1.0);
-    final db = _eq.maxDb - t * (_eq.maxDb - _eq.minDb);
-    // Snap to half a dB, and to 0 near the middle.
+    return _eq.maxDb - t * (_eq.maxDb - _eq.minDb);
+  }
+
+  /// Half-dB steps, with a little pull to 0.
+  static double _snap(double db) {
     final snapped = (db * 2).round() / 2;
     return snapped.abs() < 0.5 ? 0 : snapped;
   }
 
-  void _set(Offset local, double width, {bool start = false}) {
-    final band = start || _dragging == null
-        ? _bandAt(local.dx, width)
-        : _dragging!;
-    _dragging = band;
-    _eq.setGain(band, _dbAt(local.dy));
+  /// Touching picks the nearest band without moving it.
+  void _grab(Offset local, double width) {
+    final band = _bandAt(local.dx, width);
+    setState(() {
+      _dragging = band;
+      _dragDb = _eq.gains[band];
+    });
   }
+
+  /// Dragging moves the band from where it was.
+  void _drag(DragUpdateDetails details) {
+    final band = _dragging;
+    if (band == null) return;
+    _dragDb = (_dragDb - details.delta.dy * _dbPerPixel).clamp(
+      _eq.minDb,
+      _eq.maxDb,
+    );
+    _eq.setGain(band, _snap(_dragDb));
+  }
+
+  /// A tap puts the band where the finger is.
+  void _tap(TapUpDetails details, double width) {
+    _eq.setGain(
+      _bandAt(details.localPosition.dx, width),
+      _snap(_dbAt(details.localPosition.dy)),
+    );
+    setState(() => _dragging = null);
+  }
+
+  void _release() => setState(() => _dragging = null);
 
   @override
   Widget build(BuildContext context) {
@@ -182,10 +230,13 @@ class _EqGraphState extends State<_EqGraph> {
   Widget _buildGraph() {
     return LayoutBuilder(
       builder: (context, box) => GestureDetector(
-        onPanDown: (d) => _set(d.localPosition, box.maxWidth, start: true),
-        onPanUpdate: (d) => _set(d.localPosition, box.maxWidth),
-        onPanEnd: (_) => setState(() => _dragging = null),
-        onPanCancel: () => setState(() => _dragging = null),
+        // Count the whole drag, including the first few pixels.
+        dragStartBehavior: DragStartBehavior.down,
+        onPanDown: (d) => _grab(d.localPosition, box.maxWidth),
+        onPanUpdate: _drag,
+        onPanEnd: (_) => _release(),
+        onPanCancel: _release,
+        onTapUp: (d) => _tap(d, box.maxWidth),
         child: Container(
           height: _height,
           decoration: BoxDecoration(
