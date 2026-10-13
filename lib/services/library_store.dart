@@ -4,24 +4,28 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// A song saved in a user's playlist. Besides its path it remembers which
 /// library folder it came from and where inside it, so it can still be found
-/// if that folder's path changes (iOS can move app data on reinstall).
+/// if that folder's path changes (iOS can move app data on reinstall). A
+/// YouTube song keeps its details instead (see YouTubeTrack.toJson).
 class SavedTrack {
   final String path;
   final String? folderId;
   final String? relative;
+  final Map<String, Object?>? youtube;
 
-  const SavedTrack(this.path, {this.folderId, this.relative});
+  const SavedTrack(this.path, {this.folderId, this.relative, this.youtube});
 
   Map<String, Object?> toJson() => {
     'path': path,
     if (folderId != null) 'folder': folderId,
     if (relative != null) 'rel': relative,
+    if (youtube != null) 'youtube': youtube,
   };
 
   static SavedTrack fromJson(Map<String, Object?> json) => SavedTrack(
     json['path'] as String,
     folderId: json['folder'] as String?,
     relative: json['rel'] as String?,
+    youtube: (json['youtube'] as Map?)?.cast<String, Object?>(),
   );
 }
 

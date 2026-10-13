@@ -166,6 +166,40 @@ void main() {
     expect(reloaded.pinned, hasLength(1));
   });
 
+  test('YouTube songs can be liked and put in playlists', () async {
+    SharedPreferences.setMockInitialValues({
+      'library_folders': [first.path],
+    });
+    final library = Library.fresh();
+    await library.ensureLoaded();
+    final video = YouTubeTrack(
+      videoId: 'abc123',
+      name: 'A video',
+      channel: 'A channel',
+      length: const Duration(minutes: 4),
+    );
+    final mix = library.createPlaylist('Mix');
+    library.addTrack(mix, video);
+    library.addTrack(mix, library.allSongs.first);
+    library.toggleLike(video);
+    expect(library.isLiked(video), isTrue);
+
+    final reloaded = Library.fresh();
+    await reloaded.ensureLoaded();
+    final liked = reloaded.liked.tracks.single as YouTubeTrack;
+    expect(liked.videoId, 'abc123');
+    expect(liked.channel, 'A channel');
+    expect(liked.length, const Duration(minutes: 4));
+    final saved = reloaded.custom.single;
+    expect(saved.tracks.first, isA<YouTubeTrack>());
+    expect(saved.tracks, hasLength(2));
+
+    reloaded.removeTrack(saved, video);
+    reloaded.toggleLike(video);
+    expect(reloaded.custom.single.tracks, hasLength(1));
+    expect(reloaded.liked.tracks, isEmpty);
+  });
+
   test('deleting a folder playlist from the device', () async {
     await touch(first, 'Rock/Classic/d.mp3');
     await touch(first, 'Pop/cover.jpg');

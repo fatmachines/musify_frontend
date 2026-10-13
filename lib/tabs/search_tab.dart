@@ -310,6 +310,7 @@ class _SearchTabState extends State<SearchTab> {
               playing: current && player.player.playing,
               onTap: play,
               onMore: () => showSongMenu(context, track, onPlay: play),
+              trailing: _LikeToggle(track: track),
             );
           }
           if (i < playlists.length) {

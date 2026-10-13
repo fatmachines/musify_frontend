@@ -23,7 +23,7 @@ Future<void> showSongMenu(
   final player = PlayerService.instance;
   final info = MetadataService.cachedInfo(track);
   final liked = library.isLiked(track);
-  // YouTube songs aren't in the library: no liking, tagging or playlists.
+  // YouTube songs can be liked and put in playlists, but not tagged.
   final youtube = track is YouTubeTrack;
   return showModalBottomSheet<void>(
     context: context,
@@ -82,26 +82,25 @@ Future<void> showSongMenu(
                   showToast(context, 'Added to queue');
                 }),
               ),
-              if (!youtube) ...[
-                ListTile(
-                  leading: Icon(
-                    liked ? Icons.favorite : Icons.favorite_border,
-                    color: liked ? AppColors.green : null,
-                  ),
-                  title: Text(liked ? 'Remove from Liked Songs' : 'Like'),
-                  onTap: () => then(() => library.toggleLike(track)),
+              ListTile(
+                leading: Icon(
+                  liked ? Icons.favorite : Icons.favorite_border,
+                  color: liked ? AppColors.green : null,
                 ),
-                ListTile(
-                  leading: const Icon(Icons.add_circle_outline),
-                  title: const Text('Add to playlist'),
-                  onTap: () => then(() => showAddToPlaylist(context, track)),
-                ),
+                title: Text(liked ? 'Remove from Liked Songs' : 'Like'),
+                onTap: () => then(() => library.toggleLike(track)),
+              ),
+              ListTile(
+                leading: const Icon(Icons.add_circle_outline),
+                title: const Text('Add to playlist'),
+                onTap: () => then(() => showAddToPlaylist(context, track)),
+              ),
+              if (!youtube)
                 ListTile(
                   leading: const Icon(Icons.sell_outlined),
                   title: const Text('Tag'),
                   onTap: () => then(() => showTagSheet(context, track)),
                 ),
-              ],
               if (from != null && from.isCustom)
                 ListTile(
                   leading: const Icon(Icons.remove_circle_outline),

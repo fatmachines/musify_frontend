@@ -438,6 +438,9 @@ class Library extends ChangeNotifier {
   static String _idOf(SavedPlaylist s) => '$_customPrefix${s.id}';
 
   SavedTrack _save(Track track) {
+    if (track is YouTubeTrack) {
+      return SavedTrack(track.path, youtube: track.toJson());
+    }
     for (final folder in _folders) {
       if (p.isWithin(folder.path, track.path)) {
         return SavedTrack(
@@ -452,6 +455,7 @@ class Library extends ChangeNotifier {
 
   /// Where a saved song is now, or null if it can't be found.
   String? _resolve(SavedTrack saved) {
+    if (saved.youtube != null) return saved.path;
     if (File(saved.path).existsSync()) return saved.path;
     if (saved.folderId == null || saved.relative == null) return null;
     for (final folder in _folders) {
@@ -463,14 +467,24 @@ class Library extends ChangeNotifier {
     return null;
   }
 
+  /// A saved song as it is now, or null if it can't be found.
+  Track? _trackOf(SavedTrack saved) {
+    if (saved.youtube case final youtube?) {
+      try {
+        return YouTubeTrack.fromJson(youtube);
+      } catch (_) {
+        return null;
+      }
+    }
+    final path = _resolve(saved);
+    return path == null ? null : Track(path);
+  }
+
   void _resolveCustom() {
     _liked = Playlist(
       id: likedId,
       name: 'Liked Songs',
-      tracks: [
-        for (final t in _likedSaved)
-          if (_resolve(t) case final path?) Track(path),
-      ],
+      tracks: [for (final t in _likedSaved) ?_trackOf(t)],
     );
     _resolveTags();
     _custom = [
@@ -478,10 +492,7 @@ class Library extends ChangeNotifier {
         Playlist(
           id: _idOf(s),
           name: s.name,
-          tracks: [
-            for (final t in s.tracks)
-              if (_resolve(t) case final path?) Track(path),
-          ],
+          tracks: [for (final t in s.tracks) ?_trackOf(t)],
         ),
     ];
   }

@@ -99,11 +99,11 @@ class MusifyAudioHandler extends BaseAudioHandler with SeekHandler {
   /// expanded view). Tag switches the first tag, "To replace" to start with.
   List<MediaControl> _songButtons() {
     final track = _service.currentTrack;
-    // YouTube songs aren't in the library to like or tag.
-    if (track == null || track is YouTubeTrack) return const [];
+    if (track == null) return const [];
     final library = Library.instance;
     final liked = library.isLiked(track);
-    final tag = library.tags.firstOrNull;
+    // YouTube songs can be liked but not tagged.
+    final tag = track is YouTubeTrack ? null : library.tags.firstOrNull;
     final tagged = tag != null && library.hasTag(track, tag);
     return [
       MediaControl.custom(
@@ -130,12 +130,13 @@ class MusifyAudioHandler extends BaseAudioHandler with SeekHandler {
     Map<String, dynamic>? extras,
   ]) async {
     final track = _service.currentTrack;
-    if (track == null || track is YouTubeTrack) return;
+    if (track == null) return;
     final library = Library.instance;
     switch (name) {
       case _like:
         library.toggleLike(track);
       case _tag:
+        if (track is YouTubeTrack) return;
         final tag = library.tags.firstOrNull;
         if (tag != null) library.toggleTag(track, tag);
     }
