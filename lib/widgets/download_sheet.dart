@@ -147,17 +147,19 @@ class DownloadBannerLayout extends StatelessWidget {
           children: [
             // The banner takes the status bar's place along with its own,
             // so the app below starts just under it.
-            ClipRect(
-              child: SizedBox(
-                height: (top + _height) * shown,
-                child: OverflowBox(
-                  alignment: Alignment.bottomCenter,
-                  minHeight: top + _height,
-                  maxHeight: top + _height,
-                  child: const _DownloadBanner(),
+            // Not built while hidden: its loading bar would animate away.
+            if (shown > 0)
+              ClipRect(
+                child: SizedBox(
+                  height: (top + _height) * shown,
+                  child: OverflowBox(
+                    alignment: Alignment.bottomCenter,
+                    minHeight: top + _height,
+                    maxHeight: top + _height,
+                    child: const _DownloadBanner(),
+                  ),
                 ),
               ),
-            ),
             Expanded(
               child: MediaQuery(
                 data: media.copyWith(

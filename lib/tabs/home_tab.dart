@@ -26,7 +26,9 @@ class _HomeTabState extends State<HomeTab> {
 
   List<Playlist>? _charts;
   String? _chartsError;
-  bool _needsKey = false;
+
+  /// Null until it's known whether there's a server key.
+  bool? _needsKey;
 
   @override
   void initState() {
@@ -44,7 +46,11 @@ class _HomeTabState extends State<HomeTab> {
   }
 
   Future<void> _loadCharts({bool refresh = false}) async {
-    if (await _server.key() == null) {
+    String? key;
+    try {
+      key = await _server.key();
+    } catch (_) {}
+    if (key == null) {
       if (mounted) setState(() => _needsKey = true);
       return;
     }
@@ -170,7 +176,8 @@ String _region(Playlist chart) =>
 extension on _HomeTabState {
   List<Widget> _buildCharts() {
     final charts = _charts;
-    if (_needsKey) {
+    if (_needsKey == null) return const [];
+    if (_needsKey!) {
       return [
         const _SectionTitle('Charts'),
         SliverToBoxAdapter(
