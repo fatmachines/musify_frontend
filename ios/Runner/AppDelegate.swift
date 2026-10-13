@@ -65,8 +65,19 @@ final class SiriBridge: NSObject, INPlayMediaIntentHandling {
   static let shared = SiriBridge()
 
   private var channel: FlutterMethodChannel?
-  private var dartReady = false
+
+  // Siri calls the handler on a background thread while Flutter runs on
+  // the main one: this state is shared under a lock, and Flutter is only
+  // ever called on the main thread.
+  private let lock = NSLock()
+  private var _dartReady = false
   private var pending: [[String: Any]] = []
+
+  private var dartReady: Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return _dartReady
+  }
 
   /// iOS kills the app if it touches Siri APIs like INVocabulary without
   /// the Siri capability. A request from Siri proves it is enabled, so the
@@ -82,10 +93,12 @@ final class SiriBridge: NSObject, INPlayMediaIntentHandling {
       guard let self else { return }
       switch call.method {
       case "ready":
-        NSLog("[Musify] siri: Dart ready, %d waiting", self.pending.count)
-        self.dartReady = true
+        self.lock.lock()
+        self._dartReady = true
         let waiting = self.pending
         self.pending = []
+        self.lock.unlock()
+        NSLog("[Musify] siri: Dart ready, %d waiting", waiting.count)
         waiting.forEach(self.send)
         result(nil)
       case "vocabulary":
@@ -117,10 +130,12 @@ final class SiriBridge: NSObject, INPlayMediaIntentHandling {
   /// Called on every request from Siri, which only arrive with the Siri
   /// capability enabled.
   private func siriIsEnabled() {
-    guard !siriEnabled else { return }
-    siriEnabled = true
-    UserDefaults.standard.set(true, forKey: Self.siriSeenKey)
-    applyVocabulary()
+    DispatchQueue.main.async {
+      guard !self.siriEnabled else { return }
+      self.siriEnabled = true
+      UserDefaults.standard.set(true, forKey: Self.siriSeenKey)
+      self.applyVocabulary()
+    }
   }
 
   // INPlayMediaIntentHandling ---------------------------------------------------
@@ -149,8 +164,9 @@ final class SiriBridge: NSObject, INPlayMediaIntentHandling {
     completion: @escaping (INPlayMediaIntentResponse) -> Void
   ) {
     siriIsEnabled()
-    NSLog("[Musify] siri: handle (Dart ready: %@)", dartReady ? "yes" : "no")
-    if dartReady {
+    let ready = dartReady
+    NSLog("[Musify] siri: handle (Dart ready: %@)", ready ? "yes" : "no")
+    if ready {
       // Played in the background by application(_:handle:completionHandler:).
       completion(INPlayMediaIntentResponse(code: .handleInApp, userActivity: nil))
     } else {
@@ -166,21 +182,23 @@ final class SiriBridge: NSObject, INPlayMediaIntentHandling {
     if let name = search?.mediaName ?? search?.albumName { request["query"] = name }
     if let artist = search?.artistName { request["artist"] = artist }
     if let shuffle = intent.playShuffled { request["shuffle"] = shuffle }
-    NSLog("[Musify] Siri request: %@", request.description)
-    if dartReady {
-      send(request)
-    } else {
-      pending.append(request)
-    }
+    NSLog("[Musify] siri: request %@", request.description)
+    lock.lock()
+    let ready = _dartReady
+    if !ready { pending.append(request) }
+    lock.unlock()
+    if ready { send(request) }
   }
 
   private func send(_ request: [String: Any]) {
-    guard let channel else {
-      NSLog("[Musify] siri: no channel to Dart")
-      return
-    }
-    channel.invokeMethod("play", arguments: request) { result in
-      NSLog("[Musify] siri: Dart played: %@", String(describing: result))
+    DispatchQueue.main.async {
+      guard let channel = self.channel else {
+        NSLog("[Musify] siri: no channel to Dart")
+        return
+      }
+      channel.invokeMethod("play", arguments: request) { result in
+        NSLog("[Musify] siri: Dart played: %@", String(describing: result))
+      }
     }
   }
 
