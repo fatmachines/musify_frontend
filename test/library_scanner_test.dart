@@ -23,7 +23,7 @@ void main() {
   tearDown(() => root.delete(recursive: true));
 
   test('each folder with audio becomes a playlist', () async {
-    final playlists = await LibraryScanner.scan(root.path);
+    final playlists = (await LibraryScanner.scan(root.path)).playlists;
 
     expect(playlists.map((pl) => pl.relativePath),
         ['.', 'Rock', p.join('Rock', 'Classic')]);
@@ -31,8 +31,9 @@ void main() {
     expect(playlists[1].tracks.last.extension, 'FLAC');
   });
 
-  test('unreadable root throws instead of looking empty', () {
-    expect(LibraryScanner.scan(p.join(root.path, 'missing')),
-        throwsA(isA<FileSystemException>()));
+  test('unreadable root is reported instead of looking empty', () async {
+    final result = await LibraryScanner.scan(p.join(root.path, 'missing'));
+    expect(result.rootError, isNotNull);
+    expect(result.playlists, isEmpty);
   });
 }

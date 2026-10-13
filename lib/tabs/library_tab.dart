@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../models/playlist.dart';
 import '../screens/playlist_screen.dart';
+import '../services/app_log.dart';
 import '../services/folder_access.dart';
 import '../services/library_scanner.dart';
 import '../services/library_store.dart';
@@ -31,12 +32,7 @@ class _LibraryTabState extends State<LibraryTab> {
   }
 
   Future<void> _restore() async {
-    String? root;
-    try {
-      root = await FolderAccess.restore(await LibraryStore.loadRoot());
-    } on PlatformException {
-      root = null;
-    }
+    final root = await FolderAccess.restore(await LibraryStore.loadRoot());
     if (!mounted) return;
     if (root == null) {
       setState(() => _loading = false);
@@ -51,20 +47,16 @@ class _LibraryTabState extends State<LibraryTab> {
       _loading = true;
       _error = null;
     });
-    try {
-      final playlists = await LibraryScanner.scan(root);
-      if (!mounted) return;
-      setState(() => _playlists = playlists);
-    } on FileSystemException {
-      if (!mounted) return;
-      setState(() {
-        _playlists = const [];
-        _error = "Musify can't open this folder. Choose it again to give "
-            'access.';
-      });
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    final result = await LibraryScanner.scan(root);
+    AppLog.addAll(result.log);
+    if (!mounted) return;
+    setState(() {
+      _playlists = result.playlists;
+      _error = result.rootError == null
+          ? null
+          : "Musify can't open this folder. Choose it again to give access.";
+      _loading = false;
+    });
   }
 
   /// Android 13+ grants audio files through READ_MEDIA_AUDIO; older versions
@@ -88,15 +80,18 @@ class _LibraryTabState extends State<LibraryTab> {
 
   Future<void> _pickFolder() async {
     if (!await _ensurePermission()) return;
-    final String? path;
-    try {
-      path = await FolderAccess.pick();
-    } on PlatformException {
-      return;
-    }
+    final path = await FolderAccess.pick();
     if (path == null) return;
     await LibraryStore.saveRoot(path);
     await _scan(path);
+  }
+
+  Future<void> _copyLog() async {
+    await Clipboard.setData(ClipboardData(text: AppLog.dump()));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Debug log copied')),
+    );
   }
 
   @override
@@ -111,6 +106,11 @@ class _LibraryTabState extends State<LibraryTab> {
               icon: const Icon(Icons.refresh),
               onPressed: _loading ? null : () => _scan(_rootPath!),
             ),
+          IconButton(
+            tooltip: 'Copy debug log',
+            icon: const Icon(Icons.bug_report_outlined),
+            onPressed: _copyLog,
+          ),
           IconButton(
             tooltip: 'Choose folder',
             icon: const Icon(Icons.create_new_folder_outlined),
