@@ -120,9 +120,10 @@ Future<void> downloadWithPicker(
   );
 }
 
-/// A small pill at the top while songs download: what and how far.
-class DownloadProgressPill extends StatelessWidget {
-  const DownloadProgressPill({super.key});
+/// While songs download: a green loading bar across the top of the app
+/// and, under it, "1/3 downloading…" with the song and how far it is.
+class DownloadProgressBar extends StatelessWidget {
+  const DownloadProgressBar({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -133,47 +134,71 @@ class DownloadProgressPill extends StatelessWidget {
         final track = downloads.current;
         if (track == null) return const SizedBox.shrink();
         final progress = downloads.progressOf(track) ?? 0;
-        final more = downloads.pending - 1;
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Material(
-              color: AppColors.elevated,
-              elevation: 6,
-              borderRadius: BorderRadius.circular(20),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 6, 14, 6),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox.square(
-                      dimension: 16,
-                      child: CircularProgressIndicator(
-                        value: progress > 0 ? progress : null,
-                        strokeWidth: 2,
-                        color: AppColors.green,
+        // Above the Scaffold, so it brings its own text style.
+        return IgnorePointer(
+          child: Material(
+            type: MaterialType.transparency,
+            child: Padding(
+              padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  LinearProgressIndicator(
+                    value: progress > 0 ? progress : null,
+                    minHeight: 3,
+                    color: AppColors.green,
+                    backgroundColor: Colors.white12,
+                  ),
+                  const SizedBox(height: 6),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: AppColors.elevated.withValues(alpha: 0.95),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: const [
+                          BoxShadow(color: Colors.black45, blurRadius: 8),
+                        ],
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 5,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${downloads.batchDone + 1}/${downloads.batchTotal} '
+                              'downloading…',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.green,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                track.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ),
+                            Text(
+                              '  ${(progress * 100).round()}%',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.subtle,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 200),
-                      child: Text(
-                        track.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    ),
-                    Text(
-                      '  ${(progress * 100).round()}%'
-                      '${more > 0 ? ' • $more more' : ''}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.subtle,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),

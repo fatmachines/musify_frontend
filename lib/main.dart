@@ -189,9 +189,11 @@ class _HomeShellState extends State<HomeShell>
               child: NowPlaying(onClose: _closePlayer),
             ),
           ),
-          const Align(
-            alignment: Alignment.topCenter,
-            child: DownloadProgressPill(),
+          const Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            child: DownloadProgressBar(),
           ),
         ],
       ),

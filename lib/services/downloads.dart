@@ -37,6 +37,23 @@ class Downloads extends ChangeNotifier {
   /// How many songs are still to save, including the current one.
   int get pending => _progress.length;
 
+  /// Songs asked for since the queue was last empty, and how many of them
+  /// are finished (saved or failed): "2/3 downloading".
+  int get batchTotal => _batchTotal;
+  int get batchDone => _batchDone;
+  int _batchTotal = 0;
+  int _batchDone = 0;
+
+  /// Shows [track] as downloading, for screenshots and tests.
+  @visibleForTesting
+  void debugShow(YouTubeTrack track, double progress, int done, int total) {
+    _current = track;
+    _progress[track.videoId] = progress;
+    _batchDone = done;
+    _batchTotal = total;
+    notifyListeners();
+  }
+
   static Future<String?> lastFolder() async =>
       (await SharedPreferences.getInstance()).getString(_lastFolderKey);
 
@@ -51,6 +68,8 @@ class Downloads extends ChangeNotifier {
     SharedPreferences.getInstance().then(
       (prefs) => prefs.setString(_lastFolderKey, folder),
     );
+    if (_progress.isEmpty) _batchTotal = _batchDone = 0;
+    _batchTotal++;
     _progress[track.videoId] = null;
     _waiting.add((track, folder));
     _callbacks[track.videoId] = onDone;
@@ -76,6 +95,7 @@ class Downloads extends ChangeNotifier {
     }
     _progress.remove(track.videoId);
     _current = null;
+    _batchDone++;
     notifyListeners();
     _callbacks.remove(track.videoId)?.call(file, error);
     _next();
