@@ -139,7 +139,11 @@ class _Body extends StatelessWidget {
               },
             ),
           ),
-          const SizedBox(height: 16),
+          // Like sits between the cover and the title.
+          Align(
+            alignment: Alignment.centerRight,
+            child: _LikeButton(track: track),
+          ),
           Row(
             children: [
               Expanded(
@@ -169,7 +173,6 @@ class _Body extends StatelessWidget {
                   ],
                 ),
               ),
-              _LikeButton(track: track),
             ],
           ),
           const SizedBox(height: 16),
@@ -219,6 +222,10 @@ class _LikeButton extends StatelessWidget {
         return IconButton(
           tooltip: liked ? 'Remove from Liked Songs' : 'Like',
           iconSize: 28,
+          // Flush with the cover's right edge.
+          padding: EdgeInsets.zero,
+          alignment: Alignment.centerRight,
+          constraints: const BoxConstraints.tightFor(width: 48, height: 44),
           onPressed: () => Library.instance.toggleLike(track),
           icon: AnimatedSwitcher(
             duration: const Duration(milliseconds: 180),
