@@ -35,7 +35,9 @@ class LibraryScanner {
       try {
         entries = dir.listSync(followLinks: false);
       } on FileSystemException {
-        // Unreadable subfolder: skip it rather than failing the whole scan.
+        // An unreadable root means the whole library is unavailable; an
+        // unreadable subfolder is skipped rather than failing the scan.
+        if (dir.path == rootPath) rethrow;
         continue;
       }
 

@@ -1,11 +1,13 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 import 'package:permission_handler/permission_handler.dart';
 
 import '../models/playlist.dart';
 import '../screens/playlist_screen.dart';
+import '../services/folder_access.dart';
 import '../services/library_scanner.dart';
 import '../services/library_store.dart';
 
@@ -20,6 +22,7 @@ class _LibraryTabState extends State<LibraryTab> {
   String? _rootPath;
   List<Playlist> _playlists = const [];
   bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -28,8 +31,14 @@ class _LibraryTabState extends State<LibraryTab> {
   }
 
   Future<void> _restore() async {
-    final root = await LibraryStore.loadRoot();
-    if (root == null || !await Directory(root).exists()) {
+    String? root;
+    try {
+      root = await FolderAccess.restore(await LibraryStore.loadRoot());
+    } on PlatformException {
+      root = null;
+    }
+    if (!mounted) return;
+    if (root == null) {
       setState(() => _loading = false);
       return;
     }
@@ -40,13 +49,22 @@ class _LibraryTabState extends State<LibraryTab> {
     setState(() {
       _rootPath = root;
       _loading = true;
+      _error = null;
     });
-    final playlists = await LibraryScanner.scan(root);
-    if (!mounted) return;
-    setState(() {
-      _playlists = playlists;
-      _loading = false;
-    });
+    try {
+      final playlists = await LibraryScanner.scan(root);
+      if (!mounted) return;
+      setState(() => _playlists = playlists);
+    } on FileSystemException {
+      if (!mounted) return;
+      setState(() {
+        _playlists = const [];
+        _error = "Musify can't open this folder. Choose it again to give "
+            'access.';
+      });
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   /// Android 13+ grants audio files through READ_MEDIA_AUDIO; older versions
@@ -70,9 +88,12 @@ class _LibraryTabState extends State<LibraryTab> {
 
   Future<void> _pickFolder() async {
     if (!await _ensurePermission()) return;
-    final path = await FilePicker.getDirectoryPath(
-      dialogTitle: 'Choose your music folder',
-    );
+    final String? path;
+    try {
+      path = await FolderAccess.pick();
+    } on PlatformException {
+      return;
+    }
     if (path == null) return;
     await LibraryStore.saveRoot(path);
     await _scan(path);
@@ -112,9 +133,12 @@ class _LibraryTabState extends State<LibraryTab> {
         onPick: _pickFolder,
       );
     }
+    if (_error != null) {
+      return _EmptyState(message: _error!, onPick: _pickFolder);
+    }
     if (_playlists.isEmpty) {
       return _EmptyState(
-        message: 'No music found in $_rootPath',
+        message: 'No music found in "${p.basename(_rootPath!)}"',
         onPick: _pickFolder,
       );
     }

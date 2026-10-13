@@ -30,4 +30,9 @@ void main() {
     expect(playlists[1].tracks.map((t) => t.title), ['a', 'b']);
     expect(playlists[1].tracks.last.extension, 'FLAC');
   });
+
+  test('unreadable root throws instead of looking empty', () {
+    expect(LibraryScanner.scan(p.join(root.path, 'missing')),
+        throwsA(isA<FileSystemException>()));
+  });
 }
