@@ -1,0 +1,20 @@
+# musify.fatmachines.com -> musify-api, via the shared Caddy
+# (~/caddy-sites/musify.caddy on the aso_tool_default network).
+services:
+  musify-api:
+    build: .
+    container_name: musify-api
+    restart: unless-stopped
+    # MUSIFY_KEY: the key the app sends. Kept out of git.
+    env_file: .env
+    volumes:
+      - musify_cache:/cache
+    networks:
+      - aso_tool_default
+
+volumes:
+  musify_cache:
+
+networks:
+  aso_tool_default:
+    external: true
