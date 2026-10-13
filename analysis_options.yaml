@@ -14,6 +14,8 @@ analyzer:
     - build/**
     - android/**
     - ios/**
+    # Vendored third-party code (just_audio), kept as upstream wrote it.
+    - packages/**
 
 linter:
   # The lint rules applied to this project can be customized in the

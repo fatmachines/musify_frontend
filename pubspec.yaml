@@ -45,6 +45,11 @@ dependencies:
   audio_service: ^0.18.19
   path_provider: ^2.1.6
 
+# just_audio with Musify's iOS equalizer added (see packages/just_audio).
+dependency_overrides:
+  just_audio:
+    path: packages/just_audio
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
