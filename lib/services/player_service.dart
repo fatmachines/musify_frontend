@@ -19,17 +19,40 @@ class SleepTimer {
   bool get endOfTrack => endsAt == null;
 }
 
-/// The one audio player in the app. A playlist is loaded as a looping queue,
-/// so both in-order and shuffled playback keep going until paused.
+/// The one audio player in the app.
+///
+/// just_audio plays a flat list in order; Musify decides that order itself
+/// (rather than using just_audio's shuffle) so queued songs land exactly
+/// where Spotify puts them:
+///
+///   ...songs before | current | play next (newest first) | add to queue
+///   (oldest first) | rest of the playlist
+///
+/// The playlist part holds each of its songs once, shuffled or not, so with
+/// repeat-all the list loops. A queued song ([QueuedTrack]) plays once and is
+/// removed as soon as playback moves off it, so it never comes round again.
 class PlayerService {
-  PlayerService._();
+  @visibleForTesting
+  PlayerService.fresh();
 
-  static final instance = PlayerService._();
+  static final instance = PlayerService.fresh();
 
   // Created on first use so widget tests never touch the audio plugin.
-  late final player = AudioPlayer();
+  AudioPlayer? _player;
+  AudioPlayer get player => _player ??= _create();
 
   Playlist? _loaded;
+
+  /// Whether the playlist part plays shuffled.
+  final shuffleOn = ValueNotifier<bool>(false);
+
+  /// Queue edits run one at a time, in order.
+  Future<void> _pending = Future.value();
+
+  IndexedAudioSource? _lastSource;
+
+  /// Repeat starts as "all" until the user (or a restored session) picks.
+  bool _loopChosen = false;
 
   final sleepTimer = ValueNotifier<SleepTimer?>(null);
   Timer? _sleepClock;
@@ -42,6 +65,24 @@ class PlayerService {
     } catch (e) {
       AppLog.add('player: audio session setup failed: $e');
     }
+  }
+
+  AudioPlayer _create() {
+    final player = AudioPlayer();
+    player.currentIndexStream.listen((_) => _dropPlayedQueue());
+    return player;
+  }
+
+  /// Completes once queued edits so far have been applied.
+  @visibleForTesting
+  Future<void> get idle => _pending;
+
+  Future<void> _serial(Future<void> Function() task) {
+    final next = _pending.then((_) => task()).catchError((Object e) {
+      AppLog.add('player: $e');
+    });
+    _pending = next;
+    return next;
   }
 
   /// The playlist whose songs are in the queue.
@@ -63,53 +104,204 @@ class PlayerService {
     return tag is Track ? tag : null;
   }
 
+  static AudioSource _source(Track track) =>
+      AudioSource.file(track.path, tag: track);
+
+  /// Songs queued after the current one, in the order they will play.
+  List<QueuedTrack> get upcomingQueue {
+    final current = player.currentIndex;
+    if (current == null) return const [];
+    return [
+      for (final source in player.sequence.skip(current + 1))
+        if (source.tag is QueuedTrack) source.tag as QueuedTrack,
+    ];
+  }
+
+  /// The playlist's songs either side of the one at [index]: in playlist
+  /// order, or all the others shuffled after it.
+  static (List<Track>, List<Track>) _around(
+    List<Track> tracks,
+    int index,
+    bool shuffle,
+  ) {
+    if (shuffle) {
+      return (
+        const [],
+        [
+          for (var i = 0; i < tracks.length; i++)
+            if (i != index) tracks[i],
+        ]..shuffle(Random()),
+      );
+    }
+    return (tracks.sublist(0, index), tracks.sublist(index + 1));
+  }
+
   /// Starts [playlist] at [startIndex]. Without one, it starts at the top,
-  /// or on a random song when shuffling.
+  /// or on a random song when shuffling. Songs the user queued stay queued.
   Future<void> play(
     Playlist playlist, {
     required bool shuffle,
     int? startIndex,
-  }) async {
+  }) => _serial(() async {
     final tracks = playlist.tracks;
     if (tracks.isEmpty) return;
     final index = startIndex ?? (shuffle ? Random().nextInt(tracks.length) : 0);
-
-    if (isCurrent(playlist)) {
-      await player.seek(Duration.zero, index: index);
-    } else {
-      await player.setAudioSources([
-        for (final t in tracks) AudioSource.file(t.path, tag: t),
-      ], initialIndex: index);
-      _loaded = playlist;
+    final queued = upcomingQueue;
+    final (before, after) = _around(tracks, index, shuffle);
+    await player.setShuffleModeEnabled(false);
+    _lastSource = null;
+    await player.setAudioSources([
+      ...before.map(_source),
+      _source(tracks[index]),
+      ...queued.map(_source),
+      ...after.map(_source),
+    ], initialIndex: before.length);
+    _loaded = playlist;
+    shuffleOn.value = shuffle;
+    if (!_loopChosen) {
+      _loopChosen = true;
       await player.setLoopMode(LoopMode.all);
     }
-    await setShuffle(shuffle);
     AppLog.add('player: ${playlist.name} from #$index shuffle=$shuffle');
     // play() completes only when playback stops, so don't wait on it.
     player.play();
+  });
+
+  /// Reorders the rest of the playlist, shuffled or back in playlist order,
+  /// without interrupting the current song or the queue after it.
+  Future<void> setShuffle(bool enabled) => _serial(() async {
+    shuffleOn.value = enabled;
+    final playlist = _loaded;
+    final current = player.currentIndex;
+    if (playlist == null || current == null) return;
+    final sequence = player.sequence;
+
+    // The playlist song we're at: the current one, or the last one before
+    // the queued songs if one of those is playing.
+    var anchorAt = current;
+    while (anchorAt > 0 && sequence[anchorAt].tag is QueuedTrack) {
+      anchorAt--;
+    }
+    final anchor = sequence[anchorAt].tag;
+    if (anchor is! Track || anchor is QueuedTrack) return;
+    final anchorIndex = playlist.tracks.indexWhere(
+      (t) => t.path == anchor.path,
+    );
+    if (anchorIndex < 0) return;
+    var queueEnd = current + 1;
+    while (queueEnd < sequence.length &&
+        sequence[queueEnd].tag is QueuedTrack) {
+      queueEnd++;
+    }
+
+    final (before, after) = _around(playlist.tracks, anchorIndex, enabled);
+    await player.removeAudioSourceRange(queueEnd, sequence.length);
+    await player.addAudioSources(after.map(_source).toList());
+    if (anchorAt > 0) await player.removeAudioSourceRange(0, anchorAt);
+    if (before.isNotEmpty) {
+      await player.insertAudioSources(0, before.map(_source).toList());
+    }
+  });
+
+  /// Plays [track] right after the current song, ahead of anything queued
+  /// before.
+  Future<void> playNext(Track track) => _enqueue(track, next: true);
+
+  /// Adds [track] after the songs already queued, ahead of the rest of the
+  /// playlist.
+  Future<void> addToQueue(Track track) => _enqueue(track, next: false);
+
+  Future<void> _enqueue(Track track, {required bool next}) => _serial(() async {
+    final source = _source(QueuedTrack(track.path));
+    final current = player.currentIndex;
+    if (current == null || player.sequence.isEmpty) {
+      // Nothing loaded: the song waits, paused, in the mini player.
+      await player.setAudioSources([source]);
+      return;
+    }
+    var at = current + 1;
+    if (!next) {
+      final sequence = player.sequence;
+      while (at < sequence.length && sequence[at].tag is QueuedTrack) {
+        at++;
+      }
+    }
+    await player.insertAudioSource(at, source);
+  });
+
+  Future<void> clearQueue() => _serial(() async {
+    final current = player.currentIndex;
+    if (current == null) return;
+    final sequence = player.sequence;
+    for (var i = sequence.length - 1; i > current; i--) {
+      if (sequence[i].tag is QueuedTrack) await player.removeAudioSourceAt(i);
+    }
+  });
+
+  /// Removes queued songs playback has moved past (or skipped), so they
+  /// play only once.
+  void _dropPlayedQueue() => _serial(() async {
+    final current = player.currentIndex;
+    if (current == null) return;
+    final sequence = player.sequence;
+    final playing = sequence[current];
+    final left = _lastSource;
+    _lastSource = playing;
+    final stale = <int>{
+      for (var i = 0; i < current; i++)
+        if (sequence[i].tag is QueuedTrack) i,
+      if (left != null && left != playing && left.tag is QueuedTrack)
+        ?_indexOf(sequence, left),
+    };
+    for (final i in stale.toList()..sort((a, b) => b - a)) {
+      await player.removeAudioSourceAt(i);
+    }
+  });
+
+  static int? _indexOf(
+    List<IndexedAudioSource> sequence,
+    IndexedAudioSource s,
+  ) {
+    final i = sequence.indexOf(s);
+    return i < 0 ? null : i;
   }
 
-  /// Turning shuffle on deals a fresh random order that keeps the current
-  /// song first.
-  Future<void> setShuffle(bool enabled) async {
-    await player.setShuffleModeEnabled(enabled);
-    if (enabled) await player.shuffle();
-  }
+  /// Puts back a saved session, paused at [position].
+  Future<void> restore({
+    required Playlist? playlist,
+    required List<Track> sequence,
+    required int index,
+    required Duration position,
+    required bool shuffle,
+    required LoopMode loop,
+  }) => _serial(() async {
+    await player.setShuffleModeEnabled(false);
+    await player.setLoopMode(loop);
+    _loopChosen = true;
+    _lastSource = null;
+    await player.setAudioSources(
+      sequence.map(_source).toList(),
+      initialIndex: index,
+      initialPosition: position,
+    );
+    _loaded = playlist;
+    shuffleOn.value = shuffle;
+    AppLog.add('player: restored ${sequence.length} songs at #$index');
+  });
 
   /// Stops and empties the queue, e.g. before its songs are deleted.
-  Future<void> stop() async {
+  Future<void> stop() => _serial(() async {
     await player.stop();
     await player.clearAudioSources();
     _loaded = null;
-  }
+  });
 
   Future<void> togglePlayback() =>
       player.playing ? player.pause() : player.play();
 
-  /// The song [offset] places away from the current one in play order
-  /// (shuffled or not), or null at either end with repeat off. Unlike
-  /// just_audio's own next/previous, repeat-one still moves on, as Spotify
-  /// does when you skip.
+  /// The song [offset] places away from the current one in play order, or
+  /// null at either end with repeat off. Unlike just_audio's own
+  /// next/previous, repeat-one still moves on, as Spotify does when you skip.
   Track? neighbour(int offset) {
     final index = _neighbourIndex(offset);
     if (index == null) return null;
@@ -119,17 +311,14 @@ class PlayerService {
 
   int? _neighbourIndex(int offset) {
     final current = player.currentIndex;
-    if (current == null) return null;
-    final order = player.effectiveIndices;
-    final position = order.indexOf(current);
-    if (position < 0) return null;
-    var target = position + offset;
-    if (target < 0 || target >= order.length) {
+    final length = player.sequence.length;
+    if (current == null || length == 0) return null;
+    var target = current + offset;
+    if (target < 0 || target >= length) {
       if (player.loopMode == LoopMode.off) return null;
-      target %= order.length;
+      target %= length;
     }
-    final index = order[target];
-    return index == current ? null : index;
+    return target == current ? null : target;
   }
 
   /// Moves [offset] songs along the play order, starting it from the top.
@@ -152,6 +341,7 @@ class PlayerService {
 
   /// Repeat cycles all → one → off.
   Future<void> cycleRepeat() {
+    _loopChosen = true;
     final next = switch (player.loopMode) {
       LoopMode.all => LoopMode.one,
       LoopMode.one => LoopMode.off,

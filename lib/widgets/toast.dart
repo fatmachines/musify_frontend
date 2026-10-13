@@ -60,7 +60,8 @@ class _ToastState extends State<_Toast> with SingleTickerProviderStateMixin {
     return Positioned(
       left: 16,
       right: 16,
-      bottom: MediaQuery.paddingOf(context).bottom + 96,
+      // Clear of the tab bar and the mini player.
+      bottom: MediaQuery.paddingOf(context).bottom + 150,
       child: IgnorePointer(
         child: FadeTransition(
           opacity: _fade,

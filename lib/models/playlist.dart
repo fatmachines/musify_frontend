@@ -10,6 +10,12 @@ class Track {
   String get extension => p.extension(path).replaceFirst('.', '').toUpperCase();
 }
 
+/// A song the user queued with "Play next" or "Add to queue". It plays once,
+/// ahead of the rest of the playlist, then leaves the queue.
+class QueuedTrack extends Track {
+  const QueuedTrack(super.path);
+}
+
 /// Either a folder that directly contains audio files (nested folders become
 /// their own playlists rather than being merged into their parent), or a
 /// playlist the user made, which can hold songs from any folder.

@@ -1,0 +1,148 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/widgets.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../models/playlist.dart';
+import 'app_log.dart';
+import 'library.dart';
+import 'player_service.dart';
+
+/// Keeps what was playing across app launches: the playlist, the play order
+/// with any queued songs, the current song and how far into it, shuffle and
+/// repeat. On launch it comes back paused in the mini player.
+class PlaybackSession {
+  static const _key = 'playback_session_v1';
+
+  static bool _started = false;
+  static Timer? _saveSoon;
+  static Timer? _whilePlaying;
+  static AppLifecycleListener? _lifecycle;
+
+  /// Restores the last session, then keeps saving changes.
+  static Future<void> start() async {
+    if (_started) return;
+    _started = true;
+    final service = PlayerService.instance;
+    try {
+      // Songs live in library folders, which on iOS must be opened first.
+      await Library.instance.ensureLoaded();
+      await _restore(service);
+    } catch (e) {
+      AppLog.add('session: restore failed: $e');
+    }
+
+    final player = service.player;
+    player.sequenceStateStream.listen((_) => _saveLater());
+    player.loopModeStream.listen((_) => _saveLater());
+    player.playingStream.listen((_) => _saveLater());
+    service.shuffleOn.addListener(_saveLater);
+    _whilePlaying = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (player.playing) _save();
+    });
+    _lifecycle = AppLifecycleListener(
+      onInactive: _save,
+      onHide: _save,
+      onPause: _save,
+      onDetach: _save,
+    );
+  }
+
+  static void _saveLater() {
+    _saveSoon?.cancel();
+    _saveSoon = Timer(const Duration(milliseconds: 500), _save);
+  }
+
+  static Future<void> _save() async {
+    final service = PlayerService.instance;
+    final player = service.player;
+    final sequence = player.sequence;
+    final index = player.currentIndex;
+    final prefs = await SharedPreferences.getInstance();
+    if (sequence.isEmpty || index == null) {
+      await prefs.remove(_key);
+      return;
+    }
+    final playlist = service.current;
+    await prefs.setString(
+      _key,
+      jsonEncode({
+        'playlist': playlist?.id,
+        'name': playlist?.name,
+        'tracks': [
+          for (final source in sequence)
+            if (source.tag case final Track track)
+              [track.path, if (track is QueuedTrack) 1],
+        ],
+        'index': index,
+        'position': player.position.inMilliseconds,
+        'shuffle': service.shuffleOn.value,
+        'loop': player.loopMode.name,
+      }),
+    );
+  }
+
+  static Future<void> _restore(PlayerService service) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_key);
+    if (raw == null) return;
+    final data = jsonDecode(raw) as Map<String, dynamic>;
+
+    // Songs deleted or moved since are dropped.
+    final saved = data['tracks'] as List;
+    final savedIndex = data['index'] as int;
+    final sequence = <Track>[];
+    var index = -1;
+    var resume = true;
+    for (var i = 0; i < saved.length; i++) {
+      final entry = saved[i] as List;
+      final path = entry[0] as String;
+      if (!File(path).existsSync()) {
+        if (i == savedIndex) resume = false;
+        continue;
+      }
+      if (i >= savedIndex && index < 0) index = sequence.length;
+      sequence.add(entry.length > 1 ? QueuedTrack(path) : Track(path));
+    }
+    if (sequence.isEmpty) return;
+    if (index < 0) index = 0;
+
+    final id = data['playlist'] as String?;
+    final inOrder = [
+      for (final t in sequence)
+        if (t is! QueuedTrack) t,
+    ];
+    final playlist =
+        (id == null ? null : Library.instance.byId(id)) ??
+        (inOrder.isEmpty
+            ? null
+            : Playlist(
+                id: id ?? 'restored',
+                name: data['name'] as String? ?? 'Last played',
+                tracks: inOrder,
+              ));
+
+    await service.restore(
+      playlist: playlist,
+      sequence: sequence,
+      index: index,
+      position: resume
+          ? Duration(milliseconds: data['position'] as int? ?? 0)
+          : Duration.zero,
+      shuffle: data['shuffle'] as bool? ?? false,
+      loop: LoopMode.values.byName(data['loop'] as String? ?? 'all'),
+    );
+  }
+
+  @visibleForTesting
+  static void reset() {
+    _started = false;
+    _saveSoon?.cancel();
+    _whilePlaying?.cancel();
+    _lifecycle?.dispose();
+    _lifecycle = null;
+  }
+}

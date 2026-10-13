@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'screens/now_playing.dart';
 import 'services/app_log.dart';
 import 'services/audio_handler.dart';
+import 'services/playback_session.dart';
 import 'services/player_service.dart';
 import 'tabs/home_tab.dart';
 import 'tabs/library_tab.dart';
@@ -28,6 +29,8 @@ Future<void> main() async {
     AppLog.add('audio service setup failed: $e');
   }
   runApp(const MusifyApp());
+  // Brings back what was playing last time, paused, and keeps it saved.
+  PlaybackSession.start();
 }
 
 class MusifyApp extends StatelessWidget {

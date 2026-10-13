@@ -50,7 +50,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   /// Playback state, only meaningful while this playlist is the one loaded.
   String? _currentPath;
   bool _playing = false;
-  bool _shuffle = false;
+  bool get _shuffle => _player.shuffleOn.value;
 
   /// The latest version from the library: the user's playlists change as
   /// songs are added, removed or the playlist is renamed.
@@ -62,6 +62,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     super.initState();
     _loadDetails();
     Library.instance.addListener(_onLibraryChanged);
+    _player.shuffleOn.addListener(_onShuffleChanged);
     _scroll.addListener(_onScroll);
     _query.addListener(() => setState(() {}));
     final player = _player.player;
@@ -71,7 +72,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           final tag = state.currentSource?.tag;
           setState(() {
             _currentPath = tag is Track ? tag.path : null;
-            _shuffle = state.shuffleModeEnabled;
           });
         }),
       )
@@ -93,6 +93,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     });
   }
 
+  void _onShuffleChanged() {
+    if (mounted) setState(() {});
+  }
+
   void _onLibraryChanged() {
     if (!mounted) return;
     if (!Library.instance.scanning &&
@@ -108,6 +112,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   @override
   void dispose() {
     Library.instance.removeListener(_onLibraryChanged);
+    _player.shuffleOn.removeListener(_onShuffleChanged);
     for (final s in _subscriptions) {
       s.cancel();
     }
@@ -285,7 +290,11 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   ),
                 ),
               ),
-              const SizedBox(width: 48),
+              IconButton(
+                tooltip: 'Playlist options',
+                icon: const Icon(Icons.more_horiz),
+                onPressed: () => showPlaylistActions(context, _playlist),
+              ),
             ],
           ),
         ),
@@ -611,6 +620,24 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                 onTap: () {
                   Navigator.of(sheetContext).pop();
                   _onTrack(index);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.playlist_play),
+                title: const Text('Play next'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _player.playNext(track);
+                  showToast(context, 'Playing next');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.queue_music),
+                title: const Text('Add to queue'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _player.addToQueue(track);
+                  showToast(context, 'Added to queue');
                 },
               ),
               ListTile(

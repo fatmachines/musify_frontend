@@ -280,11 +280,9 @@ class _Controls extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        StreamBuilder<bool>(
-          stream: player.shuffleModeEnabledStream,
-          initialData: player.shuffleModeEnabled,
-          builder: (context, snapshot) {
-            final on = snapshot.data ?? false;
+        ValueListenableBuilder<bool>(
+          valueListenable: service.shuffleOn,
+          builder: (context, on, _) {
             return _DotButton(
               tooltip: 'Shuffle',
               icon: Icons.shuffle,
@@ -687,25 +685,46 @@ void _showQueue(BuildContext context) {
         initialData: player.sequenceState,
         builder: (context, snapshot) {
           final state = snapshot.data!;
-          final order = state.effectiveSequence;
-          final current = state.currentSource;
-          final position = current == null ? -1 : order.indexOf(current);
-          final upNext = order.skip(position + 1).toList();
+          final sequence = state.sequence;
+          final current = state.currentIndex ?? -1;
+          final upNext = [
+            for (var i = current + 1; i < sequence.length; i++) i,
+          ];
+          final queued = [
+            for (final i in upNext)
+              if (sequence[i].tag is QueuedTrack) i,
+          ];
+          final rest = [
+            for (final i in upNext)
+              if (sequence[i].tag is! QueuedTrack) i,
+          ];
+          Widget tile(int i) => _QueueTile(
+            track: sequence[i].tag as Track,
+            onTap: () => player.seek(Duration.zero, index: i),
+          );
           return ListView(
             children: [
               const _QueueHeading('Now playing'),
-              if (current?.tag is Track)
-                _QueueTile(track: current!.tag as Track, playing: true),
-              _QueueHeading('Next from: ${playlist?.name ?? ''}'),
-              for (final source in upNext)
-                if (source.tag is Track)
-                  _QueueTile(
-                    track: source.tag as Track,
-                    onTap: () => player.seek(
-                      Duration.zero,
-                      index: state.sequence.indexOf(source),
+              if (current >= 0 && sequence[current].tag is Track)
+                _QueueTile(
+                  track: sequence[current].tag as Track,
+                  playing: true,
+                ),
+              if (queued.isNotEmpty)
+                _QueueHeading(
+                  'Next in queue',
+                  action: TextButton(
+                    onPressed: PlayerService.instance.clearQueue,
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.subtle,
                     ),
+                    child: const Text('Clear queue'),
                   ),
+                ),
+              for (final i in queued) tile(i),
+              if (rest.isNotEmpty)
+                _QueueHeading('Next from: ${playlist?.name ?? ''}'),
+              for (final i in rest) tile(i),
             ],
           );
         },
@@ -716,16 +735,24 @@ void _showQueue(BuildContext context) {
 
 class _QueueHeading extends StatelessWidget {
   final String text;
+  final Widget? action;
 
-  const _QueueHeading(this.text);
+  const _QueueHeading(this.text, {this.action});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: Text(
-        text,
-        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+          ),
+          ?action,
+        ],
       ),
     );
   }

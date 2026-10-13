@@ -27,7 +27,7 @@ class MusifyAudioHandler extends BaseAudioHandler with SeekHandler {
       onError: (Object e) => AppLog.add('player: playback error: $e'),
     );
     _player.playingStream.listen((_) => _broadcastState());
-    _player.shuffleModeEnabledStream.listen((_) => _broadcastState());
+    _service.shuffleOn.addListener(_broadcastState);
     _player.loopModeStream.listen((_) => _broadcastState());
     _player.durationStream.listen((duration) {
       final item = mediaItem.value;
@@ -73,7 +73,7 @@ class MusifyAudioHandler extends BaseAudioHandler with SeekHandler {
         bufferedPosition: _player.bufferedPosition,
         speed: _player.speed,
         queueIndex: _player.currentIndex,
-        shuffleMode: _player.shuffleModeEnabled
+        shuffleMode: _service.shuffleOn.value
             ? AudioServiceShuffleMode.all
             : AudioServiceShuffleMode.none,
         repeatMode: switch (_player.loopMode) {
@@ -206,7 +206,7 @@ class MusifyAudioHandler extends BaseAudioHandler with SeekHandler {
     if (found != null) {
       await _service.play(
         found.$1,
-        shuffle: _player.shuffleModeEnabled,
+        shuffle: _service.shuffleOn.value,
         startIndex: found.$2,
       );
     }
