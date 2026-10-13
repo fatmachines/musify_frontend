@@ -11,6 +11,7 @@ import '../services/metadata_service.dart';
 import '../services/player_service.dart';
 import '../services/youtube/youtube_media.dart';
 import '../theme.dart';
+import '../widgets/add_to_playlist.dart';
 import '../widgets/covers.dart';
 import '../widgets/song_menu.dart';
 import '../widgets/song_tile.dart';
@@ -310,7 +311,7 @@ class _SearchTabState extends State<SearchTab> {
               playing: current && player.player.playing,
               onTap: play,
               onMore: () => showSongMenu(context, track, onPlay: play),
-              trailing: _LikeToggle(track: track),
+              trailing: _AddButton(track: track),
             );
           }
           if (i < playlists.length) {
@@ -510,6 +511,30 @@ class _PlaylistRow extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// A YouTube result's +: choose Liked Songs or a playlist to save it in.
+/// A green tick once it's in one.
+class _AddButton extends StatelessWidget {
+  final Track track;
+
+  const _AddButton({required this.track});
+
+  @override
+  Widget build(BuildContext context) {
+    final library = Library.instance;
+    final saved =
+        library.isLiked(track) ||
+        library.custom.any((p) => library.contains(p, track));
+    return IconButton(
+      tooltip: 'Add to playlist',
+      onPressed: () => showAddToPlaylist(context, track),
+      icon: Icon(
+        saved ? Icons.check_circle : Icons.add_circle_outline,
+        color: saved ? AppColors.green : AppColors.subtle,
       ),
     );
   }

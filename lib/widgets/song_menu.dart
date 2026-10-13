@@ -109,7 +109,7 @@ Future<void> showSongMenu(
                   subtitle: const Text('Save to a folder on this phone'),
                   onTap: () => then(() => downloadWithPicker(context, track)),
                 ),
-              if (from != null && from.isCustom)
+              if (from != null && from.isCustom && !Library.isRemote(from))
                 ListTile(
                   leading: const Icon(Icons.remove_circle_outline),
                   title: const Text('Remove from this playlist'),
@@ -117,6 +117,20 @@ Future<void> showSongMenu(
                     library.removeTrack(from, track);
                     showToast(context, 'Removed from ${from.name}');
                   }),
+                ),
+              // On the device: delete the file. A YouTube song has none, so
+              // it can only leave a playlist (above).
+              if (!youtube)
+                ListTile(
+                  leading: const Icon(
+                    Icons.delete_outline,
+                    color: Color(0xFFF15E6C),
+                  ),
+                  title: const Text(
+                    'Delete from device',
+                    style: TextStyle(color: Color(0xFFF15E6C)),
+                  ),
+                  onTap: () => then(() => _confirmDelete(context, track)),
                 ),
               if (!youtube)
                 ListTile(
@@ -134,4 +148,35 @@ Future<void> showSongMenu(
       );
     },
   );
+}
+
+Future<void> _confirmDelete(BuildContext context, Track track) async {
+  final overlay = Overlay.of(context, rootOverlay: true);
+  final name = MetadataService.cachedInfo(track)?.title ?? track.title;
+  final delete = await showDialog<bool>(
+    context: context,
+    useRootNavigator: true,
+    builder: (dialog) => AlertDialog(
+      backgroundColor: AppColors.elevated,
+      title: Text('Delete "$name"?'),
+      content: const Text(
+        'The file is deleted from this phone, and the song leaves every '
+        'playlist. This can\'t be undone.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialog).pop(false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(dialog).pop(true),
+          style: TextButton.styleFrom(foregroundColor: const Color(0xFFF15E6C)),
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
+  if (delete != true) return;
+  final deleted = await Library.instance.deleteSong(track);
+  showToastOn(overlay, deleted ? 'Deleted $name' : "Couldn't delete $name");
 }

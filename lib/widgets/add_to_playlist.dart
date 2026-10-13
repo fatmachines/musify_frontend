@@ -7,7 +7,8 @@ import '../theme.dart';
 import 'covers.dart';
 import 'toast.dart';
 
-/// Lets the user put [track] in one of their playlists, or in a new one.
+/// Lets the user put [track] in Liked Songs, one of their playlists, or a
+/// new one.
 Future<void> showAddToPlaylist(BuildContext context, Track track) {
   return showModalBottomSheet<void>(
     context: context,
@@ -54,6 +55,23 @@ Future<void> showAddToPlaylist(BuildContext context, Track track) {
                 ),
               ),
               const SizedBox(height: 16),
+              ListTile(
+                leading: const LikedCover(size: 48),
+                title: const Text('Liked Songs'),
+                subtitle: Text(_songs(library.liked.tracks.length)),
+                trailing: library.isLiked(track)
+                    ? const Icon(Icons.check_circle, color: AppColors.green)
+                    : const Icon(Icons.add_circle_outline),
+                onTap: () {
+                  final already = library.isLiked(track);
+                  if (!already) library.toggleLike(track);
+                  Navigator.of(sheet).pop();
+                  showToast(
+                    context,
+                    already ? 'Already in Liked Songs' : 'Added to Liked Songs',
+                  );
+                },
+              ),
               if (playlists.isEmpty)
                 const Padding(
                   padding: EdgeInsets.all(24),

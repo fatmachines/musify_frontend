@@ -5,6 +5,7 @@ import '../models/playlist.dart';
 import '../services/downloads.dart';
 import '../services/library.dart';
 import '../theme.dart';
+import 'server_key_dialog.dart';
 import 'toast.dart';
 
 /// A folder in the library a song can be saved to.
@@ -98,6 +99,7 @@ Future<void> downloadWithPicker(
   BuildContext context,
   YouTubeTrack track,
 ) async {
+  if (!await ensureServerKey(context) || !context.mounted) return;
   final folder = await pickDownloadFolder(context);
   if (folder == null || !context.mounted) return;
   final overlay = Overlay.of(context, rootOverlay: true);

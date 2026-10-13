@@ -3,13 +3,16 @@ import 'package:flutter/material.dart';
 import '../models/playlist.dart';
 import '../screens/playlist_screen.dart';
 import '../services/library.dart';
+import '../services/musify_server.dart';
 import '../services/player_service.dart';
 import '../theme.dart';
 import '../widgets/covers.dart';
 import '../widgets/playlist_actions.dart';
+import '../widgets/server_key_dialog.dart';
 
-/// Spotify's home: a greeting, then the playlists and folders pinned here
-/// as tiles, two to a row, one tap away.
+/// Spotify's home: a greeting, the playlists and folders pinned here as
+/// tiles (two to a row, one tap away), then YouTube's charts and what's
+/// trending, from Musify's server.
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
 
@@ -19,11 +22,44 @@ class HomeTab extends StatefulWidget {
 
 class _HomeTabState extends State<HomeTab> {
   final _library = Library.instance;
+  final _server = MusifyServer.instance;
+
+  List<Playlist>? _charts;
+  String? _chartsError;
+  bool _needsKey = false;
 
   @override
   void initState() {
     super.initState();
     _library.ensureLoaded();
+    _charts = _server.cachedCharts;
+    _server.addListener(_loadCharts);
+    _loadCharts();
+  }
+
+  @override
+  void dispose() {
+    _server.removeListener(_loadCharts);
+    super.dispose();
+  }
+
+  Future<void> _loadCharts({bool refresh = false}) async {
+    if (await _server.key() == null) {
+      if (mounted) setState(() => _needsKey = true);
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _needsKey = false;
+        _chartsError = null;
+      });
+    }
+    try {
+      final charts = await _server.charts(refresh: refresh);
+      if (mounted) setState(() => _charts = charts);
+    } catch (e) {
+      if (mounted) setState(() => _chartsError = '$e');
+    }
   }
 
   static String _greeting() {
@@ -102,15 +138,308 @@ class _HomeTabState extends State<HomeTab> {
                       ),
                     ),
                   ),
+                ..._buildCharts(),
                 SliverToBoxAdapter(
                   child: SizedBox(
-                    height: MediaQuery.paddingOf(context).bottom + 16,
+                    height: MediaQuery.paddingOf(context).bottom + 96,
                   ),
                 ),
               ],
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+/// Card colours for the charts, Spotify-style.
+const _chartColors = [Color(0xFF8D67AB), Color(0xFF1E3264), Color(0xFFE8115B)];
+
+extension on _HomeTabState {
+  List<Widget> _buildCharts() {
+    final charts = _charts;
+    if (_needsKey) {
+      return [
+        const _SectionTitle('Charts'),
+        SliverToBoxAdapter(
+          child: _Notice(
+            icon: Icons.cloud_outlined,
+            text:
+                'Connect to the Musify server for YouTube charts and '
+                'downloads.',
+            action: 'Connect',
+            onAction: () async {
+              if (await showServerKeyDialog(context)) _loadCharts();
+            },
+          ),
+        ),
+      ];
+    }
+    if (charts == null) {
+      return [
+        const _SectionTitle('Charts'),
+        SliverToBoxAdapter(
+          child: _chartsError == null
+              ? const SizedBox(
+                  height: 120,
+                  child: Center(
+                    child: CircularProgressIndicator(color: AppColors.green),
+                  ),
+                )
+              : _Notice(
+                  icon: Icons.cloud_off_outlined,
+                  text: "Couldn't load the charts: $_chartsError",
+                  action: 'Retry',
+                  onAction: () => _loadCharts(refresh: true),
+                ),
+        ),
+      ];
+    }
+    final trending = charts.firstOrNull;
+    return [
+      const _SectionTitle('Charts'),
+      SliverToBoxAdapter(
+        child: SizedBox(
+          height: 196,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: charts.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 14),
+            itemBuilder: (context, i) => _ChartCard(
+              chart: charts[i],
+              color: _chartColors[i % _chartColors.length],
+              onTap: () => _open(charts[i]),
+            ),
+          ),
+        ),
+      ),
+      if (trending != null && trending.tracks.isNotEmpty) ...[
+        _SectionTitle('Trending in ${trending.name.split(' ').last}'),
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: 196,
+            child: StreamBuilder(
+              // The playing song's title turns green.
+              stream: PlayerService.instance.player.sequenceStateStream,
+              builder: (context, _) => ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: trending.tracks.length.clamp(0, 20),
+                separatorBuilder: (_, _) => const SizedBox(width: 14),
+                itemBuilder: (context, i) {
+                  final track = trending.tracks[i];
+                  return _SongCard(
+                    track: track,
+                    current:
+                        PlayerService.instance.currentTrack?.path == track.path,
+                    onTap: () => PlayerService.instance.play(
+                      trending,
+                      shuffle: false,
+                      startIndex: i,
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ],
+    ];
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  final String text;
+
+  const _SectionTitle(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 28, 16, 12),
+        child: Text(
+          text,
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+        ),
+      ),
+    );
+  }
+}
+
+/// A chart: a coloured square with "Top 100" and the region, the first
+/// song's cover in the corner, and the chart's name under it.
+class _ChartCard extends StatelessWidget {
+  final Playlist chart;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ChartCard({
+    required this.chart,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final region = chart.name.split(' ').last;
+    final first = chart.tracks.firstOrNull;
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 150,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 150,
+              height: 150,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [color, Color.lerp(color, Colors.black, 0.45)!],
+                ),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                children: [
+                  if (first != null)
+                    Positioned(
+                      right: -12,
+                      bottom: -12,
+                      child: Opacity(
+                        opacity: 0.9,
+                        child: TrackCover(track: first, size: 76),
+                      ),
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Top 100',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            height: 1,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          region.toUpperCase(),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              chart.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: AppColors.subtle, fontSize: 13),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A song in a shelf: its cover, title and channel.
+class _SongCard extends StatelessWidget {
+  final Track track;
+  final bool current;
+  final VoidCallback onTap;
+
+  const _SongCard({
+    required this.track,
+    required this.current,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final youtube = track is YouTubeTrack ? track as YouTubeTrack : null;
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 140,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TrackCover(track: track, size: 140),
+            const SizedBox(height: 8),
+            Text(
+              youtube?.name ?? track.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: current ? AppColors.green : AppColors.text,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              youtube?.channel ?? '',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: AppColors.subtle, fontSize: 13),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Notice extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final String action;
+  final VoidCallback onAction;
+
+  const _Notice({
+    required this.icon,
+    required this.text,
+    required this.action,
+    required this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: AppColors.subtle),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(color: AppColors.subtle, fontSize: 14),
+            ),
+          ),
+          TextButton(onPressed: onAction, child: Text(action)),
+        ],
       ),
     );
   }

@@ -8,7 +8,6 @@ import 'services/equalizer_service.dart';
 import 'services/playback_session.dart';
 import 'services/player_service.dart';
 import 'services/voice_play.dart';
-import 'services/youtube/youtube_capture.dart';
 import 'services/youtube/youtube_web_player.dart';
 import 'tabs/equalizer_tab.dart';
 import 'tabs/home_tab.dart';
@@ -146,8 +145,6 @@ class _HomeShellState extends State<HomeShell>
         children: [
           // YouTube songs play in here, out of sight behind the app.
           const Positioned(left: 0, top: 0, child: YouTubeWebHost()),
-          // ...and downloads are captured in here.
-          const Positioned(left: 2, top: 0, child: YouTubeCaptureHost()),
           Scaffold(
             // The bar fades over the content, so content runs underneath it.
             extendBody: true,

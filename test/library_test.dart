@@ -200,6 +200,23 @@ void main() {
     expect(reloaded.liked.tracks, isEmpty);
   });
 
+  test('deleting a song removes its file and it leaves playlists', () async {
+    SharedPreferences.setMockInitialValues({
+      'library_folders': [first.path],
+    });
+    final library = Library.fresh();
+    await library.ensureLoaded();
+    final song = library.allSongs.firstWhere((t) => t.path.endsWith('a.mp3'));
+    final mix = library.createPlaylist('Mix');
+    library.addTrack(mix, song);
+    library.toggleLike(song);
+    expect(await library.deleteSong(song), isTrue);
+    expect(File(song.path).existsSync(), isFalse);
+    expect(library.allSongs.map((t) => t.path), isNot(contains(song.path)));
+    expect(library.custom.single.tracks, isEmpty);
+    expect(library.liked.tracks, isEmpty);
+  });
+
   test('deleting a folder playlist from the device', () async {
     await touch(first, 'Rock/Classic/d.mp3');
     await touch(first, 'Pop/cover.jpg');

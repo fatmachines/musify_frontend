@@ -13,6 +13,7 @@ import '../services/library.dart';
 import '../services/player_service.dart';
 import '../services/voice_play.dart';
 import '../theme.dart';
+import '../widgets/server_key_dialog.dart';
 import '../widgets/covers.dart';
 import '../widgets/offline_badge.dart';
 import '../widgets/playlist_actions.dart';
@@ -274,11 +275,14 @@ class _LibraryTabState extends State<LibraryTab> {
                   _showFolders();
                 case 'log':
                   _copyLog();
+                case 'server':
+                  showServerKeyDialog(context);
               }
             },
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'rescan', child: Text('Rescan')),
               PopupMenuItem(value: 'folders', child: Text('Manage folders')),
+              PopupMenuItem(value: 'server', child: Text('Musify server')),
               PopupMenuItem(value: 'log', child: Text('Copy debug log')),
             ],
           ),

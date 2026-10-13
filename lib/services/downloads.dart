@@ -7,14 +7,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/playlist.dart';
 import 'app_log.dart';
 import 'library.dart';
-import 'metadata_service.dart';
-import 'youtube/mp4_audio.dart';
-import 'youtube/youtube_capture.dart';
+import 'musify_server.dart';
 
-/// Saves YouTube songs into library folders as M4A: the AAC audio YouTube's
-/// player is given (captured by YouTubeCapture, not re-encoded), with title,
-/// artist and cover in the file. Then rescans, so the song shows up in its
-/// folder's playlist. One song at a time; the rest wait their turn.
+/// Saves YouTube songs into library folders as M4A, through Musify's
+/// server (AAC as YouTube has it, with title, artist and cover). Then
+/// rescans, so the song shows up in its folder's playlist. One song at a
+/// time; the rest wait their turn.
 class Downloads extends ChangeNotifier {
   Downloads._();
 
@@ -103,38 +101,18 @@ class Downloads extends ChangeNotifier {
 
   Future<File> _save(YouTubeTrack track, String folder) async {
     var shown = 0.0;
-    final captured = await YouTubeCapture.instance.capture(
+    final file = _freeName(Directory(folder), _fileName(track));
+    await MusifyServer.instance.download(
       track,
+      file,
       onProgress: (progress) {
-        // Don't rebuild for every tick.
-        if ((progress - shown).abs() < 0.01) return;
+        // Don't rebuild for every packet.
+        if (progress - shown < 0.01 && progress < 1) return;
         shown = progress;
-        _progress[track.videoId] = progress * 0.98;
+        _progress[track.videoId] = progress;
         notifyListeners();
       },
     );
-    final cover = await MetadataService.cover(track);
-    final audio = Mp4Audio.flatten(
-      captured,
-      title: track.name,
-      artist: track.channel,
-      cover: cover,
-    );
-    if (audio == null) throw CaptureFailed('the audio was unreadable');
-    AppLog.add(
-      'download: ${track.name}: ${audio.duration.inSeconds}s, '
-      'gaps ${audio.gaps.inMilliseconds}ms, ${audio.bytes.length} bytes',
-    );
-    // Missing more than a moment: better no file than a broken one.
-    final expected = track.length;
-    if (audio.gaps > const Duration(seconds: 2) ||
-        (expected != null &&
-            audio.duration < expected - const Duration(seconds: 3))) {
-      throw CaptureFailed('only part of the song came through');
-    }
-    final file = _freeName(Directory(folder), _fileName(track));
-    await file.writeAsBytes(audio.bytes, flush: true);
-    AppLog.add('download: saved ${file.path}');
     await Library.instance.rescan();
     return file;
   }

@@ -141,6 +141,10 @@ class Library extends ChangeNotifier {
   }
 
   /// Liked Songs and tag playlists: made by Musify, not renamed or deleted.
+  /// A YouTube playlist (charts, search results): not in the library, so
+  /// nothing to rename, delete, pin or remove songs from.
+  static bool isRemote(Playlist playlist) => playlist.id.startsWith('youtube:');
+
   static bool isSystem(Playlist playlist) =>
       playlist.id == likedId || playlist.id.startsWith(_tagPrefix);
 
@@ -278,6 +282,24 @@ class Library extends ChangeNotifier {
     AppLog.add('delete: ${playlist.name}, $deleted songs');
     await rescan();
     return deleted;
+  }
+
+  /// Deletes a song's file from the device, then rescans; it leaves every
+  /// playlist with it. Stops the player if it's the one playing. False if
+  /// the file couldn't be deleted.
+  Future<bool> deleteSong(Track track) async {
+    if (track is YouTubeTrack) return false;
+    final player = PlayerService.instance;
+    if (player.currentTrack?.path == track.path) await player.stop();
+    try {
+      await File(track.path).delete();
+    } on FileSystemException catch (e) {
+      AppLog.add('delete: ${track.path} failed: ${e.message}');
+      return false;
+    }
+    AppLog.add('delete: ${track.path}');
+    await rescan();
+    return true;
   }
 
   // Liked Songs -----------------------------------------------------------------

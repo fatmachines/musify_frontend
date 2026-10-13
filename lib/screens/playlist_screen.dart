@@ -103,7 +103,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   void _onLibraryChanged() {
     if (!mounted) return;
-    if (!Library.instance.scanning &&
+    if (!Library.isRemote(widget.playlist) &&
+        !Library.instance.scanning &&
         Library.instance.byId(widget.playlist.id) == null) {
       // Deleted or hidden.
       Navigator.of(context).maybePop();
@@ -297,11 +298,14 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   ),
                 ),
               ),
-              IconButton(
-                tooltip: 'Playlist options',
-                icon: const Icon(Icons.more_horiz),
-                onPressed: () => showPlaylistActions(context, _playlist),
-              ),
+              if (Library.isRemote(_playlist))
+                const SizedBox(width: 48)
+              else
+                IconButton(
+                  tooltip: 'Playlist options',
+                  icon: const Icon(Icons.more_horiz),
+                  onPressed: () => showPlaylistActions(context, _playlist),
+                ),
             ],
           ),
         ),
