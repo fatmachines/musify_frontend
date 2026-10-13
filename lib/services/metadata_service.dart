@@ -4,6 +4,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:audio_metadata_reader/audio_metadata_reader.dart';
+import 'package:http/http.dart' as http;
 
 import '../models/playlist.dart';
 
@@ -50,13 +51,19 @@ class MetadataService {
   static String _playlistKey(Playlist playlist) =>
       '${playlist.id}#${playlist.tracks.length}';
 
-  static TrackInfo? cachedInfo(Track track) => _info[track.path];
+  static TrackInfo? cachedInfo(Track track) => track is YouTubeTrack
+      ? TrackInfo(
+          title: track.name,
+          artist: track.channel,
+          duration: track.length,
+        )
+      : _info[track.path];
 
   /// Tags (no artwork) for every track not read yet.
   static Future<void> loadInfo(List<Track> tracks) async {
     final missing = [
       for (final t in tracks)
-        if (!_info.containsKey(t.path)) t.path,
+        if (t is! YouTubeTrack && !_info.containsKey(t.path)) t.path,
     ];
     if (missing.isEmpty) return;
     final read = await Isolate.run(
@@ -67,7 +74,9 @@ class MetadataService {
 
   static Future<Uint8List?> cover(Track track) {
     return _covers.putIfAbsent(track.path, () async {
-      final bytes = await Isolate.run(() => _readCover(track.path));
+      final bytes = track is YouTubeTrack
+          ? await _download(track.thumbnail)
+          : await Isolate.run(() => _readCover(track.path));
       _loadedCovers[track.path] = bytes;
       return bytes;
     });
@@ -92,6 +101,17 @@ class MetadataService {
       _loadedPlaylistCovers[key] = covers;
       return covers;
     });
+  }
+
+  /// A YouTube thumbnail, or null if there's none or it can't be fetched.
+  static Future<Uint8List?> _download(String? url) async {
+    if (url == null) return null;
+    try {
+      final response = await http.get(Uri.parse(url));
+      return response.statusCode == 200 ? response.bodyBytes : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   static TrackInfo _readInfo(String path) {

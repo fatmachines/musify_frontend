@@ -75,7 +75,9 @@ class PlaybackSession {
         'tracks': [
           for (final source in sequence)
             if (source.tag case final Track track)
-              [track.path, if (track is QueuedTrack) 1],
+              track is YouTubeTrack
+                  ? {...track.toJson(), if (track is QueuedTrack) 'queued': 1}
+                  : [track.path, if (track is QueuedTrack) 1],
         ],
         'index': index,
         'position': player.position.inMilliseconds,
@@ -98,14 +100,22 @@ class PlaybackSession {
     var index = -1;
     var resume = true;
     for (var i = 0; i < saved.length; i++) {
-      final entry = saved[i] as List;
-      final path = entry[0] as String;
-      if (!File(path).existsSync()) {
-        if (i == savedIndex) resume = false;
-        continue;
+      final entry = saved[i];
+      final Track track;
+      if (entry is Map) {
+        // A YouTube song.
+        final json = entry.cast<String, Object?>();
+        track = YouTubeTrack.fromJson(json, queued: json['queued'] != null);
+      } else {
+        final path = (entry as List)[0] as String;
+        if (!File(path).existsSync()) {
+          if (i == savedIndex) resume = false;
+          continue;
+        }
+        track = entry.length > 1 ? QueuedTrack(path) : Track(path);
       }
       if (i >= savedIndex && index < 0) index = sequence.length;
-      sequence.add(entry.length > 1 ? QueuedTrack(path) : Track(path));
+      sequence.add(track);
     }
     if (sequence.isEmpty) return;
     if (index < 0) index = 0;

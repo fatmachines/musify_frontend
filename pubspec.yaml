@@ -44,6 +44,8 @@ dependencies:
   share_plus: ^13.3.1
   audio_service: ^0.18.19
   path_provider: ^2.1.6
+  youtube_explode_dart: ^3.1.0
+  http: ^1.6.0
 
 # just_audio with Musify's iOS equalizer added (see packages/just_audio).
 dependency_overrides:

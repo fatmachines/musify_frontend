@@ -9,6 +9,7 @@ import '../models/playlist.dart';
 import 'app_log.dart';
 import 'equalizer_service.dart';
 import 'library.dart';
+import 'youtube/youtube_media.dart';
 
 /// An active sleep timer: either a time to stop at, or the end of the
 /// current song.
@@ -111,8 +112,9 @@ class PlayerService {
     return tag is Track ? tag : null;
   }
 
-  static AudioSource _source(Track track) =>
-      AudioSource.file(track.path, tag: track);
+  static AudioSource _source(Track track) => track is YouTubeTrack
+      ? YouTubeAudioSource(track)
+      : AudioSource.file(track.path, tag: track);
 
   /// Songs queued after the current one, in the order they will play.
   List<QueuedTrack> get upcomingQueue {
@@ -234,7 +236,7 @@ class PlayerService {
   Future<void> addToQueue(Track track) => _enqueue(track, next: false);
 
   Future<void> _enqueue(Track track, {required bool next}) => _serial(() async {
-    final source = _source(QueuedTrack(track.path));
+    final source = _source(queuedCopy(track));
     final current = player.currentIndex;
     if (current == null || player.sequence.isEmpty) {
       // Nothing loaded: the song waits, paused, in the mini player.
