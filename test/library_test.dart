@@ -1,11 +1,18 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:musify/models/playlist.dart';
 import 'package:musify/services/library.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// Playlist names, leaving out the permanent Liked Songs.
+List<String> names(Library library) => [
+  for (final pl in library.all)
+    if (pl.id != Library.likedId) pl.name,
+];
 
 void main() {
   // Deleting checks the player, which needs Flutter's bindings.
@@ -37,7 +44,7 @@ void main() {
     final library = Library.fresh();
     await library.ensureLoaded();
     expect(library.folders.map((f) => f.path), [first.path]);
-    expect(library.all.map((pl) => pl.name), ['Pop', 'Rock']);
+    expect(names(library), ['Pop', 'Rock']);
   });
 
   test('every added folder contributes its playlists', () async {
@@ -47,11 +54,7 @@ void main() {
     final library = Library.fresh();
     await library.ensureLoaded();
     // Sorted by name, ignoring case.
-    expect(library.all.map((pl) => pl.name), [
-      p.basename(second.path),
-      'Pop',
-      'Rock',
-    ]);
+    expect(names(library), [p.basename(second.path), 'Pop', 'Rock']);
   });
 
   test('user playlists mix folders, persist and can be edited', () async {
@@ -70,8 +73,8 @@ void main() {
     mix = library.byId(mix.id)!;
     expect(mix.isCustom, isTrue);
     expect(mix.tracks.map((t) => p.basename(t.path)), ['a.mp3', 'c.mp3']);
-    // User playlists come first.
-    expect(library.all.first.id, mix.id);
+    // Liked Songs, then the user's playlists.
+    expect(library.all.map((pl) => pl.id).take(2), [Library.likedId, mix.id]);
 
     // Saved and read back by a fresh library.
     final prefs = await SharedPreferences.getInstance();
@@ -99,7 +102,7 @@ void main() {
     });
     final library = Library.fresh();
     await library.ensureLoaded();
-    final song = library.all.single.tracks.single;
+    final song = library.all.last.tracks.single;
     final mix = library.createPlaylist('Mix');
     library.addTrack(mix, song);
     await File(song.path).delete();
@@ -115,17 +118,17 @@ void main() {
     await library.ensureLoaded();
     final rock = library.all.firstWhere((pl) => pl.name == 'Rock');
     library.hidePlaylist(rock);
-    expect(library.all.map((pl) => pl.name), ['Pop']);
+    expect(names(library), ['Pop']);
     expect(library.hidden.map((pl) => pl.name), ['Rock']);
     expect(library.byId(rock.id), isNull);
 
     // Remembered across launches and rescans.
     final reloaded = Library.fresh();
     await reloaded.ensureLoaded();
-    expect(reloaded.all.map((pl) => pl.name), ['Pop']);
+    expect(names(reloaded), ['Pop']);
 
     reloaded.unhidePlaylist(reloaded.hidden.single);
-    expect(reloaded.all.map((pl) => pl.name), ['Pop', 'Rock']);
+    expect(names(reloaded), ['Pop', 'Rock']);
   });
 
   test('deleting a folder playlist from the device', () async {
@@ -143,8 +146,8 @@ void main() {
     expect(await library.deleteFromDevice(named('Rock')), 1);
     expect(File(p.join(first.path, 'Rock/a.mp3')).existsSync(), isFalse);
     expect(Directory(p.join(first.path, 'Rock')).existsSync(), isTrue);
-    expect(library.all.map((pl) => pl.name), contains('Classic'));
-    expect(library.all.map((pl) => pl.name), isNot(contains('Rock')));
+    expect(names(library), contains('Classic'));
+    expect(names(library), isNot(contains('Rock')));
 
     // Nothing left in Classic, so the folder goes too.
     await library.deleteFromDevice(named('Classic'));
@@ -158,6 +161,69 @@ void main() {
     await library.deleteFromDevice(named(p.basename(second.path)));
     expect(second.existsSync(), isTrue);
     expect(library.folders.map((f) => f.path), contains(second.path));
-    expect(library.all, isEmpty);
+    expect(names(library), isEmpty);
+  });
+
+  test('liked songs: newest first, saved, and removable', () async {
+    SharedPreferences.setMockInitialValues({
+      'library_folders': [first.path],
+    });
+    final library = Library.fresh();
+    await library.ensureLoaded();
+    final rock = library.all.firstWhere((pl) => pl.name == 'Rock');
+    final pop = library.all.firstWhere((pl) => pl.name == 'Pop');
+    expect(library.all.first.id, Library.likedId);
+    expect(library.liked.tracks, isEmpty);
+
+    library.toggleLike(rock.tracks.single);
+    library.toggleLike(pop.tracks.single);
+    expect(library.isLiked(rock.tracks.single), isTrue);
+    expect(library.liked.tracks.map((t) => p.basename(t.path)), [
+      'b.mp3',
+      'a.mp3',
+    ]);
+
+    final reloaded = Library.fresh();
+    await reloaded.ensureLoaded();
+    expect(reloaded.liked.tracks.map((t) => p.basename(t.path)), [
+      'b.mp3',
+      'a.mp3',
+    ]);
+
+    // Removing from the Liked Songs playlist unlikes; it can't be deleted.
+    reloaded.removeTrack(reloaded.liked, reloaded.liked.tracks.first);
+    reloaded.deletePlaylist(reloaded.liked);
+    expect(reloaded.byId(Library.likedId), isNotNull);
+    expect(reloaded.liked.tracks.map((t) => p.basename(t.path)), ['a.mp3']);
+  });
+
+  test('tags: a default to start, toggled per song, saved', () async {
+    SharedPreferences.setMockInitialValues({
+      'library_folders': [first.path],
+    });
+    final library = Library.fresh();
+    await library.ensureLoaded();
+    expect(library.tags.map((t) => t.name), ['To replace']);
+
+    final song = library.all
+        .firstWhere((pl) => pl.name == 'Rock')
+        .tracks
+        .single;
+    final replace = library.tags.single;
+    final live = library.createTag('Live', const Color(0xFF4FC3F7));
+    library.toggleTag(song, replace);
+    library.toggleTag(song, live);
+    expect(library.tagsOf(song).map((t) => t.name), ['To replace', 'Live']);
+    library.toggleTag(song, live);
+    expect(library.tagsOf(song).map((t) => t.name), ['To replace']);
+
+    final reloaded = Library.fresh();
+    await reloaded.ensureLoaded();
+    expect(reloaded.tags.map((t) => t.name), ['To replace', 'Live']);
+    expect(reloaded.tagsOf(song).map((t) => t.name), ['To replace']);
+
+    reloaded.deleteTag(reloaded.tags.first);
+    expect(reloaded.tags.map((t) => t.name), ['Live']);
+    expect(reloaded.tagsOf(song), isEmpty);
   });
 }

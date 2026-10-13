@@ -1,10 +1,12 @@
 import 'dart:io';
 import 'dart:math';
+import 'dart:ui' show Color;
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/playlist.dart';
+import '../models/song_tag.dart';
 import 'app_log.dart';
 import 'folder_access.dart';
 import 'library_scanner.dart';
@@ -12,6 +14,10 @@ import 'library_store.dart';
 import 'player_service.dart';
 
 const _customPrefix = 'custom:';
+
+/// Offered on first launch for the main use of tags: marking songs whose
+/// file should be swapped for a better version.
+const _defaultTag = SavedTag('to-replace', 'To replace', 0xFFFF9F43, []);
 
 /// Everything in Your Library: the folders the user added (each folder in
 /// them that holds music becomes a playlist) and the playlists they made,
@@ -25,6 +31,9 @@ class Library extends ChangeNotifier {
 
   static final instance = Library.fresh();
 
+  /// The permanent "Liked Songs" playlist's id.
+  static const likedId = 'liked';
+
   /// For the media browser: waits for the first load.
   static Future<List<Playlist>> playlists() async {
     await instance.ensureLoaded();
@@ -35,6 +44,19 @@ class Library extends ChangeNotifier {
   List<Playlist> _folderPlaylists = [];
   List<SavedPlaylist> _saved = [];
   List<Playlist> _custom = [];
+
+  List<SavedTrack> _likedSaved = [];
+  Playlist _liked = const Playlist(
+    id: likedId,
+    name: 'Liked Songs',
+    tracks: [],
+  );
+
+  List<SavedTag> _tagsSaved = [];
+  List<SongTag> _tags = [];
+
+  /// Resolved song paths per tag id.
+  Map<String, Set<String>> _tagged = {};
 
   /// Folders that couldn't be read on the last scan, by folder id.
   final folderErrors = <String, String>{};
@@ -49,8 +71,9 @@ class Library extends ChangeNotifier {
   /// Whether the first scan has finished.
   bool get loaded => _ready;
 
-  /// The user's playlists first, then folder playlists.
+  /// Liked Songs, the user's playlists, then folder playlists.
   List<Playlist> get all => [
+    _liked,
     ..._custom,
     for (final p in _folderPlaylists)
       if (!_hidden.contains(_hideKeys[p.id])) p,
@@ -84,6 +107,8 @@ class Library extends ChangeNotifier {
     _folders = await FolderAccess.restoreAll();
     _saved = await LibraryStore.loadPlaylists();
     _hidden = await LibraryStore.loadHidden();
+    _likedSaved = await LibraryStore.loadLiked();
+    _tagsSaved = await LibraryStore.loadTags() ?? const [_defaultTag];
     await rescan();
   }
 
@@ -189,6 +214,89 @@ class Library extends ChangeNotifier {
     return deleted;
   }
 
+  // Liked Songs -----------------------------------------------------------------
+
+  Playlist get liked => _liked;
+
+  bool isLiked(Track track) => _liked.tracks.any((t) => t.path == track.path);
+
+  /// Likes or unlikes [track]; newly liked songs go to the top.
+  void toggleLike(Track track) {
+    if (isLiked(track)) {
+      _likedSaved = [
+        for (final t in _likedSaved)
+          if (_resolve(t) != track.path) t,
+      ];
+    } else {
+      _likedSaved = [_save(track), ..._likedSaved];
+    }
+    _resolveCustom();
+    notifyListeners();
+    LibraryStore.saveLiked(_likedSaved);
+  }
+
+  // Tags --------------------------------------------------------------------------
+
+  List<SongTag> get tags => List.unmodifiable(_tags);
+
+  List<SongTag> tagsOf(Track track) => [
+    for (final tag in _tags)
+      if (_tagged[tag.id]?.contains(track.path) ?? false) tag,
+  ];
+
+  bool hasTag(Track track, SongTag tag) =>
+      _tagged[tag.id]?.contains(track.path) ?? false;
+
+  SongTag createTag(String name, Color color) {
+    final id = 'tag${DateTime.now().microsecondsSinceEpoch}';
+    _tagsSaved = [
+      ..._tagsSaved,
+      SavedTag(id, name, color.toARGB32(), const []),
+    ];
+    _commitTags();
+    return _tags.firstWhere((t) => t.id == id);
+  }
+
+  void deleteTag(SongTag tag) {
+    _tagsSaved = [
+      for (final t in _tagsSaved)
+        if (t.id != tag.id) t,
+    ];
+    _commitTags();
+  }
+
+  void toggleTag(Track track, SongTag tag) {
+    final on = hasTag(track, tag);
+    _tagsSaved = [
+      for (final t in _tagsSaved)
+        t.id != tag.id
+            ? t
+            : SavedTag(t.id, t.name, t.color, [
+                for (final saved in t.tracks)
+                  if (_resolve(saved) != track.path) saved,
+                if (!on) _save(track),
+              ]),
+    ];
+    _commitTags();
+  }
+
+  void _commitTags() {
+    _resolveTags();
+    notifyListeners();
+    LibraryStore.saveTags(_tagsSaved);
+  }
+
+  void _resolveTags() {
+    _tags = [
+      for (final t in _tagsSaved)
+        SongTag(id: t.id, name: t.name, color: Color(t.color)),
+    ];
+    _tagged = {
+      for (final t in _tagsSaved)
+        t.id: {for (final saved in t.tracks) ?_resolve(saved)},
+    };
+  }
+
   // The user's playlists ------------------------------------------------------
 
   Playlist createPlaylist(String name) {
@@ -205,6 +313,7 @@ class Library extends ChangeNotifier {
   }
 
   void deletePlaylist(Playlist playlist) {
+    if (playlist.id == likedId) return;
     _saved = [
       for (final s in _saved)
         if (_idOf(s) != playlist.id) s,
@@ -226,6 +335,10 @@ class Library extends ChangeNotifier {
   }
 
   void removeTrack(Playlist playlist, Track track) {
+    if (playlist.id == likedId) {
+      if (isLiked(track)) toggleLike(track);
+      return;
+    }
     _update(
       playlist,
       (s) => SavedPlaylist(s.id, s.name, [
@@ -278,6 +391,15 @@ class Library extends ChangeNotifier {
   }
 
   void _resolveCustom() {
+    _liked = Playlist(
+      id: likedId,
+      name: 'Liked Songs',
+      tracks: [
+        for (final t in _likedSaved)
+          if (_resolve(t) case final path?) Track(path),
+      ],
+    );
+    _resolveTags();
     _custom = [
       for (final s in _saved)
         Playlist(

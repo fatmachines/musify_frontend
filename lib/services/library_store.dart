@@ -45,6 +45,32 @@ class SavedPlaylist {
       ]);
 }
 
+class SavedTag {
+  final String id;
+  final String name;
+  final int color;
+  final List<SavedTrack> tracks;
+
+  const SavedTag(this.id, this.name, this.color, this.tracks);
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'name': name,
+    'color': color,
+    'tracks': [for (final t in tracks) t.toJson()],
+  };
+
+  static SavedTag fromJson(Map<String, Object?> json) => SavedTag(
+    json['id'] as String,
+    json['name'] as String,
+    json['color'] as int,
+    [
+      for (final t in json['tracks'] as List)
+        SavedTrack.fromJson((t as Map).cast<String, Object?>()),
+    ],
+  );
+}
+
 /// What the library keeps between launches.
 class LibraryStore {
   // Before several folders were supported there was a single one.
@@ -52,6 +78,8 @@ class LibraryStore {
   static const _foldersKey = 'library_folders';
   static const _playlistsKey = 'custom_playlists_v1';
   static const _hiddenKey = 'hidden_folder_playlists';
+  static const _likedKey = 'liked_songs_v1';
+  static const _tagsKey = 'song_tags_v1';
 
   /// Library folder paths (Android; iOS keeps bookmarks natively).
   static Future<List<String>> loadFolderPaths() async {
@@ -77,6 +105,45 @@ class LibraryStore {
   static Future<void> saveHidden(Set<String> hidden) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_hiddenKey, hidden.toList());
+  }
+
+  /// Liked songs, most recently liked first.
+  static Future<List<SavedTrack>> loadLiked() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_likedKey);
+    if (raw == null) return [];
+    return [
+      for (final t in jsonDecode(raw) as List)
+        SavedTrack.fromJson((t as Map).cast<String, Object?>()),
+    ];
+  }
+
+  static Future<void> saveLiked(List<SavedTrack> liked) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _likedKey,
+      jsonEncode([for (final t in liked) t.toJson()]),
+    );
+  }
+
+  /// Tags in the order created, or null if tags were never saved (a fresh
+  /// install).
+  static Future<List<SavedTag>?> loadTags() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_tagsKey);
+    if (raw == null) return null;
+    return [
+      for (final t in jsonDecode(raw) as List)
+        SavedTag.fromJson((t as Map).cast<String, Object?>()),
+    ];
+  }
+
+  static Future<void> saveTags(List<SavedTag> tags) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _tagsKey,
+      jsonEncode([for (final t in tags) t.toJson()]),
+    );
   }
 
   static Future<List<SavedPlaylist>> loadPlaylists() async {

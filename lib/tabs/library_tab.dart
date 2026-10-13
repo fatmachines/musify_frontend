@@ -398,7 +398,9 @@ class _PlaylistTile extends StatelessWidget {
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => PlaylistScreen(playlist: playlist)),
       ),
-      onLongPress: () => showPlaylistActions(context, playlist),
+      onLongPress: playlist.id == Library.likedId
+          ? null
+          : () => showPlaylistActions(context, playlist),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(

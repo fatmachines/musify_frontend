@@ -13,6 +13,8 @@ import '../widgets/add_to_playlist.dart';
 import '../widgets/covers.dart';
 import '../widgets/offline_badge.dart';
 import '../widgets/playlist_actions.dart';
+import '../widgets/swipe_actions.dart';
+import '../widgets/tag_sheet.dart';
 import '../widgets/toast.dart';
 
 const _searchDuration = Duration(milliseconds: 220);
@@ -35,7 +37,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   final _searchFocus = FocusNode();
   final _playKey = GlobalKey();
 
-  Color _accent = const Color(0xFF535353);
+  late Color _accent = widget.playlist.id == Library.likedId
+      ? LikedCover.accent
+      : const Color(0xFF535353);
+
+  /// Only songs with this tag are listed, when set.
+  String? _tagFilter;
   bool _infoLoaded = false;
 
   /// Scroll position, driving the header's fade, shrink and title bar.
@@ -241,6 +248,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   Widget _buildPage(BuildContext context) {
     final tracks = _playlist.tracks;
+    final shown = _tagFiltered();
     final barColor = Color.lerp(_accent, Colors.black, 0.4)!;
     final collapse = _collapse;
     return Stack(
@@ -250,10 +258,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           slivers: [
             SliverToBoxAdapter(child: _buildHeader(context)),
             if (tracks.isEmpty)
-              const SliverToBoxAdapter(child: _EmptyPlaylist()),
+              SliverToBoxAdapter(
+                child: _EmptyPlaylist(liked: _playlist.id == Library.likedId),
+              ),
             SliverList.builder(
-              itemCount: tracks.length,
-              itemBuilder: (context, i) => _buildTrack(i),
+              itemCount: shown.length,
+              itemBuilder: (context, i) => _buildTrack(shown[i]),
             ),
             SliverToBoxAdapter(
               child: SizedBox(
@@ -290,11 +300,15 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   ),
                 ),
               ),
-              IconButton(
-                tooltip: 'Playlist options',
-                icon: const Icon(Icons.more_horiz),
-                onPressed: () => showPlaylistActions(context, _playlist),
-              ),
+              if (_playlist.id == Library.likedId)
+                // Liked Songs can't be renamed or deleted.
+                const SizedBox(width: 48)
+              else
+                IconButton(
+                  tooltip: 'Playlist options',
+                  icon: const Icon(Icons.more_horiz),
+                  onPressed: () => showPlaylistActions(context, _playlist),
+                ),
             ],
           ),
         ),
@@ -441,10 +455,94 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               ),
             ],
           ),
+          _buildTagChips(),
           const SizedBox(height: 8),
         ],
       ),
     );
+  }
+
+  /// Indexes of the songs to list: all of them, or those with the chosen tag.
+  List<int> _tagFiltered() {
+    final tracks = _playlist.tracks;
+    final library = Library.instance;
+    // A tag no longer on any song here lists everything again.
+    final tag = library.tags
+        .where(
+          (t) =>
+              t.id == _tagFilter &&
+              tracks.any((track) => library.hasTag(track, t)),
+        )
+        .firstOrNull;
+    return [
+      for (var i = 0; i < tracks.length; i++)
+        if (tag == null || library.hasTag(tracks[i], tag)) i,
+    ];
+  }
+
+  /// Filter chips for the tags used in this playlist.
+  Widget _buildTagChips() {
+    final library = Library.instance;
+    final used = [
+      for (final tag in library.tags)
+        if (_playlist.tracks.any((t) => library.hasTag(t, tag))) tag,
+    ];
+    if (used.isEmpty) return const SizedBox.shrink();
+    final active = used.any((t) => t.id == _tagFilter) ? _tagFilter : null;
+    Widget chip(String label, String? id, {Color? dot}) {
+      final selected = active == id;
+      return Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: ChoiceChip(
+          selected: selected,
+          showCheckmark: false,
+          onSelected: (_) => setState(() => _tagFilter = id),
+          avatar: dot == null
+              ? null
+              : Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+                ),
+          label: Text(label),
+          labelStyle: TextStyle(
+            color: selected ? Colors.black : AppColors.text,
+            fontWeight: FontWeight.w500,
+          ),
+          selectedColor: AppColors.green,
+          backgroundColor: AppColors.chip,
+          side: BorderSide.none,
+          shape: const StadiumBorder(),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            chip('All', null),
+            for (final tag in used) chip(tag.name, tag.id, dot: tag.color),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Swiping a song left toggles the first tag; with no tags yet it opens
+  /// the tag sheet to make one.
+  void _quickTag(Track track) {
+    final library = Library.instance;
+    final tag = library.tags.firstOrNull;
+    if (tag == null) {
+      showTagSheet(context, track);
+      return;
+    }
+    final had = library.hasTag(track, tag);
+    library.toggleTag(track, tag);
+    showToast(context, had ? 'Removed ${tag.name}' : 'Tagged ${tag.name}');
   }
 
   Widget _buildSearch(BuildContext context) {
@@ -536,62 +634,76 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     final track = _playlist.tracks[index];
     final info = MetadataService.cachedInfo(track);
     final isCurrentTrack = _isCurrent && track.path == _currentPath;
-    return InkWell(
-      onTap: () => _onTrack(index),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
-        child: Row(
-          children: [
-            TrackCover(track: track, size: 52),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    info?.title ?? track.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: isCurrentTrack ? AppColors.green : AppColors.text,
-                      fontSize: 16,
+    final firstTag = Library.instance.tags.firstOrNull;
+    return SwipeActions(
+      rightIcon: Icons.queue_music,
+      onSwipeRight: () {
+        _player.addToQueue(track);
+        showToast(context, 'Added to queue');
+      },
+      leftIcon: Icons.sell_outlined,
+      leftColor: firstTag?.color ?? AppColors.subtle,
+      onSwipeLeft: () => _quickTag(track),
+      child: InkWell(
+        onTap: () => _onTrack(index),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
+          child: Row(
+            children: [
+              TrackCover(track: track, size: 52),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      info?.title ?? track.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isCurrentTrack
+                            ? AppColors.green
+                            : AppColors.text,
+                        fontSize: 16,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      if (isCurrentTrack && _playing) ...[
-                        const Icon(
-                          Icons.graphic_eq,
-                          size: 14,
-                          color: AppColors.green,
-                        ),
-                        const SizedBox(width: 4),
-                      ],
-                      const OfflineBadge(),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          info?.artist ?? 'Unknown artist',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AppColors.subtle,
-                            fontSize: 14,
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        if (isCurrentTrack && _playing) ...[
+                          const Icon(
+                            Icons.graphic_eq,
+                            size: 14,
+                            color: AppColors.green,
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        TagDots(track: track),
+                        const OfflineBadge(),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            info?.artist ?? 'Unknown artist',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColors.subtle,
+                              fontSize: 14,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-            IconButton(
-              tooltip: 'More',
-              icon: const Icon(Icons.more_horiz, color: AppColors.subtle),
-              onPressed: () => _showTrackSheet(index),
-            ),
-          ],
+              IconButton(
+                tooltip: 'More',
+                icon: const Icon(Icons.more_horiz, color: AppColors.subtle),
+                onPressed: () => _showTrackSheet(index),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -652,11 +764,38 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                 },
               ),
               ListTile(
+                leading: Icon(
+                  Library.instance.isLiked(track)
+                      ? Icons.favorite
+                      : Icons.favorite_border,
+                  color: Library.instance.isLiked(track)
+                      ? AppColors.green
+                      : null,
+                ),
+                title: Text(
+                  Library.instance.isLiked(track)
+                      ? 'Remove from Liked Songs'
+                      : 'Like',
+                ),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  Library.instance.toggleLike(track);
+                },
+              ),
+              ListTile(
                 leading: const Icon(Icons.add_circle_outline),
                 title: const Text('Add to playlist'),
                 onTap: () {
                   Navigator.of(sheetContext).pop();
                   showAddToPlaylist(context, track);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.sell_outlined),
+                title: const Text('Tag'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  showTagSheet(context, track);
                 },
               ),
               if (_playlist.isCustom)
@@ -841,25 +980,33 @@ class _PlayButton extends StatelessWidget {
 }
 
 class _EmptyPlaylist extends StatelessWidget {
-  const _EmptyPlaylist();
+  final bool liked;
+
+  const _EmptyPlaylist({required this.liked});
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.fromLTRB(32, 32, 32, 0),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(32, 32, 32, 0),
       child: Column(
         children: [
           Text(
-            "Let's start building your playlist",
+            liked
+                ? 'Songs you like will appear here'
+                : "Let's start building your playlist",
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
-            'While a song plays, open ••• in the player and choose '
-            '"Add to playlist". Song menus in your folders have it too.',
+            liked
+                ? 'Save songs by tapping the heart in the player, or "Like" '
+                      'in a song\'s menu.'
+                : 'While a song plays, open ••• in the player and choose '
+                      '"Add to playlist". Song menus in your folders have it '
+                      'too.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.subtle, fontSize: 14),
+            style: const TextStyle(color: AppColors.subtle, fontSize: 14),
           ),
         ],
       ),

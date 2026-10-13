@@ -6,12 +6,14 @@ import 'package:share_plus/share_plus.dart';
 
 import '../models/playlist.dart';
 import '../services/app_log.dart';
+import '../services/library.dart';
 import '../services/metadata_service.dart';
 import '../services/player_service.dart';
 import '../theme.dart';
 import '../utils/cover_color.dart';
 import '../widgets/add_to_playlist.dart';
 import '../widgets/covers.dart';
+import '../widgets/tag_sheet.dart';
 import '../widgets/track_swiper.dart';
 
 const _fallbackColor = Color(0xFF3E3E3E);
@@ -138,30 +140,37 @@ class _Body extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  info?.title ?? track.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.text,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                  ),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      info?.title ?? track.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.text,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      info?.artist ?? 'Unknown artist',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.subtle,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  info?.artist ?? 'Unknown artist',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: AppColors.subtle, fontSize: 16),
-                ),
-              ],
-            ),
+              ),
+              _LikeButton(track: track),
+            ],
           ),
           const SizedBox(height: 16),
           const _SeekBar(),
@@ -191,6 +200,38 @@ class _Body extends StatelessWidget {
           const SizedBox(height: 12),
         ],
       ),
+    );
+  }
+}
+
+/// The heart next to the song title: outlined, or filled green once liked.
+class _LikeButton extends StatelessWidget {
+  final Track track;
+
+  const _LikeButton({required this.track});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: Library.instance,
+      builder: (context, _) {
+        final liked = Library.instance.isLiked(track);
+        return IconButton(
+          tooltip: liked ? 'Remove from Liked Songs' : 'Like',
+          iconSize: 28,
+          onPressed: () => Library.instance.toggleLike(track),
+          icon: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            transitionBuilder: (child, animation) =>
+                ScaleTransition(scale: animation, child: child),
+            child: Icon(
+              liked ? Icons.favorite : Icons.favorite_border,
+              key: ValueKey(liked),
+              color: liked ? AppColors.green : AppColors.text,
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -523,6 +564,14 @@ void _showMore(BuildContext context, Track track) {
               onTap: () {
                 Navigator.of(sheet).pop();
                 showAddToPlaylist(context, track);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.sell_outlined),
+              title: const Text('Tag'),
+              onTap: () {
+                Navigator.of(sheet).pop();
+                showTagSheet(context, track);
               },
             ),
             ListTile(

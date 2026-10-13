@@ -70,6 +70,23 @@ void main() {
     expect(order(service), '[a] x2* x1* q1* q2* b c d e');
   });
 
+  test('manually queued songs always come before the playlist', () async {
+    final service = PlayerService.fresh();
+    await service.play(abcde, shuffle: false, startIndex: 0);
+    await service.addToQueue(song('q1'));
+    await service.addToQueue(song('q2'));
+    await service.playNext(song('x1'));
+    await settle(service);
+    expect(order(service), '[a] x1* q1* q2* b c d e');
+
+    // Queued while a queued song plays: still ahead of the playlist.
+    await service.next();
+    await settle(service);
+    await service.addToQueue(song('x2'));
+    await settle(service);
+    expect(order(service), 'a [x1*] q1* q2* x2* b c d e');
+  });
+
   test('queued songs play once and survive changing songs', () async {
     final service = PlayerService.fresh();
     await service.play(abcde, shuffle: false, startIndex: 0);

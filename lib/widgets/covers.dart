@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../models/playlist.dart';
+import '../services/library.dart';
 import '../services/metadata_service.dart';
 
 /// Playlist artwork: a 2x2 grid of four different song covers, or a single
@@ -15,6 +16,7 @@ class PlaylistCover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (playlist.id == Library.likedId) return LikedCover(size: size);
     return SizedBox.square(
       dimension: size,
       child: FutureBuilder<List<Uint8List>>(
@@ -109,6 +111,31 @@ class _Placeholder extends StatelessWidget {
       height: size,
       color: const Color(0xFF282828),
       child: Icon(icon, size: size * 0.45, color: const Color(0xFFB3B3B3)),
+    );
+  }
+}
+
+/// Spotify's Liked Songs art: a white heart on a purple-to-mint gradient.
+class LikedCover extends StatelessWidget {
+  static const accent = Color(0xFF5038A0);
+
+  final double size;
+
+  const LikedCover({super.key, required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF450AF5), Color(0xFF8E8EE5), Color(0xFFC4EFD9)],
+        ),
+      ),
+      child: Icon(Icons.favorite, color: Colors.white, size: size * 0.42),
     );
   }
 }
