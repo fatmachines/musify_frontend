@@ -66,6 +66,14 @@ final class SiriBridge: NSObject, INPlayMediaIntentHandling {
   private var dartReady = false
   private var pending: [[String: Any]] = []
 
+  /// iOS kills the app if it touches Siri APIs like INVocabulary without
+  /// the Siri capability. A request from Siri proves it is enabled, so the
+  /// names are only handed over once one has arrived (remembered across
+  /// launches).
+  private static let siriSeenKey = "musify_siri_request_seen"
+  private var siriEnabled = UserDefaults.standard.bool(forKey: siriSeenKey)
+  private var vocabulary: (playlists: [String], artists: [String])?
+
   func attach(messenger: FlutterBinaryMessenger) {
     let channel = FlutterMethodChannel(name: "musify/siri", binaryMessenger: messenger)
     channel.setMethodCallHandler { [weak self] call, result in
@@ -80,12 +88,11 @@ final class SiriBridge: NSObject, INPlayMediaIntentHandling {
       case "vocabulary":
         // Helps Siri recognise the library's own names.
         let args = call.arguments as? [String: Any]
-        let playlists = args?["playlists"] as? [String] ?? []
-        let artists = args?["artists"] as? [String] ?? []
-        INVocabulary.shared().setVocabularyStrings(
-          NSOrderedSet(array: playlists), of: .mediaPlaylistTitle)
-        INVocabulary.shared().setVocabularyStrings(
-          NSOrderedSet(array: artists), of: .mediaMusicArtistName)
+        self.vocabulary = (
+          playlists: args?["playlists"] as? [String] ?? [],
+          artists: args?["artists"] as? [String] ?? []
+        )
+        self.applyVocabulary()
         result(nil)
       default:
         result(FlutterMethodNotImplemented)
@@ -96,6 +103,23 @@ final class SiriBridge: NSObject, INPlayMediaIntentHandling {
     self.channel = channel
   }
 
+  private func applyVocabulary() {
+    guard siriEnabled, let vocabulary else { return }
+    INVocabulary.shared().setVocabularyStrings(
+      NSOrderedSet(array: vocabulary.playlists), of: .mediaPlaylistTitle)
+    INVocabulary.shared().setVocabularyStrings(
+      NSOrderedSet(array: vocabulary.artists), of: .mediaMusicArtistName)
+  }
+
+  /// Called on every request from Siri, which only arrive with the Siri
+  /// capability enabled.
+  private func siriIsEnabled() {
+    guard !siriEnabled else { return }
+    siriEnabled = true
+    UserDefaults.standard.set(true, forKey: Self.siriSeenKey)
+    applyVocabulary()
+  }
+
   // INPlayMediaIntentHandling ---------------------------------------------------
 
   /// The library is searched when playing, so Siri is told the request
@@ -104,6 +128,7 @@ final class SiriBridge: NSObject, INPlayMediaIntentHandling {
     for intent: INPlayMediaIntent,
     with completion: @escaping ([INPlayMediaMediaItemResolutionResult]) -> Void
   ) {
+    siriIsEnabled()
     let search = intent.mediaSearch
     let title = search?.mediaName ?? search?.artistName ?? search?.albumName ?? "Musify"
     let item = INMediaItem(
@@ -119,6 +144,7 @@ final class SiriBridge: NSObject, INPlayMediaIntentHandling {
     intent: INPlayMediaIntent,
     completion: @escaping (INPlayMediaIntentResponse) -> Void
   ) {
+    siriIsEnabled()
     if dartReady {
       // Played in the background by application(_:handle:completionHandler:).
       completion(INPlayMediaIntentResponse(code: .handleInApp, userActivity: nil))
