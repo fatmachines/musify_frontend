@@ -21,6 +21,7 @@ class PlaylistCover extends StatelessWidget {
       dimension: size,
       child: FutureBuilder<List<Uint8List>>(
         future: MetadataService.playlistCovers(playlist),
+        initialData: MetadataService.loadedPlaylistCovers(playlist),
         builder: (context, snapshot) {
           final covers = snapshot.data ?? const [];
           if (covers.isEmpty) {
@@ -64,6 +65,7 @@ class TrackCover extends StatelessWidget {
       borderRadius: BorderRadius.circular(4),
       child: FutureBuilder<Uint8List?>(
         future: MetadataService.cover(track),
+        initialData: MetadataService.loadedCover(track),
         builder: (context, snapshot) {
           final bytes = snapshot.data;
           return bytes == null

@@ -34,6 +34,22 @@ class MetadataService {
   static final _covers = <String, Future<Uint8List?>>{};
   static final _playlistCovers = <String, Future<List<Uint8List>>>{};
 
+  // Results already in, so widgets can show them on their first frame
+  // instead of starting blank while a finished future is awaited.
+  static final _loadedCovers = <String, Uint8List?>{};
+  static final _loadedPlaylistCovers = <String, List<Uint8List>>{};
+
+  /// The song's cover if it has been read (null if not yet, or none).
+  static Uint8List? loadedCover(Track track) => _loadedCovers[track.path];
+
+  /// The playlist's mosaic covers if already picked.
+  static List<Uint8List>? loadedPlaylistCovers(Playlist playlist) =>
+      _loadedPlaylistCovers[_playlistKey(playlist)];
+
+  // Keyed on length too: a user's playlist changes as songs are added.
+  static String _playlistKey(Playlist playlist) =>
+      '${playlist.id}#${playlist.tracks.length}';
+
   static TrackInfo? cachedInfo(Track track) => _info[track.path];
 
   /// Tags (no artwork) for every track not read yet.
@@ -50,17 +66,17 @@ class MetadataService {
   }
 
   static Future<Uint8List?> cover(Track track) {
-    return _covers.putIfAbsent(
-      track.path,
-      () => Isolate.run(() => _readCover(track.path)),
-    );
+    return _covers.putIfAbsent(track.path, () async {
+      final bytes = await Isolate.run(() => _readCover(track.path));
+      _loadedCovers[track.path] = bytes;
+      return bytes;
+    });
   }
 
   /// Up to four different covers from random songs in [playlist], for the
   /// Spotify-style mosaic. Picked once per playlist per app run.
   static Future<List<Uint8List>> playlistCovers(Playlist playlist) {
-    // Keyed on length too: a user's playlist changes as songs are added.
-    final key = '${playlist.id}#${playlist.tracks.length}';
+    final key = _playlistKey(playlist);
     return _playlistCovers.putIfAbsent(key, () async {
       final candidates = [...playlist.tracks]..shuffle(Random());
       final covers = <Uint8List>[];
@@ -73,6 +89,7 @@ class MetadataService {
         covers.add(bytes);
         if (covers.length == 4) break;
       }
+      _loadedPlaylistCovers[key] = covers;
       return covers;
     });
   }

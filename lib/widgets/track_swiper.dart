@@ -36,6 +36,12 @@ class _TrackSwiperState extends State<TrackSwiper> {
   bool _dragging = false;
   bool _sliding = false;
 
+  /// After a swipe, the song it landed on. Until the player has switched to
+  /// it, its in-between updates are ignored; otherwise the pages would snap
+  /// back to the old song for a moment.
+  String? _awaiting;
+  Timer? _awaitTimeout;
+
   @override
   void initState() {
     super.initState();
@@ -50,6 +56,7 @@ class _TrackSwiperState extends State<TrackSwiper> {
 
   @override
   void dispose() {
+    _awaitTimeout?.cancel();
     _subscription.cancel();
     _controller.dispose();
     super.dispose();
@@ -65,6 +72,11 @@ class _TrackSwiperState extends State<TrackSwiper> {
 
   void _onPlayerChange() {
     if (_dragging || _sliding || !mounted) return;
+    final awaiting = _awaiting;
+    if (awaiting != null) {
+      if (_service.currentTrack?.path != awaiting) return;
+      _stopAwaiting();
+    }
     final current = _service.currentTrack;
     final shownAt = current == null
         ? -1
@@ -107,6 +119,12 @@ class _TrackSwiperState extends State<TrackSwiper> {
     WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
   }
 
+  void _stopAwaiting() {
+    _awaiting = null;
+    _awaitTimeout?.cancel();
+    _awaitTimeout = null;
+  }
+
   bool _onScroll(ScrollNotification notification) {
     if (notification is ScrollStartNotification &&
         notification.dragDetails != null) {
@@ -115,7 +133,14 @@ class _TrackSwiperState extends State<TrackSwiper> {
       _dragging = false;
       final page = _controller.page?.round() ?? _current;
       if (page == _current) return false;
-      _service.skip(page - _current).whenComplete(_relayout);
+      _awaiting = _pages[page].path;
+      // If the switch never comes (say the file is gone), settle anyway.
+      _awaitTimeout?.cancel();
+      _awaitTimeout = Timer(const Duration(seconds: 2), () {
+        _stopAwaiting();
+        _relayout();
+      });
+      _service.skip(page - _current);
     }
     return false;
   }

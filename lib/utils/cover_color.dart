@@ -7,14 +7,20 @@ import '../models/playlist.dart';
 import '../services/metadata_service.dart';
 
 final _trackColors = <String, Future<Color?>>{};
+final _loadedTrackColors = <String, Color?>{};
 
 /// [coverColor] of a song's embedded art, cached per song.
 Future<Color?> trackColor(Track track) {
   return _trackColors.putIfAbsent(track.path, () async {
     final bytes = await MetadataService.cover(track);
-    return bytes == null ? null : coverColor(bytes);
+    final color = bytes == null ? null : await coverColor(bytes);
+    _loadedTrackColors[track.path] = color;
+    return color;
   });
 }
+
+/// [trackColor] if already worked out, for a widget's first frame.
+Color? loadedTrackColor(Track track) => _loadedTrackColors[track.path];
 
 /// A muted, dark-enough version of a cover's average colour, for the
 /// gradient behind a playlist header (white text has to stay readable).

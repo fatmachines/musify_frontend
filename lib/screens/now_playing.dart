@@ -36,6 +36,7 @@ class NowPlaying extends StatelessWidget {
         if (track == null) return const ColoredBox(color: AppColors.background);
         return FutureBuilder<Color?>(
           future: trackColor(track),
+          initialData: loadedTrackColor(track),
           builder: (context, color) {
             final accent = color.data ?? _fallbackColor;
             return AnimatedContainer(

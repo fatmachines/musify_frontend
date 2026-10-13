@@ -39,6 +39,7 @@ class MiniPlayer extends StatelessWidget {
           onVerticalDragEnd: onDragEnd,
           child: FutureBuilder<Color?>(
             future: trackColor(track),
+            initialData: loadedTrackColor(track),
             builder: (context, color) => AnimatedContainer(
               duration: const Duration(milliseconds: 300),
               margin: const EdgeInsets.fromLTRB(8, 0, 8, 10),
