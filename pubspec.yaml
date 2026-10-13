@@ -49,6 +49,7 @@ dependencies:
   webview_flutter: ^4.14.1
   webview_flutter_android: ^4.14.1
   webview_flutter_wkwebview: ^3.27.0
+  flutter_svg: ^2.3.0
 
 # just_audio with Musify's iOS equalizer added (see packages/just_audio).
 dependency_overrides:
@@ -84,6 +85,7 @@ flutter:
     # Two hours of silence: the stand-in Musify's player plays for a
     # YouTube song while YouTube's own player has the sound.
     - assets/audio/silence.m4a
+    - assets/icons/
 
   # Figtree (SIL OFL, see assets/fonts/Figtree-OFL.txt): bundled so the app
   # looks the same offline.

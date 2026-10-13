@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../theme.dart';
 
@@ -40,21 +41,15 @@ class BottomBar extends StatelessWidget {
               _item(
                 0,
                 'Home',
-                (c, s) => Icon(
-                  s ? Icons.home_filled : Icons.home_outlined,
+                (c, s) => _SvgIcon(
+                  s ? 'assets/icons/home_filled.svg' : 'assets/icons/home.svg',
                   color: c,
-                  size: 28,
                 ),
               ),
               _item(
                 1,
                 'Search',
-                (c, s) => Icon(
-                  Icons.search,
-                  color: c,
-                  size: 28,
-                  weight: s ? 700 : 400,
-                ),
+                (c, s) => _SvgIcon('assets/icons/search.svg', color: c),
               ),
               _item(
                 2,
@@ -106,6 +101,30 @@ class BottomBar extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// An icon drawn from an SVG in assets/icons, in [color].
+class _SvgIcon extends StatelessWidget {
+  final String asset;
+  final Color color;
+
+  const _SvgIcon(this.asset, {required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    // Same box as the other tab icons, so the labels line up.
+    return SizedBox.square(
+      dimension: 28,
+      child: Center(
+        child: SvgPicture.asset(
+          asset,
+          width: 26,
+          height: 26,
+          colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
         ),
       ),
     );
