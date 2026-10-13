@@ -57,6 +57,39 @@ class Library extends ChangeNotifier {
   List<SongTag> _tags = [];
 
   /// Resolved song paths per tag id.
+  // Home --------------------------------------------------------------------
+
+  /// See [LibraryStore.loadPinned].
+  List<String> _pins = [];
+
+  /// Folder playlists by folder and location, which survive iOS moving the
+  /// folder's path; anything else by id.
+  String _pinKey(Playlist playlist) => _hideKeys[playlist.id] ?? playlist.id;
+
+  /// The playlists pinned to Home, in the order pinned. Ones gone or
+  /// hidden since are left out.
+  List<Playlist> get pinned {
+    final byKey = {
+      for (final p in [...all, for (final t in _tags) tagPlaylist(t)])
+        _pinKey(p): p,
+    };
+    return [for (final key in _pins) ?byKey[key]];
+  }
+
+  bool isPinned(Playlist playlist) => _pins.contains(_pinKey(playlist));
+
+  void togglePin(Playlist playlist) {
+    final key = _pinKey(playlist);
+    _pins = _pins.contains(key)
+        ? [
+            for (final k in _pins)
+              if (k != key) k,
+          ]
+        : [..._pins, key];
+    notifyListeners();
+    LibraryStore.savePinned(_pins);
+  }
+
   Map<String, Set<String>> _tagged = {};
 
   /// Folders that couldn't be read on the last scan, by folder id.
@@ -139,6 +172,7 @@ class Library extends ChangeNotifier {
     _folders = await FolderAccess.restoreAll();
     _saved = await LibraryStore.loadPlaylists();
     _hidden = await LibraryStore.loadHidden();
+    _pins = await LibraryStore.loadPinned();
     _likedSaved = await LibraryStore.loadLiked();
     _tagsSaved = await LibraryStore.loadTags() ?? const [_defaultTag];
     await rescan();

@@ -131,6 +131,41 @@ void main() {
     expect(names(reloaded), ['Pop', 'Rock']);
   });
 
+  test('playlists pinned to Home stay pinned, in the order pinned', () async {
+    SharedPreferences.setMockInitialValues({
+      'library_folders': [first.path],
+    });
+    final library = Library.fresh();
+    await library.ensureLoaded();
+    final rock = library.all.firstWhere((pl) => pl.name == 'Rock');
+    library.togglePin(rock);
+    library.togglePin(library.liked);
+    library.togglePin(library.tagPlaylist(library.tags.first));
+    expect(library.pinned.map((pl) => pl.name), [
+      'Rock',
+      'Liked Songs',
+      library.tags.first.name,
+    ]);
+    expect(library.isPinned(rock), isTrue);
+
+    final reloaded = Library.fresh();
+    await reloaded.ensureLoaded();
+    expect(reloaded.pinned.map((pl) => pl.id), [
+      rock.id,
+      Library.likedId,
+      reloaded.tagPlaylist(reloaded.tags.first).id,
+    ]);
+
+    // Hidden folders leave Home; unpinning removes them for good.
+    reloaded.hidePlaylist(reloaded.pinned.first);
+    expect(reloaded.pinned.map((pl) => pl.id), [
+      Library.likedId,
+      reloaded.tagPlaylist(reloaded.tags.first).id,
+    ]);
+    reloaded.togglePin(reloaded.liked);
+    expect(reloaded.pinned, hasLength(1));
+  });
+
   test('deleting a folder playlist from the device', () async {
     await touch(first, 'Rock/Classic/d.mp3');
     await touch(first, 'Pop/cover.jpg');

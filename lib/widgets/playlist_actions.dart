@@ -10,9 +10,13 @@ import 'toast.dart';
 const _danger = Color(0xFFF15E6C);
 
 /// The menu for a whole playlist, from its page's ••• or a long press in
-/// Your Library.
+/// Your Library or on Home. Liked Songs and tags can only be pinned.
 Future<void> showPlaylistActions(BuildContext context, Playlist playlist) {
   final songs = playlist.tracks.length;
+  final library = Library.instance;
+  final system = Library.isSystem(playlist);
+  final pinned = library.isPinned(playlist);
+  final kind = playlist.isCustom ? 'Playlist' : 'Folder';
   return showModalBottomSheet<void>(
     context: context,
     useRootNavigator: true,
@@ -31,12 +35,27 @@ Future<void> showPlaylistActions(BuildContext context, Playlist playlist) {
                 overflow: TextOverflow.ellipsis,
               ),
               subtitle: Text(
-                '${playlist.isCustom ? 'Playlist' : 'Folder'} • '
+                '$kind • '
                 '$songs ${songs == 1 ? 'song' : 'songs'}',
               ),
             ),
             const Divider(color: Colors.white12, height: 16),
-            if (playlist.isCustom)
+            ListTile(
+              leading: Icon(
+                pinned ? Icons.push_pin : Icons.push_pin_outlined,
+                color: pinned ? AppColors.green : null,
+              ),
+              title: Text(pinned ? 'Unpin from Home' : 'Pin to Home'),
+              onTap: () {
+                Navigator.of(sheet).pop();
+                library.togglePin(playlist);
+                showToast(
+                  context,
+                  pinned ? 'Unpinned from Home' : 'Pinned to Home',
+                );
+              },
+            ),
+            if (playlist.isCustom && !system)
               ListTile(
                 leading: const Icon(Icons.edit_outlined),
                 title: const Text('Rename'),
@@ -53,14 +72,15 @@ Future<void> showPlaylistActions(BuildContext context, Playlist playlist) {
                   }
                 },
               ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline),
-              title: const Text('Delete playlist'),
-              onTap: () {
-                Navigator.of(sheet).pop();
-                confirmDeletePlaylist(context, playlist);
-              },
-            ),
+            if (!system)
+              ListTile(
+                leading: const Icon(Icons.delete_outline),
+                title: const Text('Delete playlist'),
+                onTap: () {
+                  Navigator.of(sheet).pop();
+                  confirmDeletePlaylist(context, playlist);
+                },
+              ),
           ],
         ),
       ),

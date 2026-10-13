@@ -297,15 +297,11 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   ),
                 ),
               ),
-              if (Library.isSystem(_playlist))
-                // Liked Songs and tags can't be renamed or deleted.
-                const SizedBox(width: 48)
-              else
-                IconButton(
-                  tooltip: 'Playlist options',
-                  icon: const Icon(Icons.more_horiz),
-                  onPressed: () => showPlaylistActions(context, _playlist),
-                ),
+              IconButton(
+                tooltip: 'Playlist options',
+                icon: const Icon(Icons.more_horiz),
+                onPressed: () => showPlaylistActions(context, _playlist),
+              ),
             ],
           ),
         ),

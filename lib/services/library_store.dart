@@ -80,6 +80,7 @@ class LibraryStore {
   static const _hiddenKey = 'hidden_folder_playlists';
   static const _likedKey = 'liked_songs_v1';
   static const _tagsKey = 'song_tags_v1';
+  static const _pinnedKey = 'home_pins_v1';
 
   /// Library folder paths (Android; iOS keeps bookmarks natively).
   static Future<List<String>> loadFolderPaths() async {
@@ -144,6 +145,18 @@ class LibraryStore {
       _tagsKey,
       jsonEncode([for (final t in tags) t.toJson()]),
     );
+  }
+
+  /// Playlists pinned to Home, in the order pinned: a folder playlist as
+  /// `<folder id>|<location>`, any other by its id.
+  static Future<List<String>> loadPinned() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_pinnedKey) ?? [];
+  }
+
+  static Future<void> savePinned(List<String> pins) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_pinnedKey, pins);
   }
 
   static Future<List<SavedPlaylist>> loadPlaylists() async {

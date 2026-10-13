@@ -40,11 +40,9 @@ void main() {
       );
       expect(service.player.currentIndex, 1);
       final source = sequence[1] as ClippingAudioSource;
-      expect(source.child, isA<UriAudioSource>());
-      expect(
-        (source.child as UriAudioSource).uri.toString(),
-        contains('silence.m4a'),
-      );
+      final child = source.child;
+      expect(child, isA<UriAudioSource>());
+      expect((child as UriAudioSource).uri.toString(), contains('silence.m4a'));
       expect(source.end, const Duration(minutes: 3, seconds: 32));
     },
   );
