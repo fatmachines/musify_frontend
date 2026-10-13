@@ -72,12 +72,49 @@ class PlayerService {
   AudioPlayer _create() {
     final androidEq = EqualizerService.instance.android;
     final player = AudioPlayer(
+      // Handled below, so YouTube's video starting doesn't pause us.
+      handleInterruptions: false,
       audioPipeline: androidEq == null
           ? null
           : AudioPipeline(androidAudioEffects: [androidEq]),
     );
     player.currentIndexStream.listen((_) => _dropPlayedQueue());
+    _handleInterruptions(player);
     return player;
+  }
+
+  /// Like just_audio's own handling (pause for a call or another app, play
+  /// again after; pause when headphones come out), except while a YouTube
+  /// song plays: the web view's video starting counts as an interruption
+  /// on iOS, which would pause the stand-in, and with it the video. The
+  /// video looks after real interruptions itself.
+  void _handleInterruptions(AudioPlayer player) {
+    var interrupted = false;
+    AudioSession.instance.then((session) {
+      session.becomingNoisyEventStream.listen((_) {
+        AppLog.add('player: headphones out, pausing');
+        player.pause();
+      });
+      session.interruptionEventStream.listen((event) {
+        if (event.type == AudioInterruptionType.duck) return;
+        final youtube = _trackOf(player.sequenceState) is YouTubeTrack;
+        AppLog.add(
+          'player: interruption ${event.begin ? 'began' : 'ended'} '
+          '(${event.type.name})${youtube ? ', ignored for YouTube' : ''}',
+        );
+        if (event.begin) {
+          interrupted = false;
+          if (youtube || !player.playing) return;
+          player.pause();
+          interrupted = true;
+        } else {
+          if (interrupted && event.type == AudioInterruptionType.pause) {
+            player.play();
+          }
+          interrupted = false;
+        }
+      });
+    });
   }
 
   /// Completes once queued edits so far have been applied.

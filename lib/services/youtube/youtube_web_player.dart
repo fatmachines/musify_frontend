@@ -94,7 +94,9 @@ class YouTubeWebPlayer {
       ..add(player.sequenceStateStream.listen((_) => _onSongChanged()))
       ..add(
         player.playingStream.listen((playing) {
-          if (_current != null) _command(playing ? 'play' : 'pause');
+          if (_current == null) return;
+          AppLog.add('youtube web: ${playing ? 'play' : 'pause'}');
+          _command(playing ? 'play' : 'pause');
         }),
       )
       ..add(
@@ -170,6 +172,8 @@ class YouTubeWebPlayer {
             const Duration(milliseconds: 1500)) {
           _follow(time);
         }
+      case 'paused':
+        AppLog.add('youtube web: video paused itself, resuming');
       case 'ended':
         AppLog.add('youtube web: ${track.videoId} ended');
         if (_player.loopMode == LoopMode.one) {
@@ -221,7 +225,10 @@ class YouTubeWebPlayer {
       v.addEventListener('ended', () => { if (!isAd()) send({ e: 'ended' }); });
       // The system pauses video when the app leaves the screen: resume.
       v.addEventListener('pause', () => {
-        if (want === 'play' && !v.ended) setTimeout(() => v.play().catch(() => {}), 300);
+        if (want === 'play' && !v.ended && !isAd()) {
+          send({ e: 'paused' });
+          setTimeout(() => v.play().catch(() => {}), 300);
+        }
       });
     }
     if (want === 'play') {
