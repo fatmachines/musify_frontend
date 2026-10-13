@@ -26,6 +26,10 @@ const _cardColors = [
   Color(0xFF503750),
 ];
 
+/// Bumped to start a search (focus the field, show the keyboard), e.g. when
+/// the Search tab is tapped while already open.
+final searchFocusRequests = ValueNotifier<int>(0);
+
 /// Finds songs (by title, artist, album or file name) and playlists across
 /// every added folder. Before typing it shows the library as cards.
 class SearchTab extends StatefulWidget {
@@ -47,11 +51,13 @@ class _SearchTabState extends State<SearchTab> {
     _query.addListener(() => setState(() {}));
     _focus.addListener(() => setState(() {}));
     _library.ensureLoaded().then((_) => _onLibraryChanged());
+    searchFocusRequests.addListener(_focus.requestFocus);
   }
 
   @override
   void dispose() {
     _library.removeListener(_onLibraryChanged);
+    searchFocusRequests.removeListener(_focus.requestFocus);
     _query.dispose();
     _focus.dispose();
     super.dispose();
@@ -141,59 +147,64 @@ class _SearchTabState extends State<SearchTab> {
       child: Row(
         children: [
           Expanded(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              height: 46,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: active ? AppColors.chip : AppColors.text,
-                borderRadius: BorderRadius.circular(active ? 23 : 6),
-              ),
-              child: Row(
-                children: [
-                  if (!active) ...[
-                    const Icon(Icons.search, color: Colors.black, size: 28),
-                    const SizedBox(width: 8),
-                  ],
-                  Expanded(
-                    child: TextField(
-                      controller: _query,
-                      focusNode: _focus,
-                      cursorColor: AppColors.green,
-                      textInputAction: TextInputAction.search,
-                      // Matches update as you type; no suggestions list.
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      style: TextStyle(
-                        color: active ? AppColors.text : Colors.black,
-                        fontSize: 16,
-                      ),
-                      decoration: InputDecoration(
-                        isCollapsed: true,
-                        border: InputBorder.none,
-                        hintText: active
-                            ? 'Songs, artists, playlists'
-                            : 'What do you want to listen to?',
-                        hintStyle: TextStyle(
-                          color: active ? AppColors.subtle : Colors.black87,
+            // The whole bar opens the keyboard, not just the text line.
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _focus.requestFocus,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                height: 46,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: active ? AppColors.chip : AppColors.text,
+                  borderRadius: BorderRadius.circular(active ? 23 : 6),
+                ),
+                child: Row(
+                  children: [
+                    if (!active) ...[
+                      const Icon(Icons.search, color: Colors.black, size: 28),
+                      const SizedBox(width: 8),
+                    ],
+                    Expanded(
+                      child: TextField(
+                        controller: _query,
+                        focusNode: _focus,
+                        cursorColor: AppColors.green,
+                        textInputAction: TextInputAction.search,
+                        // Matches update as you type; no suggestions list.
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        style: TextStyle(
+                          color: active ? AppColors.text : Colors.black,
                           fontSize: 16,
-                          fontWeight: active
-                              ? FontWeight.w400
-                              : FontWeight.w500,
+                        ),
+                        decoration: InputDecoration(
+                          isCollapsed: true,
+                          border: InputBorder.none,
+                          hintText: active
+                              ? 'Songs, artists, playlists'
+                              : 'What do you want to listen to?',
+                          hintStyle: TextStyle(
+                            color: active ? AppColors.subtle : Colors.black87,
+                            fontSize: 16,
+                            fontWeight: active
+                                ? FontWeight.w400
+                                : FontWeight.w500,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  if (_query.text.isNotEmpty)
-                    GestureDetector(
-                      onTap: _query.clear,
-                      child: const Icon(
-                        Icons.cancel,
-                        color: AppColors.subtle,
-                        size: 22,
+                    if (_query.text.isNotEmpty)
+                      GestureDetector(
+                        onTap: _query.clear,
+                        child: const Icon(
+                          Icons.cancel,
+                          color: AppColors.subtle,
+                          size: 22,
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

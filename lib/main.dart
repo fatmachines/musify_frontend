@@ -75,9 +75,16 @@ class _HomeShellState extends State<HomeShell>
 
   static const _tabs = [HomeTab(), SearchTab(), LibraryTab(), EqualizerTab()];
 
+  /// Tapping the open tab goes back to its first page; on Search, tapping
+  /// it again from there starts a search.
   void _onSelect(int index) {
     if (index == _index) {
-      _navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
+      final navigator = _navigatorKeys[index].currentState;
+      if (navigator != null && navigator.canPop()) {
+        navigator.popUntil((route) => route.isFirst);
+      } else if (index == 1) {
+        searchFocusRequests.value++;
+      }
     } else {
       setState(() => _index = index);
     }
