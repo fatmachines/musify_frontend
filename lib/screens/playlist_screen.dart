@@ -11,6 +11,9 @@ import '../utils/cover_color.dart';
 import '../widgets/covers.dart';
 import '../widgets/offline_badge.dart';
 
+const _searchDuration = Duration(milliseconds: 220);
+const _findBarHeight = 38.0;
+
 class PlaylistScreen extends StatefulWidget {
   final Playlist playlist;
 
@@ -25,12 +28,20 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   final _subscriptions = <StreamSubscription>[];
   final _scroll = ScrollController();
   final _query = TextEditingController();
+  final _searchFocus = FocusNode();
+  final _playKey = GlobalKey();
 
   Color _accent = const Color(0xFF535353);
   bool _infoLoaded = false;
 
-  /// How far the header has scrolled under the app bar, 0..1.
-  double _collapse = 0;
+  /// Scroll position, driving the header's fade, shrink and title bar.
+  double _offset = 0;
+
+  /// Whether the play button has scrolled up to the title bar and is shown
+  /// pinned on the bar's bottom edge instead.
+  bool _pinPlay = false;
+
+  bool _searching = false;
 
   /// Playback state, only meaningful while this playlist is the one loaded.
   String? _currentPath;
@@ -73,18 +84,34 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     }
     _scroll.dispose();
     _query.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
+  double get _barBottom => MediaQuery.paddingOf(context).top + kToolbarHeight;
+
   void _onScroll() {
-    // The title bar fills in as the playlist name scrolls under it.
-    final start = _coverSize(context) * 0.75;
-    final t = ((_scroll.offset - start) / 80).clamp(0.0, 1.0);
-    if (t != _collapse) setState(() => _collapse = t);
+    var pin = false;
+    final box = _playKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box != null && box.attached) {
+      final center = box.localToGlobal(box.size.center(Offset.zero)).dy;
+      pin = center <= _barBottom;
+    }
+    setState(() {
+      _offset = _scroll.offset;
+      _pinPlay = pin;
+    });
   }
 
   double _coverSize(BuildContext context) =>
       (MediaQuery.sizeOf(context).width * 0.6).clamp(160.0, 300.0);
+
+  /// 0 while the playlist name is below the title bar, 1 once it has
+  /// scrolled under it.
+  double get _collapse {
+    final start = _coverSize(context) * 0.8;
+    return ((_offset - start) / 70).clamp(0.0, 1.0);
+  }
 
   bool get _isCurrent => _player.isCurrent(_playlist);
 
@@ -117,8 +144,19 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   void _onTrack(int index) => _run(() => _player.play(_playlist,
       shuffle: _isCurrent && _shuffle, startIndex: index));
 
-  /// Indexes into the playlist of the songs matching "Find on this page".
-  List<int> _visible() {
+  void _openSearch() {
+    setState(() => _searching = true);
+    _searchFocus.requestFocus();
+  }
+
+  void _closeSearch() {
+    _searchFocus.unfocus();
+    _query.clear();
+    setState(() => _searching = false);
+  }
+
+  /// Indexes into the playlist of the songs matching the search.
+  List<int> _matches() {
     final q = _query.text.trim().toLowerCase();
     final all = List.generate(_playlist.tracks.length, (i) => i);
     if (q.isEmpty) return all;
@@ -132,48 +170,104 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final visible = _visible();
-    final barColor = Color.lerp(_accent, Colors.black, 0.35)!;
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: barColor.withValues(alpha: _collapse),
-        leading: IconButton(
-          tooltip: 'Back',
-          icon: const Icon(Icons.arrow_back_ios_new, size: 22),
-          onPressed: () => Navigator.of(context).maybePop(),
+    return PopScope(
+      canPop: !_searching,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _closeSearch();
+      },
+      child: Scaffold(
+        body: Stack(
+          children: [
+            _buildPage(context),
+            IgnorePointer(
+              ignoring: !_searching,
+              child: AnimatedOpacity(
+                duration: _searchDuration,
+                curve: Curves.easeOut,
+                opacity: _searching ? 1 : 0,
+                child: _buildSearch(context),
+              ),
+            ),
+          ],
         ),
-        centerTitle: true,
-        title: Opacity(
-          opacity: _collapse,
-          child: Text(
-            _playlist.name,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-          ),
-        ),
-      ),
-      body: CustomScrollView(
-        controller: _scroll,
-        slivers: [
-          SliverToBoxAdapter(child: _buildHeader(context)),
-          SliverList.builder(
-            itemCount: visible.length,
-            itemBuilder: (context, i) => _buildTrack(visible[i]),
-          ),
-          SliverToBoxAdapter(
-            child: SizedBox(height: MediaQuery.paddingOf(context).bottom + 24),
-          ),
-        ],
       ),
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
-    final top = MediaQuery.paddingOf(context).top + kToolbarHeight;
-    final current = _isCurrent;
+  Widget _buildPage(BuildContext context) {
+    final tracks = _playlist.tracks;
+    final barColor = Color.lerp(_accent, Colors.black, 0.4)!;
+    final collapse = _collapse;
+    return Stack(
+      children: [
+        CustomScrollView(
+          controller: _scroll,
+          slivers: [
+            SliverToBoxAdapter(child: _buildHeader(context)),
+            SliverList.builder(
+              itemCount: tracks.length,
+              itemBuilder: (context, i) => _buildTrack(i),
+            ),
+            SliverToBoxAdapter(
+              child:
+                  SizedBox(height: MediaQuery.paddingOf(context).bottom + 24),
+            ),
+          ],
+        ),
+        // Title bar: clear over the header, filling with the cover colour as
+        // the playlist name scrolls under it.
+        Container(
+          height: _barBottom,
+          padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
+          color: barColor.withValues(alpha: collapse),
+          child: Row(
+            children: [
+              IconButton(
+                tooltip: 'Back',
+                icon: const Icon(Icons.arrow_back_ios_new, size: 22),
+                onPressed: () => Navigator.of(context).maybePop(),
+              ),
+              Expanded(
+                child: Opacity(
+                  opacity: collapse,
+                  child: Text(
+                    _playlist.name,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 48),
+            ],
+          ),
+        ),
+        if (_pinPlay)
+          Positioned(
+            top: _barBottom - 28,
+            right: 16,
+            child: _PlayButton(
+                playing: _isCurrent && _playing, onTap: _onPlay),
+          ),
+      ],
+    );
+  }
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 400),
+  Widget _buildHeader(BuildContext context) {
+    final current = _isCurrent;
+    final coverSize = _coverSize(context);
+
+    // The find bar scrolls away first. The cover then sticks just under the
+    // title bar, shrinking and fading, while the name and buttons slide up
+    // over it.
+    const coverTop = _findBarHeight + 4 + 24;
+    final o = _offset.clamp(0.0, double.infinity);
+    final coverProgress = (o / (coverSize * 0.85 + coverTop)).clamp(0.0, 1.0);
+    final findOpacity = (1 - o / 40).clamp(0.0, 1.0);
+
+    return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -182,23 +276,35 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           stops: const [0, 0.85],
         ),
       ),
-      padding: EdgeInsets.fromLTRB(16, top + 4, 16, 4),
+      padding: EdgeInsets.fromLTRB(16, _barBottom + 4, 16, 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _FindBar(controller: _query),
+          Opacity(
+            opacity: findOpacity,
+            child: _FindBar(onTap: _openSearch),
+          ),
           const SizedBox(height: 24),
           Center(
-            child: DecoratedBox(
-              decoration: const BoxDecoration(boxShadow: [
-                BoxShadow(
-                  color: Color(0x80000000),
-                  blurRadius: 40,
-                  offset: Offset(0, 12),
+            child: Transform.translate(
+              offset: Offset(0, (o - coverTop).clamp(0.0, double.infinity)),
+              child: Transform.scale(
+                alignment: Alignment.topCenter,
+                scale: 1 - 0.3 * coverProgress,
+                child: Opacity(
+                  opacity: (1 - coverProgress * 1.1).clamp(0.0, 1.0),
+                  child: DecoratedBox(
+                    decoration: const BoxDecoration(boxShadow: [
+                      BoxShadow(
+                        color: Color(0x80000000),
+                        blurRadius: 40,
+                        offset: Offset(0, 12),
+                      ),
+                    ]),
+                    child: PlaylistCover(playlist: _playlist, size: coverSize),
+                  ),
                 ),
-              ]),
-              child: PlaylistCover(
-                  playlist: _playlist, size: _coverSize(context)),
+              ),
             ),
           ),
           const SizedBox(height: 24),
@@ -246,15 +352,85 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           const SizedBox(height: 4),
           Row(
             children: [
-              const Tooltip(
-                message: 'On this device',
-                child: OfflineBadge(size: 28),
-              ),
               const Spacer(),
               _ShuffleButton(active: current && _shuffle, onTap: _onShuffle),
               const SizedBox(width: 16),
-              _PlayButton(playing: current && _playing, onTap: _onPlay),
+              Opacity(
+                opacity: _pinPlay ? 0 : 1,
+                child: _PlayButton(
+                  key: _playKey,
+                  playing: current && _playing,
+                  onTap: _onPlay,
+                ),
+              ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearch(BuildContext context) {
+    final matches = _matches();
+    final query = _query.text.trim();
+    return ColoredBox(
+      color: AppColors.background,
+      child: Column(
+        children: [
+          SafeArea(
+            bottom: false,
+            child: AnimatedSlide(
+              duration: _searchDuration,
+              curve: Curves.easeOut,
+              // Rises from where the find bar sat in the header.
+              offset: _searching ? Offset.zero : const Offset(0, 0.6),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _SearchField(
+                        controller: _query,
+                        focusNode: _searchFocus,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _closeSearch,
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.text,
+                        textStyle: const TextStyle(
+                            fontFamily: 'Figtree',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500),
+                      ),
+                      child: const Text('Cancel'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: matches.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Text(
+                      "Couldn't find \"$query\"",
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          color: AppColors.text,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: EdgeInsets.only(
+                        bottom: MediaQuery.paddingOf(context).bottom + 24),
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    itemCount: matches.length,
+                    itemBuilder: (context, i) => _buildTrack(matches[i]),
+                  ),
           ),
         ],
       ),
@@ -379,10 +555,46 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   }
 }
 
+/// The header's "Find on this page" bar. Tapping it opens search.
 class _FindBar extends StatelessWidget {
-  final TextEditingController controller;
+  final VoidCallback onTap;
 
-  const _FindBar({required this.controller});
+  const _FindBar({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: _findBarHeight,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.search, size: 22, color: AppColors.text),
+            SizedBox(width: 8),
+            Text(
+              'Find on this page',
+              style: TextStyle(
+                  color: AppColors.text,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SearchField extends StatelessWidget {
+  final TextEditingController controller;
+  final FocusNode focusNode;
+
+  const _SearchField({required this.controller, required this.focusNode});
 
   @override
   Widget build(BuildContext context) {
@@ -390,36 +602,32 @@ class _FindBar extends StatelessWidget {
       height: 38,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
+        color: AppColors.chip,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
         children: [
-          const Icon(Icons.search, size: 22, color: AppColors.text),
+          const Icon(Icons.search, size: 22, color: AppColors.subtle),
           const SizedBox(width: 8),
           Expanded(
             child: TextField(
               controller: controller,
+              focusNode: focusNode,
               cursorColor: AppColors.green,
-              style: const TextStyle(
-                  color: AppColors.text,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700),
+              textInputAction: TextInputAction.search,
+              style: const TextStyle(color: AppColors.text, fontSize: 14),
               decoration: const InputDecoration(
                 isCollapsed: true,
                 border: InputBorder.none,
                 hintText: 'Find on this page',
-                hintStyle: TextStyle(
-                    color: AppColors.text,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700),
+                hintStyle: TextStyle(color: AppColors.subtle, fontSize: 14),
               ),
             ),
           ),
           if (controller.text.isNotEmpty)
             GestureDetector(
               onTap: controller.clear,
-              child: const Icon(Icons.close, size: 20, color: AppColors.text),
+              child: const Icon(Icons.close, size: 20, color: AppColors.subtle),
             ),
         ],
       ),
@@ -472,7 +680,7 @@ class _PlayButton extends StatelessWidget {
   final bool playing;
   final VoidCallback onTap;
 
-  const _PlayButton({required this.playing, required this.onTap});
+  const _PlayButton({super.key, required this.playing, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -482,6 +690,7 @@ class _PlayButton extends StatelessWidget {
       child: Material(
         color: AppColors.green,
         shape: const CircleBorder(),
+        elevation: 4,
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: onTap,
