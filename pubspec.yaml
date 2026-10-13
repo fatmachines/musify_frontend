@@ -64,6 +64,19 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # Figtree (SIL OFL, see assets/fonts/Figtree-OFL.txt): bundled so the app
+  # looks the same offline.
+  fonts:
+    - family: Figtree
+      fonts:
+        - asset: assets/fonts/Figtree-400.ttf
+        - asset: assets/fonts/Figtree-500.ttf
+          weight: 500
+        - asset: assets/fonts/Figtree-700.ttf
+          weight: 700
+        - asset: assets/fonts/Figtree-800.ttf
+          weight: 800
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

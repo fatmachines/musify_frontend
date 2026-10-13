@@ -11,7 +11,10 @@ import '../services/app_log.dart';
 import '../services/folder_access.dart';
 import '../services/library_scanner.dart';
 import '../services/library_store.dart';
+import '../services/player_service.dart';
+import '../theme.dart';
 import '../widgets/covers.dart';
+import '../widgets/offline_badge.dart';
 
 class LibraryTab extends StatefulWidget {
   const LibraryTab({super.key});
@@ -99,23 +102,39 @@ class _LibraryTabState extends State<LibraryTab> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Your Library'),
-        actions: [
-          if (_rootPath != null)
-            IconButton(
-              tooltip: 'Rescan',
-              icon: const Icon(Icons.refresh),
-              onPressed: _loading ? null : () => _scan(_rootPath!),
+        titleSpacing: 16,
+        title: const Row(
+          children: [
+            CircleAvatar(
+              radius: 16,
+              backgroundColor: AppColors.green,
+              child: Icon(Icons.music_note, size: 18, color: Colors.black),
             ),
-          IconButton(
-            tooltip: 'Copy debug log',
-            icon: const Icon(Icons.bug_report_outlined),
-            onPressed: _copyLog,
-          ),
+            SizedBox(width: 12),
+            Text('Your Library'),
+          ],
+        ),
+        actions: [
           IconButton(
             tooltip: 'Choose folder',
-            icon: const Icon(Icons.create_new_folder_outlined),
+            icon: const Icon(Icons.add, size: 30),
             onPressed: _loading ? null : _pickFolder,
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              switch (value) {
+                case 'rescan':
+                  if (_rootPath != null) _scan(_rootPath!);
+                case 'log':
+                  _copyLog();
+              }
+            },
+            itemBuilder: (_) => [
+              if (_rootPath != null)
+                const PopupMenuItem(value: 'rescan', child: Text('Rescan')),
+              const PopupMenuItem(value: 'log', child: Text('Copy debug log')),
+            ],
           ),
         ],
       ),
@@ -129,58 +148,118 @@ class _LibraryTabState extends State<LibraryTab> {
     }
     if (_rootPath == null) {
       return _EmptyState(
+        title: 'Add your music',
         message: 'Pick a folder on your device. Every folder inside it with '
             'music becomes a playlist.',
         onPick: _pickFolder,
       );
     }
     if (_error != null) {
-      return _EmptyState(message: _error!, onPick: _pickFolder);
+      return _EmptyState(
+          title: "Can't open folder", message: _error!, onPick: _pickFolder);
     }
     if (_playlists.isEmpty) {
       return _EmptyState(
-        message: 'No music found in "${p.basename(_rootPath!)}"',
+        title: 'No music found',
+        message: 'Nothing playable in "${p.basename(_rootPath!)}".',
         onPick: _pickFolder,
       );
     }
     return RefreshIndicator(
       onRefresh: () => _scan(_rootPath!),
-      child: ListView.builder(
-        itemCount: _playlists.length,
-        itemBuilder: (context, index) {
-          final playlist = _playlists[index];
-          final songs = playlist.tracks.length;
-          // Only nested folders need their path to tell them apart.
-          final nested = playlist.relativePath != '.' &&
-              playlist.relativePath != playlist.name;
-          final location = nested ? ' • ${playlist.relativePath}' : '';
-          return ListTile(
-            leading: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: PlaylistCover(playlist: playlist, size: 56),
+      // Rebuilds tiles when playback moves to another playlist.
+      child: StreamBuilder(
+        stream: PlayerService.instance.player.sequenceStateStream,
+        builder: (context, _) => ListView.builder(
+          padding: EdgeInsets.only(
+              top: 8, bottom: MediaQuery.paddingOf(context).bottom + 8),
+          itemCount: _playlists.length,
+          itemBuilder: (context, index) => _PlaylistTile(
+            playlist: _playlists[index],
+            playing: PlayerService.instance.isCurrent(_playlists[index]),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlaylistTile extends StatelessWidget {
+  final Playlist playlist;
+  final bool playing;
+
+  const _PlaylistTile({required this.playlist, required this.playing});
+
+  @override
+  Widget build(BuildContext context) {
+    final songs = playlist.tracks.length;
+    // Only nested folders need their path to tell them apart.
+    final nested =
+        playlist.relativePath != '.' && playlist.relativePath != playlist.name;
+    final detail =
+        nested ? playlist.relativePath : '$songs ${songs == 1 ? 'song' : 'songs'}';
+    return InkWell(
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => PlaylistScreen(playlist: playlist),
+      )),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            PlaylistCover(playlist: playlist, size: 64),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    playlist.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: playing ? AppColors.green : AppColors.text,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const OfflineBadge(),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Playlist • $detail',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: AppColors.subtle, fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-            title: Text(playlist.name,
-                maxLines: 1, overflow: TextOverflow.ellipsis),
-            subtitle: Text(
-              '$songs ${songs == 1 ? 'song' : 'songs'}$location',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            onTap: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => PlaylistScreen(playlist: playlist),
-            )),
-          );
-        },
+            if (playing)
+              const Icon(Icons.volume_up, color: AppColors.green, size: 20),
+          ],
+        ),
       ),
     );
   }
 }
 
 class _EmptyState extends StatelessWidget {
+  final String title;
   final String message;
   final VoidCallback onPick;
 
-  const _EmptyState({required this.message, required this.onPick});
+  const _EmptyState({
+    required this.title,
+    required this.message,
+    required this.onPick,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -190,12 +269,28 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(message, textAlign: TextAlign.center),
-            const SizedBox(height: 20),
-            FilledButton.icon(
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  color: AppColors.text,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.subtle, fontSize: 14),
+            ),
+            const SizedBox(height: 24),
+            FilledButton(
               onPressed: onPick,
-              icon: const Icon(Icons.folder_open),
-              label: const Text('Choose folder'),
+              style: FilledButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+              ),
+              child: const Text('Choose folder'),
             ),
           ],
         ),

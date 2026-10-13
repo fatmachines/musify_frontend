@@ -4,6 +4,8 @@ import 'services/player_service.dart';
 import 'tabs/home_tab.dart';
 import 'tabs/library_tab.dart';
 import 'tabs/search_tab.dart';
+import 'theme.dart';
+import 'widgets/bottom_bar.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,17 +22,7 @@ class MusifyApp extends StatelessWidget {
       title: 'Musify',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.dark,
-      darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1DB954),
-          brightness: Brightness.dark,
-        ),
-        scaffoldBackgroundColor: const Color(0xFF121212),
-        appBarTheme: const AppBarTheme(backgroundColor: Color(0xFF121212)),
-        navigationBarTheme: const NavigationBarThemeData(
-          backgroundColor: Color(0xFF181818),
-        ),
-      ),
+      darkTheme: buildTheme(),
       home: const HomeShell(),
     );
   }
@@ -75,6 +67,8 @@ class _HomeShellState extends State<HomeShell> {
         }
       },
       child: Scaffold(
+        // The bar fades over the content, so content runs underneath it.
+        extendBody: true,
         body: IndexedStack(
           index: _index,
           children: [
@@ -86,26 +80,7 @@ class _HomeShellState extends State<HomeShell> {
               ),
           ],
         ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _index,
-          onDestinationSelected: _onSelect,
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home),
-              label: 'Home',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.search),
-              label: 'Search',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.library_music_outlined),
-              selectedIcon: Icon(Icons.library_music),
-              label: 'Your Library',
-            ),
-          ],
-        ),
+        bottomNavigationBar: BottomBar(index: _index, onSelect: _onSelect),
       ),
     );
   }
