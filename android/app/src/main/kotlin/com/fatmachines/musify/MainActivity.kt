@@ -1,5 +1,7 @@
 package com.fatmachines.musify
 
-import io.flutter.embedding.android.FlutterActivity
+import com.ryanheise.audioservice.AudioServiceActivity
 
-class MainActivity : FlutterActivity()
+// audio_service shares this activity's Flutter engine with its background
+// playback service.
+class MainActivity : AudioServiceActivity()

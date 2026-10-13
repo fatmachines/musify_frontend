@@ -9,6 +9,7 @@ import '../models/playlist.dart';
 import '../screens/playlist_screen.dart';
 import '../services/app_log.dart';
 import '../services/folder_access.dart';
+import '../services/library.dart';
 import '../services/library_scanner.dart';
 import '../services/library_store.dart';
 import '../services/player_service.dart';
@@ -53,6 +54,7 @@ class _LibraryTabState extends State<LibraryTab> {
     });
     final result = await LibraryScanner.scan(root);
     AppLog.addAll(result.log);
+    Library.update(result.playlists);
     if (!mounted) return;
     setState(() {
       _playlists = result.playlists;

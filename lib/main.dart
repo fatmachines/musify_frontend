@@ -1,6 +1,9 @@
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 
 import 'screens/now_playing.dart';
+import 'services/app_log.dart';
+import 'services/audio_handler.dart';
 import 'services/player_service.dart';
 import 'tabs/home_tab.dart';
 import 'tabs/library_tab.dart';
@@ -12,6 +15,18 @@ import 'widgets/mini_player.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await PlayerService.init();
+  try {
+    await AudioService.init(
+      builder: MusifyAudioHandler.new,
+      config: const AudioServiceConfig(
+        androidNotificationChannelId: 'com.fatmachines.musify.playback',
+        androidNotificationChannelName: 'Playback',
+        androidNotificationOngoing: true,
+      ),
+    );
+  } catch (e) {
+    AppLog.add('audio service setup failed: $e');
+  }
   runApp(const MusifyApp());
 }
 
