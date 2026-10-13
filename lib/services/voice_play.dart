@@ -40,6 +40,7 @@ class VoicePlay {
     _channel.setMethodCallHandler((call) async {
       if (call.method != 'play') return null;
       final args = (call.arguments as Map).cast<String, Object?>();
+      AppLog.add('voice: from Siri $args');
       return play(
         args['query'] as String?,
         artist: args['artist'] as String?,
@@ -51,6 +52,7 @@ class VoicePlay {
     for (var attempt = 0; attempt < 10; attempt++) {
       try {
         await _channel.invokeMethod('ready');
+        AppLog.add('voice: Siri channel ready');
         break;
       } on MissingPluginException {
         await Future<void>.delayed(const Duration(milliseconds: 300));

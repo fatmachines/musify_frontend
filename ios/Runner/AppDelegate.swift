@@ -34,6 +34,7 @@ import UniformTypeIdentifiers
   // Musify takes the play requests and passes anything else on.
 
   override func application(_ application: UIApplication, handlerFor intent: INIntent) -> Any? {
+    NSLog("[Musify] siri: handlerFor %@", String(describing: type(of: intent)))
     if intent is INPlayMediaIntent { return SiriBridge.shared }
     return super.application(application, handlerFor: intent)
   }
@@ -47,6 +48,7 @@ import UniformTypeIdentifiers
       super.application(application, handle: intent, completionHandler: completionHandler)
       return
     }
+    NSLog("[Musify] siri: handling in the app")
     SiriBridge.shared.play(intent)
     completionHandler(INPlayMediaIntentResponse(code: .success, userActivity: nil))
   }
@@ -80,6 +82,7 @@ final class SiriBridge: NSObject, INPlayMediaIntentHandling {
       guard let self else { return }
       switch call.method {
       case "ready":
+        NSLog("[Musify] siri: Dart ready, %d waiting", self.pending.count)
         self.dartReady = true
         let waiting = self.pending
         self.pending = []
@@ -129,6 +132,7 @@ final class SiriBridge: NSObject, INPlayMediaIntentHandling {
     with completion: @escaping ([INPlayMediaMediaItemResolutionResult]) -> Void
   ) {
     siriIsEnabled()
+    NSLog("[Musify] siri: resolve %@", String(describing: intent.mediaSearch))
     let search = intent.mediaSearch
     let title = search?.mediaName ?? search?.artistName ?? search?.albumName ?? "Musify"
     let item = INMediaItem(
@@ -145,6 +149,7 @@ final class SiriBridge: NSObject, INPlayMediaIntentHandling {
     completion: @escaping (INPlayMediaIntentResponse) -> Void
   ) {
     siriIsEnabled()
+    NSLog("[Musify] siri: handle (Dart ready: %@)", dartReady ? "yes" : "no")
     if dartReady {
       // Played in the background by application(_:handle:completionHandler:).
       completion(INPlayMediaIntentResponse(code: .handleInApp, userActivity: nil))
@@ -170,7 +175,13 @@ final class SiriBridge: NSObject, INPlayMediaIntentHandling {
   }
 
   private func send(_ request: [String: Any]) {
-    channel?.invokeMethod("play", arguments: request)
+    guard let channel else {
+      NSLog("[Musify] siri: no channel to Dart")
+      return
+    }
+    channel.invokeMethod("play", arguments: request) { result in
+      NSLog("[Musify] siri: Dart played: %@", String(describing: result))
+    }
   }
 
   /// Matches VoiceKind in voice_play.dart.
