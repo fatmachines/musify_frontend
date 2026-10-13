@@ -30,19 +30,21 @@ import UniformTypeIdentifiers
 
   // Siri: "Play X on Musify" is handled inside the app (no extension).
 
-  @objc(application:handlerForIntent:)
-  func application(_ application: UIApplication, handlerFor intent: INIntent) -> Any? {
-    intent is INPlayMediaIntent ? SiriBridge.shared : nil
+  // FlutterAppDelegate already implements these (forwarding to plugins), so
+  // Musify takes the play requests and passes anything else on.
+
+  override func application(_ application: UIApplication, handlerFor intent: INIntent) -> Any? {
+    if intent is INPlayMediaIntent { return SiriBridge.shared }
+    return super.application(application, handlerFor: intent)
   }
 
-  @objc(application:handleIntent:completionHandler:)
-  func application(
+  override func application(
     _ application: UIApplication,
     handle intent: INIntent,
     completionHandler: @escaping (INIntentResponse) -> Void
   ) {
     guard let intent = intent as? INPlayMediaIntent else {
-      completionHandler(INPlayMediaIntentResponse(code: .failure, userActivity: nil))
+      super.application(application, handle: intent, completionHandler: completionHandler)
       return
     }
     SiriBridge.shared.play(intent)
