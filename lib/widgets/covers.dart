@@ -28,16 +28,22 @@ class PlaylistCover extends StatelessWidget {
             return _CoverImage(bytes: covers.first, size: size);
           }
           final half = size / 2;
-          return Column(children: [
-            Row(children: [
-              _CoverImage(bytes: covers[0], size: half),
-              _CoverImage(bytes: covers[1], size: half),
-            ]),
-            Row(children: [
-              _CoverImage(bytes: covers[2], size: half),
-              _CoverImage(bytes: covers[3], size: half),
-            ]),
-          ]);
+          return Column(
+            children: [
+              Row(
+                children: [
+                  _CoverImage(bytes: covers[0], size: half),
+                  _CoverImage(bytes: covers[1], size: half),
+                ],
+              ),
+              Row(
+                children: [
+                  _CoverImage(bytes: covers[2], size: half),
+                  _CoverImage(bytes: covers[3], size: half),
+                ],
+              ),
+            ],
+          );
         },
       ),
     );

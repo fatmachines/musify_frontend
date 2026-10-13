@@ -65,16 +65,20 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     _query.addListener(() => setState(() {}));
     final player = _player.player;
     _subscriptions
-      ..add(player.sequenceStateStream.listen((state) {
-        final tag = state.currentSource?.tag;
-        setState(() {
-          _currentPath = tag is Track ? tag.path : null;
-          _shuffle = state.shuffleModeEnabled;
-        });
-      }))
-      ..add(player.playingStream.listen((playing) {
-        setState(() => _playing = playing);
-      }));
+      ..add(
+        player.sequenceStateStream.listen((state) {
+          final tag = state.currentSource?.tag;
+          setState(() {
+            _currentPath = tag is Track ? tag.path : null;
+            _shuffle = state.shuffleModeEnabled;
+          });
+        }),
+      )
+      ..add(
+        player.playingStream.listen((playing) {
+          setState(() => _playing = playing);
+        }),
+      );
   }
 
   @override
@@ -121,28 +125,35 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     } catch (e) {
       AppLog.add('player: failed: $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Couldn't play this song")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Couldn't play this song")));
     }
   }
 
-  void _onPlay() => _run(() => _isCurrent
-      ? _player.togglePlayback()
-      : _player.play(_playlist, shuffle: false));
+  void _onPlay() => _run(
+    () => _isCurrent
+        ? _player.togglePlayback()
+        : _player.play(_playlist, shuffle: false),
+  );
 
   /// Starts shuffled playback; on the playlist already playing it flips
   /// shuffle on or off without interrupting the song.
   void _onShuffle() => _run(() async {
-        if (_isCurrent && _playing) {
-          await _player.setShuffle(!_shuffle);
-        } else {
-          await _player.play(_playlist, shuffle: true);
-        }
-      });
+    if (_isCurrent && _playing) {
+      await _player.setShuffle(!_shuffle);
+    } else {
+      await _player.play(_playlist, shuffle: true);
+    }
+  });
 
-  void _onTrack(int index) => _run(() => _player.play(_playlist,
-      shuffle: _isCurrent && _shuffle, startIndex: index));
+  void _onTrack(int index) => _run(
+    () => _player.play(
+      _playlist,
+      shuffle: _isCurrent && _shuffle,
+      startIndex: index,
+    ),
+  );
 
   void _openSearch() {
     setState(() => _searching = true);
@@ -163,8 +174,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     return all.where((i) {
       final track = _playlist.tracks[i];
       final info = MetadataService.cachedInfo(track);
-      return [track.title, info?.title, info?.artist, info?.album]
-          .any((s) => s != null && s.toLowerCase().contains(q));
+      return [
+        track.title,
+        info?.title,
+        info?.artist,
+        info?.album,
+      ].any((s) => s != null && s.toLowerCase().contains(q));
     }).toList();
   }
 
@@ -209,8 +224,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               itemBuilder: (context, i) => _buildTrack(i),
             ),
             SliverToBoxAdapter(
-              child:
-                  SizedBox(height: MediaQuery.paddingOf(context).bottom + 24),
+              child: SizedBox(
+                height: MediaQuery.paddingOf(context).bottom + 24,
+              ),
             ),
           ],
         ),
@@ -236,7 +252,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w700),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ),
@@ -248,8 +266,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           Positioned(
             top: _barBottom - 28,
             right: 16,
-            child: _PlayButton(
-                playing: _isCurrent && _playing, onTap: _onPlay),
+            child: _PlayButton(playing: _isCurrent && _playing, onTap: _onPlay),
           ),
       ],
     );
@@ -294,13 +311,15 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                 child: Opacity(
                   opacity: (1 - coverProgress * 1.1).clamp(0.0, 1.0),
                   child: DecoratedBox(
-                    decoration: const BoxDecoration(boxShadow: [
-                      BoxShadow(
-                        color: Color(0x80000000),
-                        blurRadius: 40,
-                        offset: Offset(0, 12),
-                      ),
-                    ]),
+                    decoration: const BoxDecoration(
+                      boxShadow: [
+                        BoxShadow(
+                          color: Color(0x80000000),
+                          blurRadius: 40,
+                          offset: Offset(0, 12),
+                        ),
+                      ],
+                    ),
                     child: PlaylistCover(playlist: _playlist, size: coverSize),
                   ),
                 ),
@@ -399,9 +418,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                       style: TextButton.styleFrom(
                         foregroundColor: AppColors.text,
                         textStyle: const TextStyle(
-                            fontFamily: 'Figtree',
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500),
+                          fontFamily: 'Figtree',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                       child: const Text('Cancel'),
                     ),
@@ -418,14 +438,16 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                       "Couldn't find \"$query\"",
                       textAlign: TextAlign.center,
                       style: const TextStyle(
-                          color: AppColors.text,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700),
+                        color: AppColors.text,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   )
                 : ListView.builder(
                     padding: EdgeInsets.only(
-                        bottom: MediaQuery.paddingOf(context).bottom + 24),
+                      bottom: MediaQuery.paddingOf(context).bottom + 24,
+                    ),
                     keyboardDismissBehavior:
                         ScrollViewKeyboardDismissBehavior.onDrag,
                     itemCount: matches.length,
@@ -481,8 +503,11 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   Row(
                     children: [
                       if (isCurrentTrack && _playing) ...[
-                        const Icon(Icons.graphic_eq,
-                            size: 14, color: AppColors.green),
+                        const Icon(
+                          Icons.graphic_eq,
+                          size: 14,
+                          color: AppColors.green,
+                        ),
                         const SizedBox(width: 4),
                       ],
                       const OfflineBadge(),
@@ -493,7 +518,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                              color: AppColors.subtle, fontSize: 14),
+                            color: AppColors.subtle,
+                            fontSize: 14,
+                          ),
                         ),
                       ),
                     ],
@@ -525,8 +552,11 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           children: [
             ListTile(
               leading: TrackCover(track: track, size: 48),
-              title: Text(info?.title ?? track.title,
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              title: Text(
+                info?.title ?? track.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               subtitle: Text(
                 [info?.artist, info?.album].whereType<String>().join(' • '),
                 maxLines: 1,
@@ -545,8 +575,11 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             ListTile(
               leading: const Icon(Icons.insert_drive_file_outlined),
               title: const Text('File'),
-              subtitle: Text('${track.title}.${track.extension.toLowerCase()}',
-                  maxLines: 2, overflow: TextOverflow.ellipsis),
+              subtitle: Text(
+                '${track.title}.${track.extension.toLowerCase()}',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -579,9 +612,10 @@ class _FindBar extends StatelessWidget {
             Text(
               'Find on this page',
               style: TextStyle(
-                  color: AppColors.text,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700),
+                color: AppColors.text,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ],
         ),

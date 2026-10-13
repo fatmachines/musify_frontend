@@ -18,8 +18,11 @@ class OfflineBadge extends StatelessWidget {
         color: AppColors.green,
         shape: BoxShape.circle,
       ),
-      child: Icon(Icons.arrow_downward_rounded,
-          size: size * 0.72, color: Colors.black),
+      child: Icon(
+        Icons.arrow_downward_rounded,
+        size: size * 0.72,
+        color: Colors.black,
+      ),
     );
   }
 }

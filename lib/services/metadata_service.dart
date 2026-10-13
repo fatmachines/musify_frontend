@@ -14,8 +14,15 @@ class TrackInfo {
   final String? artist;
   final String? album;
   final Duration? duration;
+  final String? lyrics;
 
-  const TrackInfo({this.title, this.artist, this.album, this.duration});
+  const TrackInfo({
+    this.title,
+    this.artist,
+    this.album,
+    this.duration,
+    this.lyrics,
+  });
 
   static const empty = TrackInfo();
 }
@@ -33,18 +40,20 @@ class MetadataService {
   static Future<void> loadInfo(List<Track> tracks) async {
     final missing = [
       for (final t in tracks)
-        if (!_info.containsKey(t.path)) t.path
+        if (!_info.containsKey(t.path)) t.path,
     ];
     if (missing.isEmpty) return;
-    final read = await Isolate.run(() => {
-          for (final path in missing) path: _readInfo(path),
-        });
+    final read = await Isolate.run(
+      () => {for (final path in missing) path: _readInfo(path)},
+    );
     _info.addAll(read);
   }
 
   static Future<Uint8List?> cover(Track track) {
     return _covers.putIfAbsent(
-        track.path, () => Isolate.run(() => _readCover(track.path)));
+      track.path,
+      () => Isolate.run(() => _readCover(track.path)),
+    );
   }
 
   /// Up to four different covers from random songs in [playlist], for the
@@ -74,6 +83,7 @@ class MetadataService {
         artist: _clean(m.artist),
         album: _clean(m.album),
         duration: m.duration,
+        lyrics: _clean(m.lyrics),
       );
     } catch (_) {
       return TrackInfo.empty;

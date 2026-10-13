@@ -17,7 +17,8 @@ class FolderAccess {
   static Future<String?> pick() async {
     if (!Platform.isIOS) {
       final path = await FilePicker.getDirectoryPath(
-          dialogTitle: 'Choose your music folder');
+        dialogTitle: 'Choose your music folder',
+      );
       AppLog.add('pick: file_picker returned $path');
       return path;
     }

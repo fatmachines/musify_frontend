@@ -8,7 +8,15 @@ class BottomBar extends StatelessWidget {
   final int index;
   final ValueChanged<int> onSelect;
 
-  const BottomBar({super.key, required this.index, required this.onSelect});
+  /// Shown above the tabs inside the bar's fade (the mini player).
+  final Widget? header;
+
+  const BottomBar({
+    super.key,
+    required this.index,
+    required this.onSelect,
+    this.header,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -22,12 +30,39 @@ class BottomBar extends StatelessWidget {
           stops: [0, 0.45, 1],
         ),
       ),
-      padding: EdgeInsets.only(top: 20, bottom: bottom > 0 ? bottom : 8),
-      child: Row(
+      padding: EdgeInsets.only(top: 16, bottom: bottom > 0 ? bottom : 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          _item(0, 'Home', (c, s) => Icon(s ? Icons.home_filled : Icons.home_outlined, color: c, size: 28)),
-          _item(1, 'Search', (c, s) => Icon(Icons.search, color: c, size: 28, weight: s ? 700 : 400)),
-          _item(2, 'Your Library', (c, s) => LibraryIcon(color: c, filled: s, size: 28)),
+          ?header,
+          Row(
+            children: [
+              _item(
+                0,
+                'Home',
+                (c, s) => Icon(
+                  s ? Icons.home_filled : Icons.home_outlined,
+                  color: c,
+                  size: 28,
+                ),
+              ),
+              _item(
+                1,
+                'Search',
+                (c, s) => Icon(
+                  Icons.search,
+                  color: c,
+                  size: 28,
+                  weight: s ? 700 : 400,
+                ),
+              ),
+              _item(
+                2,
+                'Your Library',
+                (c, s) => LibraryIcon(color: c, filled: s, size: 28),
+              ),
+            ],
+          ),
         ],
       ),
     );

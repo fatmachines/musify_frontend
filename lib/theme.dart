@@ -71,10 +71,14 @@ ThemeData buildTheme() {
         backgroundColor: AppColors.text,
         foregroundColor: Colors.black,
         textStyle: const TextStyle(
-            fontFamily: 'Figtree', fontWeight: FontWeight.w700, fontSize: 15),
+          fontFamily: 'Figtree',
+          fontWeight: FontWeight.w700,
+          fontSize: 15,
+        ),
       ),
     ),
-    progressIndicatorTheme:
-        const ProgressIndicatorThemeData(color: AppColors.green),
+    progressIndicatorTheme: const ProgressIndicatorThemeData(
+      color: AppColors.green,
+    ),
   );
 }

@@ -3,12 +3,28 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
 
+import '../models/playlist.dart';
+import '../services/metadata_service.dart';
+
+final _trackColors = <String, Future<Color?>>{};
+
+/// [coverColor] of a song's embedded art, cached per song.
+Future<Color?> trackColor(Track track) {
+  return _trackColors.putIfAbsent(track.path, () async {
+    final bytes = await MetadataService.cover(track);
+    return bytes == null ? null : coverColor(bytes);
+  });
+}
+
 /// A muted, dark-enough version of a cover's average colour, for the
 /// gradient behind a playlist header (white text has to stay readable).
 Future<Color?> coverColor(Uint8List bytes) async {
   try {
-    final codec = await ui.instantiateImageCodec(bytes,
-        targetWidth: 24, targetHeight: 24);
+    final codec = await ui.instantiateImageCodec(
+      bytes,
+      targetWidth: 24,
+      targetHeight: 24,
+    );
     final image = (await codec.getNextFrame()).image;
     final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
     image.dispose();

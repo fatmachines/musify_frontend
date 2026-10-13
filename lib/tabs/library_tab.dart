@@ -73,12 +73,14 @@ class _LibraryTabState extends State<LibraryTab> {
 
     if (!mounted) return false;
     final permanentlyDenied = statuses.values.any((s) => s.isPermanentlyDenied);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: const Text('Musify needs access to your music files.'),
-      action: permanentlyDenied
-          ? SnackBarAction(label: 'Settings', onPressed: openAppSettings)
-          : null,
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Musify needs access to your music files.'),
+        action: permanentlyDenied
+            ? SnackBarAction(label: 'Settings', onPressed: openAppSettings)
+            : null,
+      ),
+    );
     return false;
   }
 
@@ -93,9 +95,8 @@ class _LibraryTabState extends State<LibraryTab> {
   Future<void> _copyLog() async {
     await Clipboard.setData(ClipboardData(text: AppLog.dump()));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Debug log copied')),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Debug log copied')));
   }
 
   @override
@@ -149,14 +150,18 @@ class _LibraryTabState extends State<LibraryTab> {
     if (_rootPath == null) {
       return _EmptyState(
         title: 'Add your music',
-        message: 'Pick a folder on your device. Every folder inside it with '
+        message:
+            'Pick a folder on your device. Every folder inside it with '
             'music becomes a playlist.',
         onPick: _pickFolder,
       );
     }
     if (_error != null) {
       return _EmptyState(
-          title: "Can't open folder", message: _error!, onPick: _pickFolder);
+        title: "Can't open folder",
+        message: _error!,
+        onPick: _pickFolder,
+      );
     }
     if (_playlists.isEmpty) {
       return _EmptyState(
@@ -172,7 +177,9 @@ class _LibraryTabState extends State<LibraryTab> {
         stream: PlayerService.instance.player.sequenceStateStream,
         builder: (context, _) => ListView.builder(
           padding: EdgeInsets.only(
-              top: 8, bottom: MediaQuery.paddingOf(context).bottom + 8),
+            top: 8,
+            bottom: MediaQuery.paddingOf(context).bottom + 8,
+          ),
           itemCount: _playlists.length,
           itemBuilder: (context, index) => _PlaylistTile(
             playlist: _playlists[index],
@@ -196,12 +203,13 @@ class _PlaylistTile extends StatelessWidget {
     // Only nested folders need their path to tell them apart.
     final nested =
         playlist.relativePath != '.' && playlist.relativePath != playlist.name;
-    final detail =
-        nested ? playlist.relativePath : '$songs ${songs == 1 ? 'song' : 'songs'}';
+    final detail = nested
+        ? playlist.relativePath
+        : '$songs ${songs == 1 ? 'song' : 'songs'}';
     return InkWell(
-      onTap: () => Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => PlaylistScreen(playlist: playlist),
-      )),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => PlaylistScreen(playlist: playlist)),
+      ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
@@ -233,7 +241,9 @@ class _PlaylistTile extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                              color: AppColors.subtle, fontSize: 13),
+                            color: AppColors.subtle,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                     ],
@@ -273,9 +283,10 @@ class _EmptyState extends StatelessWidget {
               title,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                  color: AppColors.text,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700),
+                color: AppColors.text,
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
@@ -287,8 +298,10 @@ class _EmptyState extends StatelessWidget {
             FilledButton(
               onPressed: onPick,
               style: FilledButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 14,
+                ),
               ),
               child: const Text('Choose folder'),
             ),

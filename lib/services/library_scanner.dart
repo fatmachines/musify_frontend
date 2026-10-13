@@ -50,8 +50,10 @@ class LibraryScanner {
       try {
         entries = dir.listSync(followLinks: false);
       } on FileSystemException catch (e) {
-        log.add('scan: [$rel] list failed: ${e.message} '
-            '(os: ${e.osError?.message}, code ${e.osError?.errorCode})');
+        log.add(
+          'scan: [$rel] list failed: ${e.message} '
+          '(os: ${e.osError?.message}, code ${e.osError?.errorCode})',
+        );
         // An unreadable root means the whole library is unavailable; an
         // unreadable subfolder is skipped rather than failing the scan.
         if (dir.path == rootPath) rootError = e.message;
@@ -78,25 +80,28 @@ class LibraryScanner {
         }
       }
 
-      log.add('scan: [$rel] entries=${entries.length} dirs=$dirs '
-          'audio=${tracks.length} skipped=${skipped.length}');
+      log.add(
+        'scan: [$rel] entries=${entries.length} dirs=$dirs '
+        'audio=${tracks.length} skipped=${skipped.length}',
+      );
       if (skipped.isNotEmpty) {
         log.add('scan: [$rel] skipped e.g. ${skipped.take(5).join(', ')}');
       }
 
       if (tracks.isNotEmpty) {
         tracks.sort(
-            (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
-        playlists.add(Playlist(
-          path: dir.path,
-          relativePath: rel,
-          tracks: tracks,
-        ));
+          (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
+        );
+        playlists.add(
+          Playlist(path: dir.path, relativePath: rel, tracks: tracks),
+        );
       }
     }
 
-    playlists.sort((a, b) =>
-        a.relativePath.toLowerCase().compareTo(b.relativePath.toLowerCase()));
+    playlists.sort(
+      (a, b) =>
+          a.relativePath.toLowerCase().compareTo(b.relativePath.toLowerCase()),
+    );
     log.add('scan: done, playlists=${playlists.length}');
     return ScanResult(playlists, log, rootError);
   }
