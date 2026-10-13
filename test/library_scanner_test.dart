@@ -25,8 +25,11 @@ void main() {
   test('each folder with audio becomes a playlist', () async {
     final playlists = (await LibraryScanner.scan(root.path)).playlists;
 
-    expect(playlists.map((pl) => pl.relativePath),
-        ['.', 'Rock', p.join('Rock', 'Classic')]);
+    expect(playlists.map((pl) => pl.location), [
+      '.',
+      'Rock',
+      p.join('Rock', 'Classic'),
+    ]);
     expect(playlists[1].tracks.map((t) => t.title), ['a', 'b']);
     expect(playlists[1].tracks.last.extension, 'FLAC');
   });

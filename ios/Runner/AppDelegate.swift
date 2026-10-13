@@ -23,16 +23,19 @@ import UniformTypeIdentifiers
   }
 }
 
-/// Lets Dart read a folder the user picks in Files. iOS hands out such a
+/// Lets Dart read the folders the user picks in Files. iOS hands out such a
 /// folder as a security-scoped URL: nothing inside it is readable until
 /// access is started, and it only survives a relaunch as a saved bookmark.
+/// Each library folder gets its own bookmark, kept in an ordered list.
 ///
-/// Both calls answer {path, log}; the log lines end up in the app's debug log.
+/// Every reply is a map that includes "log", lines for the app's debug log.
 class FolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
-  private static let bookmarkKey = "library_folder_bookmark"
+  private static let bookmarksKey = "library_folder_bookmarks"
+  // Before several folders were supported there was a single bookmark.
+  private static let legacyKey = "library_folder_bookmark"
 
   private var pendingResult: FlutterResult?
-  private var openURL: URL?
+  private var openURLs: [String: URL] = [:]
   private var log: [String] = []
 
   static func register(with registrar: FlutterPluginRegistrar) {
@@ -49,9 +52,13 @@ class FolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     switch call.method {
     case "pick":
       pick(result)
-    case "restore":
-      let path = restore()
-      result(reply(path))
+    case "restoreAll":
+      result(reply(["folders": restoreAll()]))
+    case "remove":
+      if let args = call.arguments as? [String: Any], let id = args["id"] as? String {
+        remove(id)
+      }
+      result(reply([:]))
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -62,16 +69,49 @@ class FolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     log.append(line)
   }
 
-  private func reply(_ path: String?) -> [String: Any] {
-    var value: [String: Any] = ["log": log]
-    if let path { value["path"] = path }
+  private func reply(_ values: [String: Any]) -> [String: Any] {
+    var value = values
+    value["log"] = log
     return value
   }
+
+  // Saved bookmarks: [{"id": String, "bookmark": Data}] in the order added.
+
+  private func loadEntries() -> [[String: Any]] {
+    let defaults = UserDefaults.standard
+    if let entries = defaults.array(forKey: Self.bookmarksKey) as? [[String: Any]] {
+      return entries
+    }
+    if let legacy = defaults.data(forKey: Self.legacyKey) {
+      let entries: [[String: Any]] = [["id": UUID().uuidString, "bookmark": legacy]]
+      saveEntries(entries)
+      defaults.removeObject(forKey: Self.legacyKey)
+      note("migrated the single saved folder")
+      return entries
+    }
+    return []
+  }
+
+  private func saveEntries(_ entries: [[String: Any]]) {
+    UserDefaults.standard.set(entries, forKey: Self.bookmarksKey)
+  }
+
+  private func bookmark(_ url: URL) -> Data? {
+    do {
+      return try url.bookmarkData(
+        options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil)
+    } catch {
+      note("bookmark failed: \(error)")
+      return nil
+    }
+  }
+
+  // Picking ---------------------------------------------------------------------
 
   private func pick(_ result: @escaping FlutterResult) {
     guard pendingResult == nil, let presenter = topViewController() else {
       note("pick: no presenter (pending=\(pendingResult != nil))")
-      result(reply(nil))
+      result(reply([:]))
       return
     }
     pendingResult = result
@@ -89,17 +129,22 @@ class FolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
       finish(nil)
       return
     }
-    open(url)
-    do {
-      let bookmark = try url.bookmarkData(
-        options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil)
-      UserDefaults.standard.set(bookmark, forKey: Self.bookmarkKey)
-      note("pick: bookmark saved (\(bookmark.count) bytes)")
-    } catch {
-      note("pick: bookmark failed: \(error)")
+    // Picking a folder that is already in the library reuses its entry.
+    for (id, existing) in openURLs
+    where existing.standardizedFileURL == url.standardizedFileURL {
+      note("pick: already added as \(id)")
+      describe(url)
+      finish(["id": id, "path": existing.path])
+      return
+    }
+    let id = UUID().uuidString
+    open(url, id: id)
+    if let data = bookmark(url) {
+      saveEntries(loadEntries() + [["id": id, "bookmark": data]])
+      note("pick: bookmark saved (\(data.count) bytes)")
     }
     describe(url)
-    finish(url.path)
+    finish(["id": id, "path": url.path])
   }
 
   func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
@@ -107,50 +152,64 @@ class FolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     finish(nil)
   }
 
-  private func finish(_ path: String?) {
-    pendingResult?(reply(path))
+  private func finish(_ folder: [String: Any]?) {
+    var values: [String: Any] = [:]
+    if let folder { values["folder"] = folder }
+    pendingResult?(reply(values))
     pendingResult = nil
   }
 
-  /// Reopens the last picked folder. Its path can change between launches
-  /// (the container moves on reinstall), so Dart takes the path from here.
-  private func restore() -> String? {
-    guard let data = UserDefaults.standard.data(forKey: Self.bookmarkKey) else {
-      note("restore: no bookmark saved")
-      return nil
+  // Restoring and removing ------------------------------------------------------
+
+  /// Reopens every saved folder. Paths can change between launches (the
+  /// container moves on reinstall), so Dart takes them from here.
+  private func restoreAll() -> [[String: Any]] {
+    var entries = loadEntries()
+    var folders: [[String: Any]] = []
+    for (index, entry) in entries.enumerated() {
+      guard let id = entry["id"] as? String, let data = entry["bookmark"] as? Data else {
+        continue
+      }
+      var stale = false
+      let url: URL
+      do {
+        url = try URL(resolvingBookmarkData: data, bookmarkDataIsStale: &stale)
+      } catch {
+        note("restore: \(id) failed to resolve: \(error)")
+        continue
+      }
+      note("restore: \(id) url=\(url.absoluteString) stale=\(stale)")
+      open(url, id: id)
+      if stale, let fresh = bookmark(url) {
+        entries[index]["bookmark"] = fresh
+      }
+      describe(url)
+      folders.append(["id": id, "path": url.path])
     }
-    var stale = false
-    let url: URL
-    do {
-      url = try URL(resolvingBookmarkData: data, bookmarkDataIsStale: &stale)
-    } catch {
-      note("restore: bookmark resolve failed: \(error)")
-      return nil
-    }
-    note("restore: url=\(url.absoluteString) stale=\(stale)")
-    open(url)
-    if stale,
-      let fresh = try? url.bookmarkData(
-        options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil)
-    {
-      UserDefaults.standard.set(fresh, forKey: Self.bookmarkKey)
-    }
-    describe(url)
-    return url.path
+    saveEntries(entries)
+    if entries.isEmpty { note("restore: no folders saved") }
+    return folders
   }
 
-  /// Access stays open for the app's life so the scanner (and later the
-  /// player) can read files; only the current library folder is kept open.
-  private func open(_ url: URL) {
-    if openURL == url {
+  private func remove(_ id: String) {
+    openURLs[id]?.stopAccessingSecurityScopedResource()
+    openURLs[id] = nil
+    saveEntries(loadEntries().filter { ($0["id"] as? String) != id })
+    note("remove: \(id)")
+  }
+
+  /// Access stays open for the app's life so the scanner and player can read
+  /// files in every library folder.
+  private func open(_ url: URL, id: String) {
+    if openURLs[id] == url {
       note("open: already open")
       return
     }
     let started = url.startAccessingSecurityScopedResource()
     note("open: startAccessingSecurityScopedResource=\(started)")
     if started {
-      openURL?.stopAccessingSecurityScopedResource()
-      openURL = url
+      openURLs[id]?.stopAccessingSecurityScopedResource()
+      openURLs[id] = url
     }
   }
 
@@ -159,15 +218,6 @@ class FolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     do {
       let names = try FileManager.default.contentsOfDirectory(atPath: url.path)
       note("list: \(names.count) entries, e.g. \(names.prefix(5))")
-      if let first = names.first(where: { !$0.hasPrefix(".") }) {
-        let child = url.appendingPathComponent(first)
-        var isDir: ObjCBool = false
-        FileManager.default.fileExists(atPath: child.path, isDirectory: &isDir)
-        if isDir.boolValue {
-          let inner = try FileManager.default.contentsOfDirectory(atPath: child.path)
-          note("list: [\(first)] \(inner.count) entries, e.g. \(inner.prefix(5))")
-        }
-      }
     } catch {
       note("list: failed: \(error)")
     }

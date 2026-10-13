@@ -10,20 +10,26 @@ class Track {
   String get extension => p.extension(path).replaceFirst('.', '').toUpperCase();
 }
 
-/// A folder that directly contains audio files. Nested folders become their
-/// own playlists rather than being merged into their parent.
+/// Either a folder that directly contains audio files (nested folders become
+/// their own playlists rather than being merged into their parent), or a
+/// playlist the user made, which can hold songs from any folder.
 class Playlist {
-  final String path;
-
-  /// Path relative to the chosen library root; '.' for the root itself.
-  final String relativePath;
+  /// Stable identity: the folder's path for a folder playlist,
+  /// `custom:<id>` for one the user made.
+  final String id;
+  final String name;
   final List<Track> tracks;
 
+  /// Where a folder playlist sits inside its library folder ('.' for the
+  /// library folder itself). Null for playlists the user made.
+  final String? location;
+
   const Playlist({
-    required this.path,
-    required this.relativePath,
+    required this.id,
+    required this.name,
     required this.tracks,
+    this.location,
   });
 
-  String get name => p.basename(path);
+  bool get isCustom => location == null;
 }

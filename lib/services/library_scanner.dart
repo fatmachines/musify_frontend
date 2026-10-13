@@ -93,14 +93,18 @@ class LibraryScanner {
           (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
         );
         playlists.add(
-          Playlist(path: dir.path, relativePath: rel, tracks: tracks),
+          Playlist(
+            id: dir.path,
+            name: p.basename(dir.path),
+            location: rel,
+            tracks: tracks,
+          ),
         );
       }
     }
 
     playlists.sort(
-      (a, b) =>
-          a.relativePath.toLowerCase().compareTo(b.relativePath.toLowerCase()),
+      (a, b) => a.location!.toLowerCase().compareTo(b.location!.toLowerCase()),
     );
     log.add('scan: done, playlists=${playlists.length}');
     return ScanResult(playlists, log, rootError);

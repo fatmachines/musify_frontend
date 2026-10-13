@@ -59,7 +59,9 @@ class MetadataService {
   /// Up to four different covers from random songs in [playlist], for the
   /// Spotify-style mosaic. Picked once per playlist per app run.
   static Future<List<Uint8List>> playlistCovers(Playlist playlist) {
-    return _playlistCovers.putIfAbsent(playlist.path, () async {
+    // Keyed on length too: a user's playlist changes as songs are added.
+    final key = '${playlist.id}#${playlist.tracks.length}';
+    return _playlistCovers.putIfAbsent(key, () async {
       final candidates = [...playlist.tracks]..shuffle(Random());
       final covers = <Uint8List>[];
       final seen = <int>{};

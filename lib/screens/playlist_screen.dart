@@ -4,12 +4,16 @@ import 'package:flutter/material.dart';
 
 import '../models/playlist.dart';
 import '../services/app_log.dart';
+import '../services/library.dart';
 import '../services/metadata_service.dart';
 import '../services/player_service.dart';
 import '../theme.dart';
 import '../utils/cover_color.dart';
+import '../widgets/add_to_playlist.dart';
 import '../widgets/covers.dart';
 import '../widgets/offline_badge.dart';
+import '../widgets/toast.dart';
+import 'name_playlist_screen.dart';
 
 const _searchDuration = Duration(milliseconds: 220);
 const _findBarHeight = 38.0;
@@ -48,19 +52,16 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   bool _playing = false;
   bool _shuffle = false;
 
-  Playlist get _playlist => widget.playlist;
+  /// The latest version from the library: the user's playlists change as
+  /// songs are added, removed or the playlist is renamed.
+  Playlist get _playlist =>
+      Library.instance.byId(widget.playlist.id) ?? widget.playlist;
 
   @override
   void initState() {
     super.initState();
-    MetadataService.loadInfo(_playlist.tracks).then((_) {
-      if (mounted) setState(() => _infoLoaded = true);
-    });
-    MetadataService.playlistCovers(_playlist).then((covers) async {
-      if (covers.isEmpty) return;
-      final color = await coverColor(covers.first);
-      if (color != null && mounted) setState(() => _accent = color);
-    });
+    _loadDetails();
+    Library.instance.addListener(_onLibraryChanged);
     _scroll.addListener(_onScroll);
     _query.addListener(() => setState(() {}));
     final player = _player.player;
@@ -81,8 +82,32 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       );
   }
 
+  void _loadDetails() {
+    MetadataService.loadInfo(_playlist.tracks).then((_) {
+      if (mounted) setState(() => _infoLoaded = true);
+    });
+    MetadataService.playlistCovers(_playlist).then((covers) async {
+      if (covers.isEmpty) return;
+      final color = await coverColor(covers.first);
+      if (color != null && mounted) setState(() => _accent = color);
+    });
+  }
+
+  void _onLibraryChanged() {
+    if (!mounted) return;
+    if (widget.playlist.isCustom &&
+        Library.instance.byId(widget.playlist.id) == null) {
+      // Deleted.
+      Navigator.of(context).maybePop();
+      return;
+    }
+    setState(() {});
+    _loadDetails();
+  }
+
   @override
   void dispose() {
+    Library.instance.removeListener(_onLibraryChanged);
     for (final s in _subscriptions) {
       s.cancel();
     }
@@ -219,6 +244,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           controller: _scroll,
           slivers: [
             SliverToBoxAdapter(child: _buildHeader(context)),
+            if (tracks.isEmpty)
+              const SliverToBoxAdapter(child: _EmptyPlaylist()),
             SliverList.builder(
               itemCount: tracks.length,
               itemBuilder: (context, i) => _buildTrack(i),
@@ -371,6 +398,18 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           const SizedBox(height: 4),
           Row(
             children: [
+              if (_playlist.isCustom)
+                IconButton(
+                  tooltip: 'More',
+                  padding: EdgeInsets.zero,
+                  alignment: Alignment.centerLeft,
+                  onPressed: _showPlaylistMenu,
+                  icon: const Icon(
+                    Icons.more_horiz,
+                    size: 28,
+                    color: AppColors.subtle,
+                  ),
+                ),
               const Spacer(),
               _ShuffleButton(active: current && _shuffle, onTap: _onShuffle),
               const SizedBox(width: 16),
@@ -539,6 +578,78 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     );
   }
 
+  void _showPlaylistMenu() {
+    showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheet) => SafeArea(
+        // Sized to its content, scrolling on screens too short for it.
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: PlaylistCover(playlist: _playlist, size: 48),
+                title: Text(_playlist.name),
+                subtitle: Text(_summary()),
+              ),
+              const Divider(color: Colors.white12, height: 16),
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: const Text('Rename'),
+                onTap: () async {
+                  Navigator.of(sheet).pop();
+                  final name = await askPlaylistName(
+                    context,
+                    title: 'Rename playlist',
+                    initial: _playlist.name,
+                    action: 'Save',
+                  );
+                  if (name != null) {
+                    Library.instance.renamePlaylist(_playlist, name);
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline),
+                title: const Text('Delete playlist'),
+                onTap: () {
+                  Navigator.of(sheet).pop();
+                  _confirmDelete();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmDelete() async {
+    final delete = await showDialog<bool>(
+      context: context,
+      useRootNavigator: true,
+      builder: (dialog) => AlertDialog(
+        backgroundColor: AppColors.elevated,
+        title: Text('Delete "${_playlist.name}"?'),
+        content: const Text('The songs stay in your folders.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialog).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialog).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (delete == true) Library.instance.deletePlaylist(_playlist);
+  }
+
   void _showTrackSheet(int index) {
     final track = _playlist.tracks[index];
     final info = MetadataService.cachedInfo(track);
@@ -546,42 +657,64 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       context: context,
       useRootNavigator: true,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: TrackCover(track: track, size: 48),
-              title: Text(
-                info?.title ?? track.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+        // Sized to its content, scrolling on screens too short for it.
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: TrackCover(track: track, size: 48),
+                title: Text(
+                  info?.title ?? track.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  [info?.artist, info?.album].whereType<String>().join(' • '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              subtitle: Text(
-                [info?.artist, info?.album].whereType<String>().join(' • '),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              const Divider(color: Colors.white12, height: 16),
+              ListTile(
+                leading: const Icon(Icons.play_circle_outline),
+                title: const Text('Play'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _onTrack(index);
+                },
               ),
-            ),
-            const Divider(color: Colors.white12, height: 16),
-            ListTile(
-              leading: const Icon(Icons.play_circle_outline),
-              title: const Text('Play'),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                _onTrack(index);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.insert_drive_file_outlined),
-              title: const Text('File'),
-              subtitle: Text(
-                '${track.title}.${track.extension.toLowerCase()}',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+              ListTile(
+                leading: const Icon(Icons.add_circle_outline),
+                title: const Text('Add to playlist'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  showAddToPlaylist(context, track);
+                },
               ),
-            ),
-          ],
+              if (_playlist.isCustom)
+                ListTile(
+                  leading: const Icon(Icons.remove_circle_outline),
+                  title: const Text('Remove from this playlist'),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    Library.instance.removeTrack(_playlist, track);
+                    showToast(context, 'Removed from ${_playlist.name}');
+                  },
+                ),
+              ListTile(
+                leading: const Icon(Icons.insert_drive_file_outlined),
+                title: const Text('File'),
+                subtitle: Text(
+                  '${track.title}.${track.extension.toLowerCase()}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -737,6 +870,33 @@ class _PlayButton extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _EmptyPlaylist extends StatelessWidget {
+  const _EmptyPlaylist();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(32, 32, 32, 0),
+      child: Column(
+        children: [
+          Text(
+            "Let's start building your playlist",
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+          ),
+          SizedBox(height: 8),
+          Text(
+            'While a song plays, open ••• in the player and choose '
+            '"Add to playlist". Song menus in your folders have it too.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.subtle, fontSize: 14),
+          ),
+        ],
       ),
     );
   }

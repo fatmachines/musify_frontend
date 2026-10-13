@@ -173,7 +173,7 @@ class MusifyAudioHandler extends BaseAudioHandler with SeekHandler {
       return [
         for (final playlist in playlists)
           MediaItem(
-            id: '$_playlistPrefix${playlist.path}',
+            id: '$_playlistPrefix${playlist.id}',
             title: playlist.name,
             displaySubtitle: '${playlist.tracks.length} songs',
             playable: false,
@@ -258,9 +258,9 @@ class MusifyAudioHandler extends BaseAudioHandler with SeekHandler {
 
   static Playlist? _playlistById(List<Playlist> playlists, String id) {
     if (!id.startsWith(_playlistPrefix)) return null;
-    final path = id.substring(_playlistPrefix.length);
+    final playlistId = id.substring(_playlistPrefix.length);
     for (final playlist in playlists) {
-      if (playlist.path == path) return playlist;
+      if (playlist.id == playlistId) return playlist;
     }
     return null;
   }

@@ -2,16 +2,14 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:path/path.dart' as p;
 import 'package:permission_handler/permission_handler.dart';
 
 import '../models/playlist.dart';
+import '../screens/name_playlist_screen.dart';
 import '../screens/playlist_screen.dart';
 import '../services/app_log.dart';
 import '../services/folder_access.dart';
 import '../services/library.dart';
-import '../services/library_scanner.dart';
-import '../services/library_store.dart';
 import '../services/player_service.dart';
 import '../theme.dart';
 import '../widgets/covers.dart';
@@ -25,44 +23,12 @@ class LibraryTab extends StatefulWidget {
 }
 
 class _LibraryTabState extends State<LibraryTab> {
-  String? _rootPath;
-  List<Playlist> _playlists = const [];
-  bool _loading = true;
-  String? _error;
+  final _library = Library.instance;
 
   @override
   void initState() {
     super.initState();
-    _restore();
-  }
-
-  Future<void> _restore() async {
-    final root = await FolderAccess.restore(await LibraryStore.loadRoot());
-    if (!mounted) return;
-    if (root == null) {
-      setState(() => _loading = false);
-      return;
-    }
-    await _scan(root);
-  }
-
-  Future<void> _scan(String root) async {
-    setState(() {
-      _rootPath = root;
-      _loading = true;
-      _error = null;
-    });
-    final result = await LibraryScanner.scan(root);
-    AppLog.addAll(result.log);
-    Library.update(result.playlists);
-    if (!mounted) return;
-    setState(() {
-      _playlists = result.playlists;
-      _error = result.rootError == null
-          ? null
-          : "Musify can't open this folder. Choose it again to give access.";
-      _loading = false;
-    });
+    _library.ensureLoaded();
   }
 
   /// Android 13+ grants audio files through READ_MEDIA_AUDIO; older versions
@@ -86,12 +52,151 @@ class _LibraryTabState extends State<LibraryTab> {
     return false;
   }
 
-  Future<void> _pickFolder() async {
+  Future<void> _addFolder() async {
     if (!await _ensurePermission()) return;
-    final path = await FolderAccess.pick();
-    if (path == null) return;
-    await LibraryStore.saveRoot(path);
-    await _scan(path);
+    await _library.addFolder();
+  }
+
+  Future<void> _createPlaylist() async {
+    final name = await askPlaylistName(
+      context,
+      initial: 'My playlist #${_library.custom.length + 1}',
+    );
+    if (name == null || !mounted) return;
+    final playlist = _library.createPlaylist(name);
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => PlaylistScreen(playlist: playlist)),
+    );
+  }
+
+  void _showAddMenu() {
+    showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheet) => SafeArea(
+        // Sized to its content, scrolling on screens too short for it.
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _MenuTile(
+                icon: Icons.create_new_folder_outlined,
+                title: 'Add folder',
+                subtitle: 'Every folder in it with music becomes a playlist',
+                onTap: () {
+                  Navigator.of(sheet).pop();
+                  _addFolder();
+                },
+              ),
+              _MenuTile(
+                icon: Icons.queue_music,
+                title: 'Create playlist',
+                subtitle: 'Mix songs from any of your folders',
+                onTap: () {
+                  Navigator.of(sheet).pop();
+                  _createPlaylist();
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showFolders() {
+    showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheet) => SafeArea(
+        // Sized to its content, scrolling on screens too short for it.
+        child: SingleChildScrollView(
+          child: ListenableBuilder(
+            listenable: _library,
+            builder: (_, _) => Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'Music folders',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                if (_library.folders.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text(
+                      'No folders added yet.',
+                      style: TextStyle(color: AppColors.subtle),
+                    ),
+                  ),
+                for (final folder in _library.folders)
+                  ListTile(
+                    leading: Icon(
+                      _library.folderErrors.containsKey(folder.id)
+                          ? Icons.error_outline
+                          : Icons.folder_outlined,
+                    ),
+                    title: Text(folder.name),
+                    subtitle: Text(
+                      _library.folderErrors.containsKey(folder.id)
+                          ? "Can't be opened. Remove it and add it again."
+                          : folder.path,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: IconButton(
+                      tooltip: 'Remove',
+                      icon: const Icon(Icons.remove_circle_outline),
+                      onPressed: () => _confirmRemove(folder),
+                    ),
+                  ),
+                ListTile(
+                  leading: const Icon(Icons.add),
+                  title: const Text('Add folder'),
+                  onTap: () {
+                    Navigator.of(sheet).pop();
+                    _addFolder();
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmRemove(LibraryFolder folder) async {
+    final remove = await showDialog<bool>(
+      context: context,
+      useRootNavigator: true,
+      builder: (dialog) => AlertDialog(
+        backgroundColor: AppColors.elevated,
+        title: Text('Remove "${folder.name}"?'),
+        content: const Text(
+          'Its playlists leave your library. The music files stay on your '
+          'device.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialog).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialog).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (remove == true) await _library.removeFolder(folder);
   }
 
   Future<void> _copyLog() async {
@@ -119,76 +224,121 @@ class _LibraryTabState extends State<LibraryTab> {
         ),
         actions: [
           IconButton(
-            tooltip: 'Choose folder',
+            tooltip: 'Add',
             icon: const Icon(Icons.add, size: 30),
-            onPressed: _loading ? null : _pickFolder,
+            onPressed: _showAddMenu,
           ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             onSelected: (value) {
               switch (value) {
                 case 'rescan':
-                  if (_rootPath != null) _scan(_rootPath!);
+                  _library.rescan();
+                case 'folders':
+                  _showFolders();
                 case 'log':
                   _copyLog();
               }
             },
-            itemBuilder: (_) => [
-              if (_rootPath != null)
-                const PopupMenuItem(value: 'rescan', child: Text('Rescan')),
-              const PopupMenuItem(value: 'log', child: Text('Copy debug log')),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'rescan', child: Text('Rescan')),
+              PopupMenuItem(value: 'folders', child: Text('Manage folders')),
+              PopupMenuItem(value: 'log', child: Text('Copy debug log')),
             ],
           ),
         ],
       ),
-      body: _buildBody(),
+      body: ListenableBuilder(
+        listenable: _library,
+        builder: (context, _) => _buildBody(),
+      ),
     );
   }
 
   Widget _buildBody() {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_rootPath == null) {
+    final playlists = _library.all;
+    if (playlists.isEmpty) {
+      if (_library.scanning || !_library.loaded) {
+        return const Center(child: CircularProgressIndicator());
+      }
       return _EmptyState(
-        title: 'Add your music',
-        message:
-            'Pick a folder on your device. Every folder inside it with '
-            'music becomes a playlist.',
-        onPick: _pickFolder,
+        title: _library.folders.isEmpty ? 'Add your music' : 'No music found',
+        message: _library.folders.isEmpty
+            ? 'Add a folder from your device. Every folder in it with music '
+                  'becomes a playlist.'
+            : 'Nothing playable in your folders.',
+        onAddFolder: _addFolder,
+        onCreatePlaylist: _createPlaylist,
       );
     }
-    if (_error != null) {
-      return _EmptyState(
-        title: "Can't open folder",
-        message: _error!,
-        onPick: _pickFolder,
-      );
-    }
-    if (_playlists.isEmpty) {
-      return _EmptyState(
-        title: 'No music found',
-        message: 'Nothing playable in "${p.basename(_rootPath!)}".',
-        onPick: _pickFolder,
-      );
-    }
+    final broken = _library.folderErrors.length;
     return RefreshIndicator(
-      onRefresh: () => _scan(_rootPath!),
+      onRefresh: _library.rescan,
       // Rebuilds tiles when playback moves to another playlist.
       child: StreamBuilder(
         stream: PlayerService.instance.player.sequenceStateStream,
-        builder: (context, _) => ListView.builder(
+        builder: (context, _) => ListView(
           padding: EdgeInsets.only(
             top: 8,
             bottom: MediaQuery.paddingOf(context).bottom + 8,
           ),
-          itemCount: _playlists.length,
-          itemBuilder: (context, index) => _PlaylistTile(
-            playlist: _playlists[index],
-            playing: PlayerService.instance.isCurrent(_playlists[index]),
-          ),
+          children: [
+            if (_library.scanning) const LinearProgressIndicator(minHeight: 2),
+            if (broken > 0)
+              ListTile(
+                leading: const Icon(Icons.error_outline, color: Colors.orange),
+                title: Text(
+                  broken == 1
+                      ? "A folder can't be opened"
+                      : "$broken folders can't be opened",
+                ),
+                subtitle: const Text('Tap to manage folders'),
+                onTap: _showFolders,
+              ),
+            for (final playlist in playlists)
+              _PlaylistTile(
+                playlist: playlist,
+                playing: PlayerService.instance.isCurrent(playlist),
+              ),
+          ],
         ),
       ),
+    );
+  }
+}
+
+class _MenuTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _MenuTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      leading: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: AppColors.chip,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Icon(icon, color: AppColors.text),
+      ),
+      title: Text(
+        title,
+        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+      ),
+      subtitle: Text(subtitle),
     );
   }
 }
@@ -202,12 +352,14 @@ class _PlaylistTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final songs = playlist.tracks.length;
+    final count = '$songs ${songs == 1 ? 'song' : 'songs'}';
+    final location = playlist.location;
     // Only nested folders need their path to tell them apart.
-    final nested =
-        playlist.relativePath != '.' && playlist.relativePath != playlist.name;
-    final detail = nested
-        ? playlist.relativePath
-        : '$songs ${songs == 1 ? 'song' : 'songs'}';
+    final detail = playlist.isCustom
+        ? 'Playlist • $count'
+        : location != '.' && location != playlist.name
+        ? 'Folder • $location'
+        : 'Folder • $count';
     return InkWell(
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => PlaylistScreen(playlist: playlist)),
@@ -235,11 +387,13 @@ class _PlaylistTile extends StatelessWidget {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const OfflineBadge(),
-                      const SizedBox(width: 6),
+                      if (!playlist.isCustom) ...[
+                        const OfflineBadge(),
+                        const SizedBox(width: 6),
+                      ],
                       Expanded(
                         child: Text(
-                          'Playlist • $detail',
+                          detail,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -265,12 +419,14 @@ class _PlaylistTile extends StatelessWidget {
 class _EmptyState extends StatelessWidget {
   final String title;
   final String message;
-  final VoidCallback onPick;
+  final VoidCallback onAddFolder;
+  final VoidCallback onCreatePlaylist;
 
   const _EmptyState({
     required this.title,
     required this.message,
-    required this.onPick,
+    required this.onAddFolder,
+    required this.onCreatePlaylist,
   });
 
   @override
@@ -298,14 +454,27 @@ class _EmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             FilledButton(
-              onPressed: onPick,
+              onPressed: onAddFolder,
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 32,
                   vertical: 14,
                 ),
               ),
-              child: const Text('Choose folder'),
+              child: const Text('Add folder'),
+            ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: onCreatePlaylist,
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.text,
+                textStyle: const TextStyle(
+                  fontFamily: 'Figtree',
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                ),
+              ),
+              child: const Text('Create playlist'),
             ),
           ],
         ),

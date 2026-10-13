@@ -48,7 +48,7 @@ class PlayerService {
   Playlist? get current => _loaded;
 
   bool isCurrent(Playlist playlist) =>
-      _loaded?.path == playlist.path &&
+      _loaded?.id == playlist.id &&
       _loaded?.tracks.length == playlist.tracks.length;
 
   Track? get currentTrack => _trackOf(player.sequenceState);

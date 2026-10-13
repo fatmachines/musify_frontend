@@ -10,6 +10,7 @@ import '../services/metadata_service.dart';
 import '../services/player_service.dart';
 import '../theme.dart';
 import '../utils/cover_color.dart';
+import '../widgets/add_to_playlist.dart';
 import '../widgets/covers.dart';
 import '../widgets/track_swiper.dart';
 
@@ -509,60 +510,72 @@ void _showMore(BuildContext context, Track track) {
   showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
+    isScrollControlled: true,
     builder: (sheet) => SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _sheetHeader(track),
-          const Divider(color: Colors.white12, height: 16),
-          ListTile(
-            leading: const Icon(Icons.ios_share),
-            title: const Text('Share'),
-            onTap: () {
-              Navigator.of(sheet).pop();
-              _share(context, track);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.timer_outlined),
-            title: const Text('Sleep timer'),
-            onTap: () {
-              Navigator.of(sheet).pop();
-              _showSleepTimer(context);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.queue_music),
-            title: const Text('Go to queue'),
-            onTap: () {
-              Navigator.of(sheet).pop();
-              _showQueue(context);
-            },
-          ),
-          StreamBuilder<LoopMode>(
-            stream: service.player.loopModeStream,
-            initialData: service.player.loopMode,
-            builder: (context, snapshot) => ListTile(
-              leading: const Icon(Icons.repeat),
-              title: const Text('Repeat'),
-              trailing: Text(switch (snapshot.data ?? LoopMode.off) {
-                LoopMode.off => 'Off',
-                LoopMode.all => 'All',
-                LoopMode.one => 'One',
-              }, style: const TextStyle(color: AppColors.subtle)),
-              onTap: service.cycleRepeat,
+      // Sized to its content, scrolling on screens too short for it.
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _sheetHeader(track),
+            const Divider(color: Colors.white12, height: 16),
+            ListTile(
+              leading: const Icon(Icons.add_circle_outline),
+              title: const Text('Add to playlist'),
+              onTap: () {
+                Navigator.of(sheet).pop();
+                showAddToPlaylist(context, track);
+              },
             ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.insert_drive_file_outlined),
-            title: const Text('File'),
-            subtitle: Text(
-              '${track.title}.${track.extension.toLowerCase()}',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+            ListTile(
+              leading: const Icon(Icons.ios_share),
+              title: const Text('Share'),
+              onTap: () {
+                Navigator.of(sheet).pop();
+                _share(context, track);
+              },
             ),
-          ),
-        ],
+            ListTile(
+              leading: const Icon(Icons.timer_outlined),
+              title: const Text('Sleep timer'),
+              onTap: () {
+                Navigator.of(sheet).pop();
+                _showSleepTimer(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.queue_music),
+              title: const Text('Go to queue'),
+              onTap: () {
+                Navigator.of(sheet).pop();
+                _showQueue(context);
+              },
+            ),
+            StreamBuilder<LoopMode>(
+              stream: service.player.loopModeStream,
+              initialData: service.player.loopMode,
+              builder: (context, snapshot) => ListTile(
+                leading: const Icon(Icons.repeat),
+                title: const Text('Repeat'),
+                trailing: Text(switch (snapshot.data ?? LoopMode.off) {
+                  LoopMode.off => 'Off',
+                  LoopMode.all => 'All',
+                  LoopMode.one => 'One',
+                }, style: const TextStyle(color: AppColors.subtle)),
+                onTap: service.cycleRepeat,
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.insert_drive_file_outlined),
+              title: const Text('File'),
+              subtitle: Text(
+                '${track.title}.${track.extension.toLowerCase()}',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
       ),
     ),
   );
@@ -576,50 +589,53 @@ void _showSleepTimer(BuildContext context) {
     showDragHandle: true,
     isScrollControlled: true,
     builder: (sheet) => SafeArea(
-      child: ValueListenableBuilder<SleepTimer?>(
-        valueListenable: service.sleepTimer,
-        builder: (context, timer, _) => Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.only(bottom: 8),
-              child: Text(
-                'Sleep timer',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-              ),
-            ),
-            if (timer != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: _SleepCountdown(timer: timer),
-              ),
-            for (final minutes in options)
-              ListTile(
-                title: Text(minutes == 60 ? '1 hour' : '$minutes minutes'),
-                onTap: () {
-                  service.setSleepTimer(duration: Duration(minutes: minutes));
-                  Navigator.of(sheet).pop();
-                },
-              ),
-            ListTile(
-              title: const Text('End of track'),
-              onTap: () {
-                service.setSleepTimer(endOfTrack: true);
-                Navigator.of(sheet).pop();
-              },
-            ),
-            if (timer != null)
-              ListTile(
-                title: const Text(
-                  'Turn off timer',
-                  style: TextStyle(color: AppColors.green),
+      // Sized to its content, scrolling on screens too short for it.
+      child: SingleChildScrollView(
+        child: ValueListenableBuilder<SleepTimer?>(
+          valueListenable: service.sleepTimer,
+          builder: (context, timer, _) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'Sleep timer',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                 ),
+              ),
+              if (timer != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _SleepCountdown(timer: timer),
+                ),
+              for (final minutes in options)
+                ListTile(
+                  title: Text(minutes == 60 ? '1 hour' : '$minutes minutes'),
+                  onTap: () {
+                    service.setSleepTimer(duration: Duration(minutes: minutes));
+                    Navigator.of(sheet).pop();
+                  },
+                ),
+              ListTile(
+                title: const Text('End of track'),
                 onTap: () {
-                  service.setSleepTimer();
+                  service.setSleepTimer(endOfTrack: true);
                   Navigator.of(sheet).pop();
                 },
               ),
-          ],
+              if (timer != null)
+                ListTile(
+                  title: const Text(
+                    'Turn off timer',
+                    style: TextStyle(color: AppColors.green),
+                  ),
+                  onTap: () {
+                    service.setSleepTimer();
+                    Navigator.of(sheet).pop();
+                  },
+                ),
+            ],
+          ),
         ),
       ),
     ),
