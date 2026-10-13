@@ -407,17 +407,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           const SizedBox(height: 4),
           Row(
             children: [
-              IconButton(
-                tooltip: 'More',
-                padding: EdgeInsets.zero,
-                alignment: Alignment.centerLeft,
-                onPressed: () => showPlaylistActions(context, _playlist),
-                icon: const Icon(
-                  Icons.more_horiz,
-                  size: 28,
-                  color: AppColors.subtle,
-                ),
-              ),
               const Spacer(),
               _ShuffleButton(active: current && _shuffle, onTap: _onShuffle),
               const SizedBox(width: 16),
