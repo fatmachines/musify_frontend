@@ -11,6 +11,7 @@ import '../services/app_log.dart';
 import '../services/folder_access.dart';
 import '../services/library.dart';
 import '../services/player_service.dart';
+import '../services/voice_play.dart';
 import '../theme.dart';
 import '../widgets/covers.dart';
 import '../widgets/offline_badge.dart';
@@ -234,6 +235,7 @@ class _LibraryTabState extends State<LibraryTab> {
   }
 
   Future<void> _copyLog() async {
+    await VoicePlay.collectSiriLog();
     await Clipboard.setData(ClipboardData(text: AppLog.dump()));
     if (!mounted) return;
     ScaffoldMessenger.of(context)

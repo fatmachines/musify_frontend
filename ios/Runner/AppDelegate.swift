@@ -34,7 +34,7 @@ import UniformTypeIdentifiers
   // Musify takes the play requests and passes anything else on.
 
   override func application(_ application: UIApplication, handlerFor intent: INIntent) -> Any? {
-    NSLog("[Musify] siri: handlerFor %@", String(describing: type(of: intent)))
+    SiriBridge.note("handlerFor \(type(of: intent))")
     if intent is INPlayMediaIntent { return SiriBridge.shared }
     return super.application(application, handlerFor: intent)
   }
@@ -48,7 +48,7 @@ import UniformTypeIdentifiers
       super.application(application, handle: intent, completionHandler: completionHandler)
       return
     }
-    NSLog("[Musify] siri: handling in the app")
+    SiriBridge.note("handling in the app")
     SiriBridge.shared.play(intent)
     completionHandler(INPlayMediaIntentResponse(code: .success, userActivity: nil))
   }
@@ -63,6 +63,18 @@ import UniformTypeIdentifiers
 /// waits here until Dart reports it is ready.
 final class SiriBridge: NSObject, INPlayMediaIntentHandling {
   static let shared = SiriBridge()
+
+  /// Siri's steps, also kept on the phone (last 60 lines) so they reach the
+  /// app's debug log even when Siri ran with nothing attached.
+  private static let logKey = "musify_siri_log"
+
+  static func note(_ line: String) {
+    NSLog("[Musify] siri: %@", line)
+    let stamp = ISO8601DateFormatter().string(from: Date())
+    var lines = UserDefaults.standard.stringArray(forKey: logKey) ?? []
+    lines.append("\(stamp) \(line)")
+    UserDefaults.standard.set(Array(lines.suffix(60)), forKey: logKey)
+  }
 
   private var channel: FlutterMethodChannel?
 
@@ -98,9 +110,13 @@ final class SiriBridge: NSObject, INPlayMediaIntentHandling {
         let waiting = self.pending
         self.pending = []
         self.lock.unlock()
-        NSLog("[Musify] siri: Dart ready, %d waiting", waiting.count)
+        SiriBridge.note("Dart ready, \(waiting.count) waiting")
         waiting.forEach(self.send)
         result(nil)
+      case "log":
+        // Hands the saved steps to Dart's debug log, then starts afresh.
+        result(UserDefaults.standard.stringArray(forKey: Self.logKey) ?? [])
+        UserDefaults.standard.removeObject(forKey: Self.logKey)
       case "vocabulary":
         // Helps Siri recognise the library's own names.
         let args = call.arguments as? [String: Any]
@@ -147,7 +163,7 @@ final class SiriBridge: NSObject, INPlayMediaIntentHandling {
     with completion: @escaping ([INPlayMediaMediaItemResolutionResult]) -> Void
   ) {
     siriIsEnabled()
-    NSLog("[Musify] siri: resolve %@", String(describing: intent.mediaSearch))
+    SiriBridge.note("resolve \(String(describing: intent.mediaSearch))")
     let search = intent.mediaSearch
     let title = search?.mediaName ?? search?.artistName ?? search?.albumName ?? "Musify"
     let item = INMediaItem(
@@ -165,7 +181,7 @@ final class SiriBridge: NSObject, INPlayMediaIntentHandling {
   ) {
     siriIsEnabled()
     let ready = dartReady
-    NSLog("[Musify] siri: handle (Dart ready: %@)", ready ? "yes" : "no")
+    SiriBridge.note("handle (Dart ready: \(ready))")
     if ready {
       // Played in the background by application(_:handle:completionHandler:).
       completion(INPlayMediaIntentResponse(code: .handleInApp, userActivity: nil))
@@ -182,7 +198,7 @@ final class SiriBridge: NSObject, INPlayMediaIntentHandling {
     if let name = search?.mediaName ?? search?.albumName { request["query"] = name }
     if let artist = search?.artistName { request["artist"] = artist }
     if let shuffle = intent.playShuffled { request["shuffle"] = shuffle }
-    NSLog("[Musify] siri: request %@", request.description)
+    SiriBridge.note("request \(request)")
     lock.lock()
     let ready = _dartReady
     if !ready { pending.append(request) }
@@ -193,11 +209,11 @@ final class SiriBridge: NSObject, INPlayMediaIntentHandling {
   private func send(_ request: [String: Any]) {
     DispatchQueue.main.async {
       guard let channel = self.channel else {
-        NSLog("[Musify] siri: no channel to Dart")
+        SiriBridge.note("no channel to Dart")
         return
       }
       channel.invokeMethod("play", arguments: request) { result in
-        NSLog("[Musify] siri: Dart played: %@", String(describing: result))
+        SiriBridge.note("Dart played: \(String(describing: result))")
       }
     }
   }

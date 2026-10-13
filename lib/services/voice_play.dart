@@ -53,6 +53,7 @@ class VoicePlay {
       try {
         await _channel.invokeMethod('ready');
         AppLog.add('voice: Siri channel ready');
+        await collectSiriLog();
         break;
       } on MissingPluginException {
         await Future<void>.delayed(const Duration(milliseconds: 300));
@@ -65,6 +66,17 @@ class VoicePlay {
     await library.ensureLoaded();
     library.addListener(_sendVocabularyLater);
     await _sendVocabulary();
+  }
+
+  /// Moves Siri's saved native steps into the app's debug log.
+  static Future<void> collectSiriLog() async {
+    if (!Platform.isIOS) return;
+    try {
+      final lines = await _channel.invokeListMethod<String>('log');
+      AppLog.addAll((lines ?? const []).map((l) => 'siri: $l'));
+    } catch (e) {
+      AppLog.add('voice: reading Siri log failed: $e');
+    }
   }
 
   static void _sendVocabularyLater() {
