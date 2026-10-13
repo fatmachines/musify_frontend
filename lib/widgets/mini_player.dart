@@ -52,32 +52,33 @@ class MiniPlayer extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
               clipBehavior: Clip.antiAlias,
-              child: Stack(
+              // The row sits centred in the space above the seek line.
+              child: Column(
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 8, 4, 10),
-                    child: Row(
-                      children: [
-                        // Swipe sideways for the previous or next song.
-                        Expanded(
-                          child: TrackSwiper(
-                            itemBuilder: (context, track) => Row(
-                              children: [
-                                TrackCover(track: track, size: 40),
-                                const SizedBox(width: 10),
-                                Expanded(child: _TrackText(track: track)),
-                              ],
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 8, right: 4),
+                      child: Row(
+                        children: [
+                          // Swipe sideways for the previous or next song.
+                          Expanded(
+                            child: TrackSwiper(
+                              itemBuilder: (context, track) => Row(
+                                children: [
+                                  TrackCover(track: track, size: 40),
+                                  const SizedBox(width: 10),
+                                  Expanded(child: _TrackText(track: track)),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                        const _PlayPause(),
-                      ],
+                          const _PlayPause(),
+                        ],
+                      ),
                     ),
                   ),
-                  const Positioned(
-                    left: 8,
-                    right: 8,
-                    bottom: 2,
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(8, 0, 8, 2),
                     child: _Progress(),
                   ),
                 ],
@@ -145,6 +146,8 @@ class _PlayPause extends StatelessWidget {
         return IconButton(
           tooltip: playing ? 'Pause' : 'Play',
           iconSize: 32,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints.tightFor(width: 44, height: 44),
           color: AppColors.text,
           onPressed: service.togglePlayback,
           icon: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
