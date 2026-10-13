@@ -61,11 +61,14 @@ class Downloads extends ChangeNotifier {
     YouTubeTrack track,
     String folder, {
     void Function(File? file, String? error)? onDone,
+    bool remember = true,
   }) {
     if (isQueued(track)) return;
-    SharedPreferences.getInstance().then(
-      (prefs) => prefs.setString(_lastFolderKey, folder),
-    );
+    if (remember) {
+      SharedPreferences.getInstance().then(
+        (prefs) => prefs.setString(_lastFolderKey, folder),
+      );
+    }
     if (_progress.isEmpty) _batchTotal = _batchDone = 0;
     _batchTotal++;
     _progress[track.videoId] = null;
@@ -96,7 +99,48 @@ class Downloads extends ChangeNotifier {
     _batchDone++;
     notifyListeners();
     _callbacks.remove(track.videoId)?.call(file, error);
+    // Once the queue is done, the library picks the new songs (and any new
+    // playlist folder) up.
+    if (_waiting.isEmpty) await Library.instance.rescan();
     _next();
+  }
+
+  /// Saves every YouTube song in [playlist] into a new folder named after
+  /// it inside [parent], which then shows up as a folder playlist. Songs
+  /// already saved there are skipped. Returns how many were queued, and
+  /// the folder.
+  Future<(int, String)> downloadPlaylist(
+    Playlist playlist,
+    String parent, {
+    void Function(int saved, int failed)? onDone,
+  }) async {
+    final folder = Directory(p.join(parent, _safe(playlist.name, 'Playlist')));
+    await folder.create(recursive: true);
+    final songs = [
+      for (final track in playlist.tracks)
+        if (track is YouTubeTrack &&
+            !isQueued(track) &&
+            !File(p.join(folder.path, '${_fileName(track)}.m4a')).existsSync())
+          track,
+    ];
+    AppLog.add(
+      'download: playlist ${playlist.name}, ${songs.length} songs -> '
+      '${folder.path}',
+    );
+    var saved = 0;
+    var failed = 0;
+    for (final track in songs) {
+      download(
+        track,
+        folder.path,
+        remember: false,
+        onDone: (file, _) {
+          file == null ? failed++ : saved++;
+          if (saved + failed == songs.length) onDone?.call(saved, failed);
+        },
+      );
+    }
+    return (songs.length, folder.path);
   }
 
   Future<File> _save(YouTubeTrack track, String folder) async {
@@ -113,17 +157,19 @@ class Downloads extends ChangeNotifier {
         notifyListeners();
       },
     );
-    await Library.instance.rescan();
     return file;
   }
 
   /// "Title", without characters file systems refuse.
-  static String _fileName(YouTubeTrack track) {
-    final safe = track.name
+  static String _fileName(YouTubeTrack track) =>
+      _safe(track.name, track.videoId);
+
+  static String _safe(String raw, String fallback) {
+    final safe = raw
         .replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1F]'), ' ')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
-    final name = safe.isEmpty ? track.videoId : safe;
+    final name = safe.isEmpty || safe.startsWith('.') ? fallback : safe;
     return name.length > 120 ? name.substring(0, 120).trim() : name;
   }
 

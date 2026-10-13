@@ -46,11 +46,11 @@ class _HomeTabState extends State<HomeTab> {
   }
 
   Future<void> _loadCharts({bool refresh = false}) async {
-    String? key;
+    var setUp = false;
     try {
-      key = await _server.key();
+      setUp = await _server.isSetUp();
     } catch (_) {}
-    if (key == null) {
+    if (!setUp) {
       if (mounted) setState(() => _needsKey = true);
       return;
     }

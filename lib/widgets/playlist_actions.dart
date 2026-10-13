@@ -5,6 +5,7 @@ import '../screens/name_playlist_screen.dart';
 import '../services/library.dart';
 import '../theme.dart';
 import 'covers.dart';
+import 'download_sheet.dart';
 import 'toast.dart';
 
 const _danger = Color(0xFFF15E6C);
@@ -16,6 +17,8 @@ Future<void> showPlaylistActions(BuildContext context, Playlist playlist) {
   final library = Library.instance;
   final system = Library.isSystem(playlist);
   final pinned = library.isPinned(playlist);
+  final remote = Library.isRemote(playlist);
+  final youtube = playlist.tracks.whereType<YouTubeTrack>().length;
   final kind = playlist.isCustom ? 'Playlist' : 'Folder';
   return showModalBottomSheet<void>(
     context: context,
@@ -40,22 +43,37 @@ Future<void> showPlaylistActions(BuildContext context, Playlist playlist) {
               ),
             ),
             const Divider(color: Colors.white12, height: 16),
-            ListTile(
-              leading: Icon(
-                pinned ? Icons.push_pin : Icons.push_pin_outlined,
-                color: pinned ? AppColors.green : null,
+            if (youtube > 0)
+              ListTile(
+                leading: const Icon(Icons.download_rounded),
+                title: const Text('Download playlist'),
+                subtitle: Text(
+                  '$youtube YouTube ${youtube == 1 ? 'song' : 'songs'} into '
+                  'a new folder',
+                ),
+                onTap: () {
+                  Navigator.of(sheet).pop();
+                  downloadPlaylistWithPicker(context, playlist);
+                },
               ),
-              title: Text(pinned ? 'Unpin from Home' : 'Pin to Home'),
-              onTap: () {
-                Navigator.of(sheet).pop();
-                library.togglePin(playlist);
-                showToast(
-                  context,
-                  pinned ? 'Unpinned from Home' : 'Pinned to Home',
-                );
-              },
-            ),
-            if (playlist.isCustom && !system)
+            // YouTube playlists aren't in the library to pin or change.
+            if (!remote)
+              ListTile(
+                leading: Icon(
+                  pinned ? Icons.push_pin : Icons.push_pin_outlined,
+                  color: pinned ? AppColors.green : null,
+                ),
+                title: Text(pinned ? 'Unpin from Home' : 'Pin to Home'),
+                onTap: () {
+                  Navigator.of(sheet).pop();
+                  library.togglePin(playlist);
+                  showToast(
+                    context,
+                    pinned ? 'Unpinned from Home' : 'Pinned to Home',
+                  );
+                },
+              ),
+            if (playlist.isCustom && !system && !remote)
               ListTile(
                 leading: const Icon(Icons.edit_outlined),
                 title: const Text('Rename'),
@@ -72,7 +90,7 @@ Future<void> showPlaylistActions(BuildContext context, Playlist playlist) {
                   }
                 },
               ),
-            if (!system)
+            if (!system && !remote)
               ListTile(
                 leading: const Icon(Icons.delete_outline),
                 title: const Text('Delete playlist'),

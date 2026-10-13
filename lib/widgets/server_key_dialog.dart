@@ -4,38 +4,41 @@ import '../services/musify_server.dart';
 import '../theme.dart';
 import 'toast.dart';
 
-/// Asks for the Musify server's key and checks it. True once a working
-/// key is saved.
+/// Asks for the Musify server's address and key, and checks them. True once
+/// a working server is saved.
 Future<bool> showServerKeyDialog(BuildContext context) async {
   final server = MusifyServer.instance;
-  final field = TextEditingController(text: await server.key() ?? '');
+  final url = TextEditingController(text: await server.url() ?? '');
+  final key = TextEditingController(text: await server.key() ?? '');
   if (!context.mounted) return false;
   final saved = await showDialog<bool>(
     context: context,
     useRootNavigator: true,
-    builder: (dialog) => _KeyDialog(field: field),
+    builder: (dialog) => _ServerDialog(url: url, secret: key),
   );
-  field.dispose();
+  url.dispose();
+  key.dispose();
   return saved ?? false;
 }
 
-/// [showServerKeyDialog] unless a key is already saved.
+/// [showServerKeyDialog] unless a server is already set up.
 Future<bool> ensureServerKey(BuildContext context) async {
-  if (await MusifyServer.instance.key() != null) return true;
+  if (await MusifyServer.instance.isSetUp()) return true;
   if (!context.mounted) return false;
   return showServerKeyDialog(context);
 }
 
-class _KeyDialog extends StatefulWidget {
-  final TextEditingController field;
+class _ServerDialog extends StatefulWidget {
+  final TextEditingController url;
+  final TextEditingController secret;
 
-  const _KeyDialog({required this.field});
+  const _ServerDialog({required this.url, required this.secret});
 
   @override
-  State<_KeyDialog> createState() => _KeyDialogState();
+  State<_ServerDialog> createState() => _ServerDialogState();
 }
 
-class _KeyDialogState extends State<_KeyDialog> {
+class _ServerDialogState extends State<_ServerDialog> {
   bool _checking = false;
   String? _error;
 
@@ -45,16 +48,17 @@ class _KeyDialogState extends State<_KeyDialog> {
       _error = null;
     });
     final server = MusifyServer.instance;
-    final before = await server.key();
-    await server.setKey(widget.field.text);
+    final oldUrl = await server.url();
+    final oldKey = await server.key();
+    await server.setUp(widget.url.text, widget.secret.text);
     try {
       final version = await server.check();
       if (!mounted) return;
       showToast(context, 'Connected (yt-dlp $version)');
       Navigator.of(context).pop(true);
     } catch (e) {
-      // Keep the old key if the new one doesn't work.
-      await server.setKey(before);
+      // Keep what worked before if the new one doesn't.
+      await server.setUp(oldUrl, oldKey);
       if (!mounted) return;
       setState(() {
         _checking = false;
@@ -72,15 +76,25 @@ class _KeyDialogState extends State<_KeyDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Downloads and YouTube charts come through '
-            '${Uri.parse(MusifyServer.base).host}. Paste its key:',
-            style: const TextStyle(color: AppColors.subtle, fontSize: 14),
+          const Text(
+            'Downloads and YouTube charts come through your own Musify '
+            'server (see the musify_backend repo). Enter its address and key:',
+            style: TextStyle(color: AppColors.subtle, fontSize: 14),
           ),
           const SizedBox(height: 12),
           TextField(
-            controller: widget.field,
+            controller: widget.url,
             autofocus: true,
+            autocorrect: false,
+            enableSuggestions: false,
+            keyboardType: TextInputType.url,
+            cursorColor: AppColors.green,
+            decoration: const InputDecoration(
+              hintText: 'https://musify.example.com',
+            ),
+          ),
+          TextField(
+            controller: widget.secret,
             autocorrect: false,
             enableSuggestions: false,
             cursorColor: AppColors.green,

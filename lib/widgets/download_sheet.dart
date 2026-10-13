@@ -38,11 +38,18 @@ List<DownloadFolder> downloadFolders() {
 }
 
 /// Asks where to save, the last folder used first. Null if cancelled.
-Future<String?> pickDownloadFolder(BuildContext context) async {
+/// With [mainOnly], just the library folders themselves.
+Future<String?> pickDownloadFolder(
+  BuildContext context, {
+  bool mainOnly = false,
+  String title = 'Download to',
+}) async {
   final last = await Downloads.lastFolder();
   if (!context.mounted) return null;
-  final folders = downloadFolders()
-    ..sort((a, b) => (a.path == last ? 0 : 1) - (b.path == last ? 0 : 1));
+  final folders = [
+    for (final f in downloadFolders())
+      if (!mainOnly || f.within == null) f,
+  ]..sort((a, b) => (a.path == last ? 0 : 1) - (b.path == last ? 0 : 1));
   return showModalBottomSheet<String>(
     context: context,
     useRootNavigator: true,
@@ -55,12 +62,12 @@ Future<String?> pickDownloadFolder(BuildContext context) async {
       child: ListView(
         shrinkWrap: true,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: Text(
-              'Download to',
+              title,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             ),
           ),
           if (folders.isEmpty)
@@ -119,6 +126,38 @@ Future<void> downloadWithPicker(
           ? "Couldn't download ${track.name}: $error"
           : 'Saved ${track.name} to ${p.basename(folder)}',
     ),
+  );
+}
+
+/// Asks for a library folder, then saves every YouTube song in [playlist]
+/// into a new folder named after it there.
+Future<void> downloadPlaylistWithPicker(
+  BuildContext context,
+  Playlist playlist,
+) async {
+  if (!await ensureServerKey(context) || !context.mounted) return;
+  final parent = await pickDownloadFolder(
+    context,
+    mainOnly: true,
+    title: 'Download "${playlist.name}" into',
+  );
+  if (parent == null || !context.mounted) return;
+  final overlay = Overlay.of(context, rootOverlay: true);
+  final (count, folder) = await Downloads.instance.downloadPlaylist(
+    playlist,
+    parent,
+    onDone: (saved, failed) => showToastOn(
+      overlay,
+      failed == 0
+          ? 'Saved ${playlist.name}: $saved songs'
+          : 'Saved $saved songs to ${playlist.name}, $failed failed',
+    ),
+  );
+  showToastOn(
+    overlay,
+    count == 0
+        ? 'Everything is already in ${p.basename(folder)}'
+        : 'Downloading $count songs to ${p.basename(folder)}',
   );
 }
 

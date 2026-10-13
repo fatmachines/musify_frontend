@@ -9,45 +9,76 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/playlist.dart';
 import 'app_log.dart';
 
-/// Musify's own server (server/ in this repo): downloads YouTube songs and
+/// Musify's server (the musify_backend repo): downloads YouTube songs and
 /// reads YouTube playlists with yt-dlp, which the phone can't do itself.
 ///
-/// It needs a key, entered once in the app (Your Library ⋮ → Musify server)
-/// or built in with --dart-define=MUSIFY_KEY=...
+/// Everyone runs their own: its address and key are entered once in the app
+/// (Your Library ⋮ → Musify server), or built in with
+/// --dart-define=MUSIFY_SERVER=https://... --dart-define=MUSIFY_KEY=...
 class MusifyServer extends ChangeNotifier {
   MusifyServer._();
 
   static final instance = MusifyServer._();
 
-  static const base = 'https://musify.fatmachines.com';
+  static const _urlKey = 'musify_server_url';
   static const _keyKey = 'musify_server_key';
+  static const _builtInUrl = String.fromEnvironment('MUSIFY_SERVER');
   static const _builtInKey = String.fromEnvironment('MUSIFY_KEY');
 
+  String? _url;
   String? _key;
   bool _loaded = false;
 
+  Future<void> _load() async {
+    if (_loaded) return;
+    final prefs = await SharedPreferences.getInstance();
+    _url = prefs.getString(_urlKey);
+    _key = prefs.getString(_keyKey);
+    _loaded = true;
+  }
+
+  /// The server's address, e.g. https://musify.example.com, or null.
+  Future<String?> url() async {
+    await _load();
+    return _url ?? (_builtInUrl.isEmpty ? null : _builtInUrl);
+  }
+
   Future<String?> key() async {
-    if (!_loaded) {
-      final prefs = await SharedPreferences.getInstance();
-      _key = prefs.getString(_keyKey);
-      _loaded = true;
-    }
+    await _load();
     return _key ?? (_builtInKey.isEmpty ? null : _builtInKey);
   }
 
-  Future<void> setKey(String? key) async {
+  /// Whether there's an address and a key to use.
+  Future<bool> isSetUp() async => await url() != null && await key() != null;
+
+  /// Saves the address and key (null or empty clears them).
+  Future<void> setUp(String? url, String? key) async {
     final prefs = await SharedPreferences.getInstance();
-    final trimmed = key?.trim();
-    if (trimmed == null || trimmed.isEmpty) {
-      await prefs.remove(_keyKey);
-      _key = null;
-    } else {
-      await prefs.setString(_keyKey, trimmed);
-      _key = trimmed;
+    var address = url?.trim() ?? '';
+    if (address.isNotEmpty && !address.contains('://')) {
+      address = 'https://$address';
     }
+    while (address.endsWith('/')) {
+      address = address.substring(0, address.length - 1);
+    }
+    final secret = key?.trim() ?? '';
+    Future<void> put(String name, String value) =>
+        value.isEmpty ? prefs.remove(name) : prefs.setString(name, value);
+    await put(_urlKey, address);
+    await put(_keyKey, secret);
+    _url = address.isEmpty ? null : address;
+    _key = secret.isEmpty ? null : secret;
     _loaded = true;
     _charts = null;
     notifyListeners();
+  }
+
+  Future<String> _base() async {
+    final address = await url();
+    if (address == null) {
+      throw const ServerError('Set up a Musify server first');
+    }
+    return address;
   }
 
   Future<Map<String, String>> _headers() async {
@@ -68,7 +99,7 @@ class MusifyServer extends ChangeNotifier {
   /// Checks the key works; returns the server's yt-dlp version.
   Future<String> check() async {
     final response = await http
-        .get(Uri.parse('$base/health'), headers: await _headers())
+        .get(Uri.parse('${await _base()}/health'), headers: await _headers())
         .timeout(const Duration(seconds: 20));
     if (response.statusCode != 200) {
       throw ServerError(_errorOf(response, response.body));
@@ -92,7 +123,7 @@ class MusifyServer extends ChangeNotifier {
       return _charts!;
     }
     final response = await http
-        .get(Uri.parse('$base/charts'), headers: await _headers())
+        .get(Uri.parse('${await _base()}/charts'), headers: await _headers())
         .timeout(const Duration(seconds: 60));
     if (response.statusCode != 200) {
       throw ServerError(_errorOf(response, response.body));
@@ -111,6 +142,7 @@ class MusifyServer extends ChangeNotifier {
   /// Sets the charts and key without the server, for screenshots and tests.
   @visibleForTesting
   void debugUse({required String key, required List<Playlist> charts}) {
+    _url = 'https://musify.example.com';
     _key = key;
     _loaded = true;
     _charts = charts;
@@ -151,7 +183,7 @@ class MusifyServer extends ChangeNotifier {
     try {
       final request = http.Request(
         'GET',
-        Uri.parse('$base/audio/${track.videoId}.m4a'),
+        Uri.parse('${await _base()}/audio/${track.videoId}.m4a'),
       )..headers.addAll(await _headers());
       final response = await client
           .send(request)
