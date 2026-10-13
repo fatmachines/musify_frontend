@@ -99,14 +99,47 @@ class PlayerService {
   Future<void> togglePlayback() =>
       player.playing ? player.pause() : player.play();
 
-  Future<void> next() => player.seekToNext();
+  /// The song [offset] places away from the current one in play order
+  /// (shuffled or not), or null at either end with repeat off. Unlike
+  /// just_audio's own next/previous, repeat-one still moves on, as Spotify
+  /// does when you skip.
+  Track? neighbour(int offset) {
+    final index = _neighbourIndex(offset);
+    if (index == null) return null;
+    final tag = player.sequence[index].tag;
+    return tag is Track ? tag : null;
+  }
+
+  int? _neighbourIndex(int offset) {
+    final current = player.currentIndex;
+    if (current == null) return null;
+    final order = player.effectiveIndices;
+    final position = order.indexOf(current);
+    if (position < 0) return null;
+    var target = position + offset;
+    if (target < 0 || target >= order.length) {
+      if (player.loopMode == LoopMode.off) return null;
+      target %= order.length;
+    }
+    final index = order[target];
+    return index == current ? null : index;
+  }
+
+  /// Moves [offset] songs along the play order, starting it from the top.
+  Future<void> skip(int offset) async {
+    final index = _neighbourIndex(offset);
+    if (index != null) await player.seek(Duration.zero, index: index);
+  }
+
+  Future<void> next() => skip(1);
 
   /// Like Spotify: restarts the song unless it has only just begun.
   Future<void> previous() async {
-    if (player.position > const Duration(seconds: 3) || !player.hasPrevious) {
+    if (player.position > const Duration(seconds: 3) ||
+        _neighbourIndex(-1) == null) {
       await player.seek(Duration.zero);
     } else {
-      await player.seekToPrevious();
+      await skip(-1);
     }
   }
 

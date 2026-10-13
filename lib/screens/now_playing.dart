@@ -11,6 +11,7 @@ import '../services/player_service.dart';
 import '../theme.dart';
 import '../utils/cover_color.dart';
 import '../widgets/covers.dart';
+import '../widgets/track_swiper.dart';
 
 const _fallbackColor = Color(0xFF3E3E3E);
 
@@ -118,18 +119,14 @@ class _Body extends StatelessWidget {
                 final size = box.maxWidth < box.maxHeight - 16
                     ? box.maxWidth
                     : box.maxHeight - 16;
-                return Center(
-                  child: GestureDetector(
-                    // Swipe the cover sideways to change song.
-                    onHorizontalDragEnd: (d) {
-                      final v = d.primaryVelocity ?? 0;
-                      if (v < -250) PlayerService.instance.next();
-                      if (v > 250) PlayerService.instance.previous();
-                    },
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 250),
+                // Swipe the cover sideways for the previous or next song.
+                // The pages run the full screen width (past the side
+                // padding) so covers slide in from the screen edge.
+                return OverflowBox(
+                  maxWidth: box.maxWidth + 48,
+                  child: TrackSwiper(
+                    itemBuilder: (context, track) => Center(
                       child: ClipRRect(
-                        key: ValueKey(track.path),
                         borderRadius: BorderRadius.circular(8),
                         child: TrackCover(track: track, size: size),
                       ),

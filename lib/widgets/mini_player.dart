@@ -6,6 +6,7 @@ import '../services/player_service.dart';
 import '../theme.dart';
 import '../utils/cover_color.dart';
 import 'covers.dart';
+import 'track_swiper.dart';
 
 const _fallbackColor = Color(0xFF3E3E3E);
 
@@ -57,9 +58,18 @@ class MiniPlayer extends StatelessWidget {
                     padding: const EdgeInsets.fromLTRB(8, 8, 4, 10),
                     child: Row(
                       children: [
-                        TrackCover(track: track, size: 40),
-                        const SizedBox(width: 10),
-                        Expanded(child: _TrackText(track: track)),
+                        // Swipe sideways for the previous or next song.
+                        Expanded(
+                          child: TrackSwiper(
+                            itemBuilder: (context, track) => Row(
+                              children: [
+                                TrackCover(track: track, size: 40),
+                                const SizedBox(width: 10),
+                                Expanded(child: _TrackText(track: track)),
+                              ],
+                            ),
+                          ),
+                        ),
                         const _PlayPause(),
                       ],
                     ),
