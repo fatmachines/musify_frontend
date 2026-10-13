@@ -22,6 +22,8 @@ import '../player_service.dart';
 ///  - the video's own clock wins: the stand-in is moved to match it (and
 ///    held still during ads)
 ///  - the video ends: on to the next song
+///  - the video stalls, or iOS ends the web view's process in the
+///    background: the video is loaded again where it was
 ///
 /// The page is told it's always visible so it keeps playing in the
 /// background, and the video is nudged back to playing if the system
@@ -43,6 +45,16 @@ class YouTubeWebPlayer {
   Duration _startAt = Duration.zero;
   Duration _lastVideoTime = Duration.zero;
   DateTime _ignoreSeeksUntil = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// When the video last played on (or showed an ad), and when it was last
+  /// loaded: how a stall is noticed.
+  DateTime _lastProgress = DateTime.now();
+  DateTime _lastLoad = DateTime.now();
+  DateTime? _lastTick;
+  bool _videoPlaying = false;
+
+  /// A song playing whose video hasn't moved for this long gets reloaded.
+  static const _stallLimit = Duration(seconds: 8);
 
   WebViewController get controller => _controller ??= _create();
 
@@ -68,8 +80,14 @@ class YouTubeWebPlayer {
             }
             _command(_player.playing ? 'play' : 'pause');
           },
-          onWebResourceError: (e) =>
-              AppLog.add('youtube web: ${e.errorCode} ${e.description}'),
+          onWebResourceError: (e) {
+            AppLog.add('youtube web: ${e.errorCode} ${e.description}');
+            // iOS ended the page's process, e.g. while in the background.
+            if (e.errorType ==
+                WebResourceErrorType.webContentProcessTerminated) {
+              _reload('web view process ended');
+            }
+          },
         ),
       );
     final platform = controller.platform;
@@ -95,6 +113,8 @@ class YouTubeWebPlayer {
       ..add(
         player.playingStream.listen((playing) {
           if (_current == null) return;
+          // Give the video a moment to start before calling it stalled.
+          if (playing) _lastProgress = DateTime.now();
           AppLog.add('youtube web: ${playing ? 'play' : 'pause'}');
           _command(playing ? 'play' : 'pause');
         }),
@@ -107,6 +127,45 @@ class YouTubeWebPlayer {
           _command('seek', player.position.inMilliseconds / 1000);
         }),
       );
+    Timer.periodic(const Duration(seconds: 2), (_) => _check());
+    // Back on screen is when a video stopped in the background shows:
+    // nudge it, and check on it sooner than usual.
+    // Kept alive by the binding it registers with.
+    AppLifecycleListener(
+      onResume: () {
+        if (_current == null || !_player.playing) return;
+        AppLog.add('youtube web: back on screen');
+        _command('play');
+        Future.delayed(
+          const Duration(seconds: 3),
+          () => _check(limit: const Duration(seconds: 3)),
+        );
+      },
+    );
+  }
+
+  /// Reloads the video if the song is playing but the video hasn't moved
+  /// for [limit].
+  void _check({Duration limit = _stallLimit}) {
+    if (_current == null || !_player.playing) return;
+    final now = DateTime.now();
+    if (now.difference(_lastProgress) < limit) return;
+    if (now.difference(_lastLoad) < limit * 2) return;
+    final tick = _lastTick;
+    _reload(
+      tick == null
+          ? 'stalled, no word from the page'
+          : 'stalled, last heard ${now.difference(tick).inSeconds}s ago, '
+                'video ${_videoPlaying ? 'playing' : 'paused'}',
+    );
+  }
+
+  /// Loads the current video again, from where it got to.
+  void _reload(String why) {
+    final track = _current;
+    if (track == null) return;
+    AppLog.add('youtube web: $why: reloading ${track.videoId}');
+    _load(track, from: _lastVideoTime);
   }
 
   void _onSongChanged() {
@@ -120,10 +179,17 @@ class YouTubeWebPlayer {
       return;
     }
     if (track.videoId == _loaded) return;
-    _loaded = track.videoId;
-    _startAt = _player.position;
-    _lastVideoTime = _startAt;
     AppLog.add('youtube web: loading ${track.videoId} (${track.name})');
+    _load(track, from: _player.position);
+  }
+
+  void _load(YouTubeTrack track, {required Duration from}) {
+    _loaded = track.videoId;
+    _startAt = from;
+    _lastVideoTime = from;
+    _lastTick = null;
+    _videoPlaying = false;
+    _lastLoad = _lastProgress = DateTime.now();
     controller.loadRequest(
       Uri.parse('https://m.youtube.com/watch?v=${track.videoId}'),
     );
@@ -159,6 +225,12 @@ class YouTubeWebPlayer {
         final time = Duration(
           milliseconds: (((data['t'] as num?) ?? 0) * 1000).round(),
         );
+        final now = DateTime.now();
+        _lastTick = now;
+        _videoPlaying = data['p'] == true;
+        if (ad || (_videoPlaying && time != _lastVideoTime)) {
+          _lastProgress = now;
+        }
         if (ad) {
           // Hold the stand-in where the song was while the ad runs.
           if ((_player.position - _lastVideoTime).abs() >
@@ -195,7 +267,12 @@ class YouTubeWebPlayer {
     Object.defineProperty(document, 'hidden', { get: () => false });
     Object.defineProperty(document, 'visibilityState', { get: () => 'visible' });
   } catch (e) {}
-  document.addEventListener('visibilitychange', e => e.stopImmediatePropagation(), true);
+  // Window first: its capturing listeners hear the event before the
+  // document's.
+  for (const name of ['visibilitychange', 'webkitvisibilitychange']) {
+    window.addEventListener(name, e => e.stopImmediatePropagation(), true);
+    document.addEventListener(name, e => e.stopImmediatePropagation(), true);
+  }
 
   let want = null;
   let seekTo = null;
