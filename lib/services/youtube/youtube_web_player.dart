@@ -53,6 +53,9 @@ class YouTubeWebPlayer {
   DateTime? _lastTick;
   bool _videoPlaying = false;
 
+  /// How far the current video has loaded ahead, for the seek bar.
+  final buffered = ValueNotifier<Duration>(Duration.zero);
+
   /// A song playing whose video hasn't moved for this long gets reloaded.
   static const _stallLimit = Duration(seconds: 8);
 
@@ -171,6 +174,7 @@ class YouTubeWebPlayer {
   void _onSongChanged() {
     final track = _current;
     if (track == null) {
+      buffered.value = Duration.zero;
       if (_loaded != null) {
         _loaded = null;
         _command('pause');
@@ -189,6 +193,7 @@ class YouTubeWebPlayer {
     _lastVideoTime = from;
     _lastTick = null;
     _videoPlaying = false;
+    buffered.value = Duration.zero;
     _lastLoad = _lastProgress = DateTime.now();
     controller.loadRequest(
       Uri.parse('https://m.youtube.com/watch?v=${track.videoId}'),
@@ -240,6 +245,9 @@ class YouTubeWebPlayer {
           return;
         }
         _lastVideoTime = time;
+        buffered.value = Duration(
+          milliseconds: (((data['b'] as num?) ?? 0) * 1000).round(),
+        );
         if ((_player.position - time).abs() >
             const Duration(milliseconds: 1500)) {
           _follow(time);
@@ -321,7 +329,12 @@ class YouTubeWebPlayer {
       v.currentTime = seekTo;
       seekTo = null;
     }
-    send({ e: 'tick', t: v.currentTime, d: v.duration || 0, p: !v.paused, ad: isAd() });
+    // The end of the loaded stretch the video is playing in.
+    let b = 0;
+    for (let i = 0; i < v.buffered.length; i++) {
+      if (v.buffered.start(i) <= v.currentTime + 1) b = Math.max(b, v.buffered.end(i));
+    }
+    send({ e: 'tick', t: v.currentTime, d: v.duration || 0, b, p: !v.paused, ad: isAd() });
   }, 500);
 })();
 ''';

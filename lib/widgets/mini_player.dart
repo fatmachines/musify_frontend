@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/playlist.dart';
 import '../services/metadata_service.dart';
 import '../services/player_service.dart';
+import '../services/youtube/youtube_web_player.dart';
 import '../theme.dart';
 import '../utils/cover_color.dart';
 import 'covers.dart';
@@ -163,29 +164,45 @@ class _Progress extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final player = PlayerService.instance.player;
-    return StreamBuilder<Duration>(
-      stream: player.positionStream,
-      builder: (context, snapshot) {
-        final total = player.duration?.inMilliseconds ?? 0;
-        final position = snapshot.data?.inMilliseconds ?? 0;
-        final fraction = total == 0 ? 0.0 : (position / total).clamp(0.0, 1.0);
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(1),
-          child: SizedBox(
-            height: 2,
-            child: Stack(
-              children: [
-                Container(color: Colors.white24),
-                FractionallySizedBox(
-                  widthFactor: fraction,
-                  child: Container(color: AppColors.text),
-                ),
-              ],
+    final service = PlayerService.instance;
+    final player = service.player;
+    return ListenableBuilder(
+      listenable: YouTubeWebPlayer.instance.buffered,
+      builder: (context, _) => StreamBuilder<Duration>(
+        stream: player.positionStream,
+        builder: (context, snapshot) {
+          final total = player.duration?.inMilliseconds ?? 0;
+          final position = snapshot.data?.inMilliseconds ?? 0;
+          final fraction = total == 0
+              ? 0.0
+              : (position / total).clamp(0.0, 1.0);
+          // How far a YouTube video has loaded.
+          final buffered = service.currentTrack is! YouTubeTrack || total == 0
+              ? 0.0
+              : (YouTubeWebPlayer.instance.buffered.value.inMilliseconds /
+                        total)
+                    .clamp(0.0, 1.0);
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(1),
+            child: SizedBox(
+              height: 2,
+              child: Stack(
+                children: [
+                  Container(color: Colors.white24),
+                  FractionallySizedBox(
+                    widthFactor: buffered,
+                    child: Container(color: Colors.white54),
+                  ),
+                  FractionallySizedBox(
+                    widthFactor: fraction,
+                    child: Container(color: AppColors.text),
+                  ),
+                ],
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }

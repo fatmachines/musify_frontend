@@ -9,6 +9,7 @@ import '../services/app_log.dart';
 import '../services/library.dart';
 import '../services/metadata_service.dart';
 import '../services/player_service.dart';
+import '../services/youtube/youtube_web_player.dart';
 import '../theme.dart';
 import '../utils/cover_color.dart';
 import '../widgets/add_to_playlist.dart';
@@ -259,55 +260,72 @@ class _SeekBarState extends State<_SeekBar> {
 
   @override
   Widget build(BuildContext context) {
-    final player = PlayerService.instance.player;
-    return StreamBuilder<Duration>(
-      stream: player.positionStream,
-      builder: (context, snapshot) {
-        final total = player.duration ?? Duration.zero;
-        final max = total.inMilliseconds.toDouble();
-        final position = (snapshot.data ?? Duration.zero).inMilliseconds
-            .toDouble()
-            .clamp(0.0, max);
-        final value = _dragging ?? position;
-        final shown = Duration(milliseconds: value.round());
-        return Column(
-          children: [
-            SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                trackHeight: 4,
-                padding: EdgeInsets.zero,
-                activeTrackColor: AppColors.text,
-                inactiveTrackColor: Colors.white24,
-                thumbColor: AppColors.text,
-                overlayColor: Colors.white24,
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-              ),
-              child: SizedBox(
-                height: 24,
-                child: Slider(
-                  value: value,
-                  max: max > 0 ? max : 1,
-                  onChanged: max > 0
-                      ? (v) => setState(() => _dragging = v)
-                      : null,
-                  onChangeEnd: (v) {
-                    player.seek(Duration(milliseconds: v.round()));
-                    setState(() => _dragging = null);
-                  },
+    final service = PlayerService.instance;
+    final player = service.player;
+    final loaded = YouTubeWebPlayer.instance.buffered;
+    // Also redrawn as the video loads while paused.
+    return ListenableBuilder(
+      listenable: loaded,
+      builder: (context, _) => StreamBuilder<Duration>(
+        stream: player.positionStream,
+        builder: (context, snapshot) {
+          final total = player.duration ?? Duration.zero;
+          final max = total.inMilliseconds.toDouble();
+          final position = (snapshot.data ?? Duration.zero).inMilliseconds
+              .toDouble()
+              .clamp(0.0, max);
+          // How far a YouTube video has loaded, like YouTube's grey bar.
+          // Songs on the device are all there, so they don't show one.
+          final buffered = service.currentTrack is YouTubeTrack
+              ? loaded.value.inMilliseconds.toDouble().clamp(0.0, max)
+              : null;
+          final value = _dragging ?? position;
+          final shown = Duration(milliseconds: value.round());
+          return Column(
+            children: [
+              SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 4,
+                  padding: EdgeInsets.zero,
+                  activeTrackColor: AppColors.text,
+                  inactiveTrackColor: Colors.white24,
+                  secondaryActiveTrackColor: Colors.white54,
+                  thumbColor: AppColors.text,
+                  overlayColor: Colors.white24,
+                  thumbShape: const RoundSliderThumbShape(
+                    enabledThumbRadius: 6,
+                  ),
+                  overlayShape: const RoundSliderOverlayShape(
+                    overlayRadius: 14,
+                  ),
+                ),
+                child: SizedBox(
+                  height: 24,
+                  child: Slider(
+                    value: value,
+                    secondaryTrackValue: buffered,
+                    max: max > 0 ? max : 1,
+                    onChanged: max > 0
+                        ? (v) => setState(() => _dragging = v)
+                        : null,
+                    onChangeEnd: (v) {
+                      player.seek(Duration(milliseconds: v.round()));
+                      setState(() => _dragging = null);
+                    },
+                  ),
                 ),
               ),
-            ),
-            Row(
-              children: [
-                Text(_format(shown), style: _timeStyle),
-                const Spacer(),
-                Text('-${_format(total - shown)}', style: _timeStyle),
-              ],
-            ),
-          ],
-        );
-      },
+              Row(
+                children: [
+                  Text(_format(shown), style: _timeStyle),
+                  const Spacer(),
+                  Text('-${_format(total - shown)}', style: _timeStyle),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
