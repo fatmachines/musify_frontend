@@ -125,8 +125,10 @@ class _LibraryTabState extends State<LibraryTab> {
         itemBuilder: (context, index) {
           final playlist = _playlists[index];
           final songs = playlist.tracks.length;
-          final location =
-              playlist.relativePath == '.' ? '' : ' • ${playlist.relativePath}';
+          // Only nested folders need their path to tell them apart.
+          final nested = playlist.relativePath != '.' &&
+              playlist.relativePath != playlist.name;
+          final location = nested ? ' • ${playlist.relativePath}' : '';
           return ListTile(
             leading: const _PlaylistArt(),
             title: Text(playlist.name,
