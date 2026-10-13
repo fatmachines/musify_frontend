@@ -38,6 +38,9 @@ dependencies:
   permission_handler: ^13.0.2
   shared_preferences: ^2.5.6
   path: ^1.9.1
+  just_audio: ^0.10.6
+  audio_session: ^0.2.4
+  audio_metadata_reader: ^1.8.0
 
 dev_dependencies:
   flutter_test:

@@ -11,6 +11,7 @@ import '../services/app_log.dart';
 import '../services/folder_access.dart';
 import '../services/library_scanner.dart';
 import '../services/library_store.dart';
+import '../widgets/covers.dart';
 
 class LibraryTab extends StatefulWidget {
   const LibraryTab({super.key});
@@ -154,7 +155,10 @@ class _LibraryTabState extends State<LibraryTab> {
               playlist.relativePath != playlist.name;
           final location = nested ? ' • ${playlist.relativePath}' : '';
           return ListTile(
-            leading: const _PlaylistArt(),
+            leading: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: PlaylistCover(playlist: playlist, size: 56),
+            ),
             title: Text(playlist.name,
                 maxLines: 1, overflow: TextOverflow.ellipsis),
             subtitle: Text(
@@ -196,24 +200,6 @@ class _EmptyState extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _PlaylistArt extends StatelessWidget {
-  const _PlaylistArt();
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      width: 56,
-      height: 56,
-      decoration: BoxDecoration(
-        color: scheme.primaryContainer,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Icon(Icons.queue_music, color: scheme.onPrimaryContainer),
     );
   }
 }

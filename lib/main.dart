@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 
+import 'services/player_service.dart';
 import 'tabs/home_tab.dart';
 import 'tabs/library_tab.dart';
 import 'tabs/search_tab.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await PlayerService.init();
   runApp(const MusifyApp());
 }
 
