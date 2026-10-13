@@ -107,15 +107,44 @@ class Downloads extends ChangeNotifier {
 
   /// Saves every YouTube song in [playlist] into a new folder named after
   /// it inside [parent], which then shows up as a folder playlist. Songs
-  /// already saved there are skipped. Returns how many were queued, and
-  /// the folder.
+  /// already saved there are skipped.
+  ///
+  /// One of the user's own playlists becomes that folder: its songs on the
+  /// device are copied in too, and once every song is there the playlist
+  /// is deleted (the folder takes its place on Home if it was pinned). If
+  /// any song fails, the playlist stays.
+  ///
+  /// Returns how many songs were queued, and the folder. [onDone] gets how
+  /// many were saved and failed, and whether the playlist became the folder.
   Future<(int, String)> downloadPlaylist(
     Playlist playlist,
     String parent, {
-    void Function(int saved, int failed)? onDone,
+    void Function(int saved, int failed, bool converted)? onDone,
   }) async {
     final folder = Directory(p.join(parent, _safe(playlist.name, 'Playlist')));
     await folder.create(recursive: true);
+    final library = Library.instance;
+    final convert =
+        playlist.isCustom &&
+        !Library.isSystem(playlist) &&
+        !Library.isRemote(playlist);
+
+    // The playlist's songs already on the device come along as copies.
+    var copyFailed = 0;
+    if (convert) {
+      for (final track in playlist.tracks) {
+        if (track is YouTubeTrack) continue;
+        final target = File(p.join(folder.path, p.basename(track.path)));
+        if (target.existsSync()) continue;
+        try {
+          await File(track.path).copy(target.path);
+        } on FileSystemException catch (e) {
+          copyFailed++;
+          AppLog.add('download: copying ${track.path} failed: ${e.message}');
+        }
+      }
+    }
+
     final songs = [
       for (final track in playlist.tracks)
         if (track is YouTubeTrack &&
@@ -125,8 +154,32 @@ class Downloads extends ChangeNotifier {
     ];
     AppLog.add(
       'download: playlist ${playlist.name}, ${songs.length} songs -> '
-      '${folder.path}',
+      '${folder.path}${convert ? ' (becomes the folder)' : ''}',
     );
+
+    Future<void> finish(int saved, int failed) async {
+      var converted = false;
+      if (convert && failed == 0 && copyFailed == 0) {
+        await library.rescan();
+        final pinned = library.isPinned(playlist);
+        final folderPlaylist = library.byId(folder.path);
+        library.deletePlaylist(playlist);
+        if (pinned && folderPlaylist != null) {
+          library.togglePin(playlist);
+          if (!library.isPinned(folderPlaylist)) {
+            library.togglePin(folderPlaylist);
+          }
+        }
+        converted = true;
+        AppLog.add('download: ${playlist.name} is now a folder');
+      }
+      onDone?.call(saved, failed + copyFailed, converted);
+    }
+
+    if (songs.isEmpty) {
+      await finish(0, 0);
+      return (0, folder.path);
+    }
     var saved = 0;
     var failed = 0;
     for (final track in songs) {
@@ -136,7 +189,7 @@ class Downloads extends ChangeNotifier {
         remember: false,
         onDone: (file, _) {
           file == null ? failed++ : saved++;
-          if (saved + failed == songs.length) onDone?.call(saved, failed);
+          if (saved + failed == songs.length) finish(saved, failed);
         },
       );
     }

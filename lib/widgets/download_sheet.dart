@@ -146,19 +146,18 @@ Future<void> downloadPlaylistWithPicker(
   final (count, folder) = await Downloads.instance.downloadPlaylist(
     playlist,
     parent,
-    onDone: (saved, failed) => showToastOn(
+    onDone: (saved, failed, converted) => showToastOn(
       overlay,
-      failed == 0
+      converted
+          ? '${playlist.name} is now a folder'
+          : failed == 0
           ? 'Saved ${playlist.name}: $saved songs'
           : 'Saved $saved songs to ${playlist.name}, $failed failed',
     ),
   );
-  showToastOn(
-    overlay,
-    count == 0
-        ? 'Everything is already in ${p.basename(folder)}'
-        : 'Downloading $count songs to ${p.basename(folder)}',
-  );
+  if (count > 0) {
+    showToastOn(overlay, 'Downloading $count songs to ${p.basename(folder)}');
+  }
 }
 
 /// Puts the download banner above [child] while songs download, pushing it
