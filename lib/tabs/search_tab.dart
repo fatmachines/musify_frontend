@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/playlist.dart';
 import '../screens/playlist_screen.dart';
 import '../services/library.dart';
+import '../services/library_search.dart';
 import '../services/metadata_service.dart';
 import '../services/player_service.dart';
 import '../theme.dart';
@@ -84,19 +85,7 @@ class _SearchTabState extends State<SearchTab> {
     _focus.unfocus();
   }
 
-  /// Plays the song within its folder, so next and previous carry on there.
-  void _play(Track track) {
-    final home = _library.all
-        .where((p) => !p.isCustom && p.tracks.any((t) => t.path == track.path))
-        .firstOrNull;
-    if (home == null) return;
-    final player = PlayerService.instance;
-    player.play(
-      home,
-      shuffle: player.shuffleOn.value,
-      startIndex: home.tracks.indexWhere((t) => t.path == track.path),
-    );
-  }
+  void _play(Track track) => PlayerService.instance.playSong(track);
 
   void _open(Playlist playlist) {
     _focus.unfocus();
@@ -234,53 +223,15 @@ class _SearchTabState extends State<SearchTab> {
 
   // Results -----------------------------------------------------------------------
 
-  List<String> get _words => _query.text
-      .toLowerCase()
-      .split(RegExp(r'\s+'))
-      .where((w) => w.isNotEmpty)
-      .toList();
-
-  List<Playlist> _matchingPlaylists(List<String> words) => [
-    for (final playlist in _library.all)
-      if (words.every(playlist.name.toLowerCase().contains)) playlist,
-  ];
-
-  /// Songs where every word appears in the title, artist, album or file
-  /// name; titles starting with the search come first.
-  List<Track> _matchingSongs(List<String> words) {
-    final phrase = words.join(' ');
-    final scored = <(int, String, Track)>[];
-    for (final track in _library.allSongs) {
-      final info = MetadataService.cachedInfo(track);
-      final title = (info?.title ?? track.title).toLowerCase();
-      final haystack = [
-        title,
-        track.title.toLowerCase(),
-        info?.artist?.toLowerCase(),
-        info?.album?.toLowerCase(),
-      ].whereType<String>().join(' ');
-      if (!words.every(haystack.contains)) continue;
-      final rank = title.startsWith(phrase)
-          ? 0
-          : title.contains(phrase)
-          ? 1
-          : 2;
-      scored.add((rank, title, track));
-    }
-    scored.sort((a, b) => a.$1 != b.$1 ? a.$1 - b.$1 : a.$2.compareTo(b.$2));
-    return [for (final s in scored) s.$3];
-  }
-
   Widget _buildResults() {
-    final words = _words;
-    if (words.isEmpty) {
+    if (LibrarySearch.words(_query.text).isEmpty) {
       return const _Hint(
         title: 'Search your music',
         message: 'Find songs by title, artist or album in all your folders.',
       );
     }
-    final playlists = _matchingPlaylists(words);
-    final songs = _matchingSongs(words);
+    final playlists = LibrarySearch.playlists(_query.text);
+    final songs = LibrarySearch.songs(_query.text);
     if (playlists.isEmpty && songs.isEmpty) {
       return _Hint(
         title: "Couldn't find \"${_query.text.trim()}\"",

@@ -7,10 +7,14 @@ import '../models/playlist.dart';
 import 'app_log.dart';
 import 'cover_files.dart';
 import 'library.dart';
+import 'library_search.dart';
 import 'metadata_service.dart';
 import 'player_service.dart';
+import 'voice_play.dart';
 
 const _playlistPrefix = 'playlist:';
+const _like = 'like';
+const _tag = 'tag';
 
 /// Connects [PlayerService] to the operating system: background playback,
 /// the lock screen, Control Center and the Android notification, headset
@@ -39,7 +43,12 @@ class MusifyAudioHandler extends BaseAudioHandler with SeekHandler {
         .map((state) => state.sequence)
         .distinct()
         .listen(_publishQueue);
-    _service.trackStream.listen(_publishTrack);
+    _service.trackStream.listen((track) {
+      _publishTrack(track);
+      _broadcastState();
+    });
+    // Like and tag buttons follow the song's state.
+    Library.instance.addListener(_broadcastState);
   }
 
   // What the system shows ------------------------------------------------------
@@ -52,6 +61,7 @@ class MusifyAudioHandler extends BaseAudioHandler with SeekHandler {
           MediaControl.skipToPrevious,
           if (playing) MediaControl.pause else MediaControl.play,
           MediaControl.skipToNext,
+          ..._songButtons(),
         ],
         systemActions: const {
           MediaAction.seek,
@@ -83,6 +93,51 @@ class MusifyAudioHandler extends BaseAudioHandler with SeekHandler {
         },
       ),
     );
+  }
+
+  /// Like and Tag for Android Auto's player (and the notification's
+  /// expanded view). Tag switches the first tag, "To replace" to start with.
+  List<MediaControl> _songButtons() {
+    final track = _service.currentTrack;
+    if (track == null) return const [];
+    final library = Library.instance;
+    final liked = library.isLiked(track);
+    final tag = library.tags.firstOrNull;
+    final tagged = tag != null && library.hasTag(track, tag);
+    return [
+      MediaControl.custom(
+        androidIcon: liked
+            ? 'drawable/ic_musify_favorite'
+            : 'drawable/ic_musify_favorite_border',
+        label: liked ? 'Remove from Liked Songs' : 'Like',
+        name: _like,
+      ),
+      if (tag != null)
+        MediaControl.custom(
+          androidIcon: tagged
+              ? 'drawable/ic_musify_tag'
+              : 'drawable/ic_musify_tag_border',
+          label: tagged ? 'Remove ${tag.name}' : 'Tag ${tag.name}',
+          name: _tag,
+        ),
+    ];
+  }
+
+  @override
+  Future<dynamic> customAction(
+    String name, [
+    Map<String, dynamic>? extras,
+  ]) async {
+    final track = _service.currentTrack;
+    if (track == null) return;
+    final library = Library.instance;
+    switch (name) {
+      case _like:
+        library.toggleLike(track);
+      case _tag:
+        final tag = library.tags.firstOrNull;
+        if (tag != null) library.toggleTag(track, tag);
+    }
   }
 
   void _publishQueue(List<IndexedAudioSource> sequence) {
@@ -168,17 +223,9 @@ class MusifyAudioHandler extends BaseAudioHandler with SeekHandler {
       final track = _service.currentTrack;
       return track == null ? const [] : [_item(track)];
     }
-    final playlists = await Library.playlists();
+    final playlists = await _browsable();
     if (parentMediaId == AudioService.browsableRootId) {
-      return [
-        for (final playlist in playlists)
-          MediaItem(
-            id: '$_playlistPrefix${playlist.id}',
-            title: playlist.name,
-            displaySubtitle: '${playlist.tracks.length} songs',
-            playable: false,
-          ),
-      ];
+      return [for (final playlist in playlists) _playlistItem(playlist)];
     }
     final playlist = _playlistById(playlists, parentMediaId);
     if (playlist == null) return const [];
@@ -197,7 +244,7 @@ class MusifyAudioHandler extends BaseAudioHandler with SeekHandler {
     String mediaId, [
     Map<String, dynamic>? extras,
   ]) async {
-    final playlists = await Library.playlists();
+    final playlists = await _browsable();
     final playlist = _playlistById(playlists, mediaId);
     if (playlist != null) {
       return _service.play(playlist, shuffle: false);
@@ -217,44 +264,54 @@ class MusifyAudioHandler extends BaseAudioHandler with SeekHandler {
     String query, [
     Map<String, dynamic>? extras,
   ]) async {
-    final q = query.trim().toLowerCase();
-    if (q.isEmpty) return const [];
-    final results = <MediaItem>[];
-    for (final playlist in await Library.playlists()) {
-      await MetadataService.loadInfo(playlist.tracks);
-      for (final track in playlist.tracks) {
-        final info = MetadataService.cachedInfo(track);
-        final haystack = [
-          track.title,
-          info?.title,
-          info?.artist,
-          info?.album,
-        ].whereType<String>().join(' ').toLowerCase();
-        if (haystack.contains(q)) results.add(_item(track, playlist: playlist));
-      }
-    }
-    return results;
+    await Library.instance.ensureLoaded();
+    await MetadataService.loadInfo(Library.instance.allSongs);
+    return [
+      for (final playlist in LibrarySearch.playlists(query))
+        _playlistItem(playlist),
+      for (final track in LibrarySearch.songs(query).take(50)) _item(track),
+    ];
   }
 
-  /// "Play [song] on Musify": plays the best match, or a playlist whose
-  /// name matches.
+  /// "Play X on Musify" from Google Assistant / Android Auto.
   @override
   Future<void> playFromSearch(
     String query, [
     Map<String, dynamic>? extras,
   ]) async {
-    final playlists = await Library.playlists();
-    final q = query.trim().toLowerCase();
-    final named = playlists.where((p) => p.name.toLowerCase().contains(q));
-    if (q.isNotEmpty && named.isNotEmpty) {
-      return _service.play(named.first, shuffle: true);
-    }
-    final results = await search(query);
-    if (results.isNotEmpty) return playFromMediaId(results.first.id);
-    if (q.isEmpty && playlists.isNotEmpty) {
-      return _service.play(playlists.first, shuffle: true);
-    }
+    // Android's media search extras say what kind of thing was named.
+    final focus = extras?['android.intent.extra.focus'] as String?;
+    final kind = switch (focus) {
+      'vnd.android.cursor.item/audio' => VoiceKind.song,
+      'vnd.android.cursor.item/playlist' => VoiceKind.playlist,
+      'vnd.android.cursor.item/artist' => VoiceKind.artist,
+      'vnd.android.cursor.item/album' => VoiceKind.album,
+      _ => VoiceKind.any,
+    };
+    await VoicePlay.play(
+      query,
+      artist: extras?['android.intent.extra.artist'] as String?,
+      kind: kind,
+    );
   }
+
+  /// Liked Songs, the user's playlists, folders, then one per tag in use.
+  static Future<List<Playlist>> _browsable() async {
+    final library = Library.instance;
+    await library.ensureLoaded();
+    return [
+      ...library.all,
+      for (final tag in library.tags)
+        if (library.tagPlaylist(tag) case final p when p.tracks.isNotEmpty) p,
+    ];
+  }
+
+  static MediaItem _playlistItem(Playlist playlist) => MediaItem(
+    id: '$_playlistPrefix${playlist.id}',
+    title: playlist.name,
+    displaySubtitle: '${playlist.tracks.length} songs',
+    playable: false,
+  );
 
   static Playlist? _playlistById(List<Playlist> playlists, String id) {
     if (!id.startsWith(_playlistPrefix)) return null;

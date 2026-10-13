@@ -1,4 +1,5 @@
 import Flutter
+import Intents
 import UIKit
 import UniformTypeIdentifiers
 
@@ -19,6 +20,139 @@ import UniformTypeIdentifiers
       FolderAccessPlugin.register(with: registrar)
     } else {
       NSLog("[Musify] no registrar for FolderAccessPlugin")
+    }
+    let siriRegistrar: FlutterPluginRegistrar? =
+      engineBridge.pluginRegistry.registrar(forPlugin: "SiriBridge")
+    if let siriRegistrar {
+      SiriBridge.shared.attach(messenger: siriRegistrar.messenger())
+    }
+  }
+
+  // Siri: "Play X on Musify" is handled inside the app (no extension).
+
+  @objc(application:handlerForIntent:)
+  func application(_ application: UIApplication, handlerFor intent: INIntent) -> Any? {
+    intent is INPlayMediaIntent ? SiriBridge.shared : nil
+  }
+
+  @objc(application:handleIntent:completionHandler:)
+  func application(
+    _ application: UIApplication,
+    handle intent: INIntent,
+    completionHandler: @escaping (INIntentResponse) -> Void
+  ) {
+    guard let intent = intent as? INPlayMediaIntent else {
+      completionHandler(INPlayMediaIntentResponse(code: .failure, userActivity: nil))
+      return
+    }
+    SiriBridge.shared.play(intent)
+    completionHandler(INPlayMediaIntentResponse(code: .success, userActivity: nil))
+  }
+}
+
+/// Siri's "Play X on Musify". Siri hands over what was said (a song,
+/// playlist, artist or album name); the Dart side (VoicePlay) searches the
+/// library and plays it, over the "musify/siri" channel.
+///
+/// Dart has to be running to play. If Musify is running, Siri's request is
+/// handled in the background; if not, Siri opens Musify and the request
+/// waits here until Dart reports it is ready.
+final class SiriBridge: NSObject, INPlayMediaIntentHandling {
+  static let shared = SiriBridge()
+
+  private var channel: FlutterMethodChannel?
+  private var dartReady = false
+  private var pending: [[String: Any]] = []
+
+  func attach(messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(name: "musify/siri", binaryMessenger: messenger)
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard let self else { return }
+      switch call.method {
+      case "ready":
+        self.dartReady = true
+        let waiting = self.pending
+        self.pending = []
+        waiting.forEach(self.send)
+        result(nil)
+      case "vocabulary":
+        // Helps Siri recognise the library's own names.
+        let args = call.arguments as? [String: Any]
+        let playlists = args?["playlists"] as? [String] ?? []
+        let artists = args?["artists"] as? [String] ?? []
+        INVocabulary.shared().setVocabularyStrings(
+          NSOrderedSet(array: playlists), of: .mediaPlaylistTitle)
+        INVocabulary.shared().setVocabularyStrings(
+          NSOrderedSet(array: artists), of: .mediaMusicArtistName)
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    // Playing media through Siri needs no permission prompt (unlike other
+    // Siri requests), only the Siri capability on the app.
+    self.channel = channel
+  }
+
+  // INPlayMediaIntentHandling ---------------------------------------------------
+
+  /// The library is searched when playing, so Siri is told the request
+  /// itself is fine.
+  func resolveMediaItems(
+    for intent: INPlayMediaIntent,
+    with completion: @escaping ([INPlayMediaMediaItemResolutionResult]) -> Void
+  ) {
+    let search = intent.mediaSearch
+    let title = search?.mediaName ?? search?.artistName ?? search?.albumName ?? "Musify"
+    let item = INMediaItem(
+      identifier: "musify-request",
+      title: title,
+      type: search?.mediaType ?? .music,
+      artwork: nil,
+      artist: search?.artistName)
+    completion(INPlayMediaMediaItemResolutionResult.successes(with: [item]))
+  }
+
+  func handle(
+    intent: INPlayMediaIntent,
+    completion: @escaping (INPlayMediaIntentResponse) -> Void
+  ) {
+    if dartReady {
+      // Played in the background by application(_:handle:completionHandler:).
+      completion(INPlayMediaIntentResponse(code: .handleInApp, userActivity: nil))
+    } else {
+      // Not running: open Musify; the request waits until Dart is ready.
+      play(intent)
+      completion(INPlayMediaIntentResponse(code: .continueInApp, userActivity: nil))
+    }
+  }
+
+  func play(_ intent: INPlayMediaIntent) {
+    let search = intent.mediaSearch
+    var request: [String: Any] = ["type": Self.kind(search?.mediaType)]
+    if let name = search?.mediaName ?? search?.albumName { request["query"] = name }
+    if let artist = search?.artistName { request["artist"] = artist }
+    if let shuffle = intent.playShuffled { request["shuffle"] = shuffle }
+    NSLog("[Musify] Siri request: %@", request.description)
+    if dartReady {
+      send(request)
+    } else {
+      pending.append(request)
+    }
+  }
+
+  private func send(_ request: [String: Any]) {
+    channel?.invokeMethod("play", arguments: request)
+  }
+
+  /// Matches VoiceKind in voice_play.dart.
+  private static func kind(_ type: INMediaItemType?) -> String {
+    switch type {
+    case .song: return "song"
+    case .playlist: return "playlist"
+    case .artist: return "artist"
+    case .album: return "album"
+    default: return "any"
     }
   }
 }

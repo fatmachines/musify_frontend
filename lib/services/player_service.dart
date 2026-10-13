@@ -8,6 +8,7 @@ import 'package:just_audio/just_audio.dart';
 import '../models/playlist.dart';
 import 'app_log.dart';
 import 'equalizer_service.dart';
+import 'library.dart';
 
 /// An active sleep timer: either a time to stop at, or the end of the
 /// current song.
@@ -172,6 +173,21 @@ class PlayerService {
     // play() completes only when playback stops, so don't wait on it.
     player.play();
   });
+
+  /// Plays [track] within its folder, so next and previous carry on there.
+  /// Returns false if it's in no folder playlist.
+  Future<bool> playSong(Track track, {bool? shuffle}) async {
+    final home = Library.instance.all
+        .where((p) => !p.isCustom && p.tracks.any((t) => t.path == track.path))
+        .firstOrNull;
+    if (home == null) return false;
+    await play(
+      home,
+      shuffle: shuffle ?? shuffleOn.value,
+      startIndex: home.tracks.indexWhere((t) => t.path == track.path),
+    );
+    return true;
+  }
 
   /// Reorders the rest of the playlist, shuffled or back in playlist order,
   /// without interrupting the current song or the queue after it.

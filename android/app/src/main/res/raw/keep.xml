@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Musify's media button icons are looked up by name at runtime
+     (audio_service), so resource shrinking can't see them being used. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_musify_*" />

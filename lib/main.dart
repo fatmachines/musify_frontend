@@ -7,6 +7,7 @@ import 'services/audio_handler.dart';
 import 'services/equalizer_service.dart';
 import 'services/playback_session.dart';
 import 'services/player_service.dart';
+import 'services/voice_play.dart';
 import 'tabs/equalizer_tab.dart';
 import 'tabs/home_tab.dart';
 import 'tabs/library_tab.dart';
@@ -34,6 +35,7 @@ Future<void> main() async {
   // Brings back what was playing last time, paused, and keeps it saved.
   PlaybackSession.start();
   EqualizerService.instance.init();
+  VoicePlay.init();
 }
 
 class MusifyApp extends StatelessWidget {
