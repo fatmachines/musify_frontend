@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'screens/now_playing.dart';
 import 'services/app_log.dart';
 import 'services/audio_handler.dart';
+import 'services/equalizer_service.dart';
 import 'services/playback_session.dart';
 import 'services/player_service.dart';
+import 'tabs/equalizer_tab.dart';
 import 'tabs/home_tab.dart';
 import 'tabs/library_tab.dart';
 import 'tabs/search_tab.dart';
@@ -31,6 +33,7 @@ Future<void> main() async {
   runApp(const MusifyApp());
   // Brings back what was playing last time, paused, and keeps it saved.
   PlaybackSession.start();
+  EqualizerService.instance.init();
 }
 
 class MusifyApp extends StatelessWidget {
@@ -68,9 +71,9 @@ class _HomeShellState extends State<HomeShell>
 
   // Each tab gets its own Navigator so pushed screens (e.g. a playlist) keep
   // the bottom bar visible and survive switching tabs.
-  final _navigatorKeys = List.generate(3, (_) => GlobalKey<NavigatorState>());
+  final _navigatorKeys = List.generate(4, (_) => GlobalKey<NavigatorState>());
 
-  static const _tabs = [HomeTab(), SearchTab(), LibraryTab()];
+  static const _tabs = [HomeTab(), SearchTab(), LibraryTab(), EqualizerTab()];
 
   void _onSelect(int index) {
     if (index == _index) {

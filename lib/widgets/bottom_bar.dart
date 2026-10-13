@@ -61,6 +61,15 @@ class BottomBar extends StatelessWidget {
                 'Your Library',
                 (c, s) => LibraryIcon(color: c, filled: s, size: 28),
               ),
+              _item(
+                3,
+                'Equalizer',
+                (c, s) => Icon(
+                  s ? Icons.equalizer_rounded : Icons.equalizer_outlined,
+                  color: c,
+                  size: 28,
+                ),
+              ),
             ],
           ),
         ],

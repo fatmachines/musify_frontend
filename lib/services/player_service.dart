@@ -7,6 +7,7 @@ import 'package:just_audio/just_audio.dart';
 
 import '../models/playlist.dart';
 import 'app_log.dart';
+import 'equalizer_service.dart';
 
 /// An active sleep timer: either a time to stop at, or the end of the
 /// current song.
@@ -68,7 +69,12 @@ class PlayerService {
   }
 
   AudioPlayer _create() {
-    final player = AudioPlayer();
+    final androidEq = EqualizerService.instance.android;
+    final player = AudioPlayer(
+      audioPipeline: androidEq == null
+          ? null
+          : AudioPipeline(androidAudioEffects: [androidEq]),
+    );
     player.currentIndexStream.listen((_) => _dropPlayedQueue());
     return player;
   }

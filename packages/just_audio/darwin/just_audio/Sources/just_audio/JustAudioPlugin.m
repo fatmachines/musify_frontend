@@ -1,5 +1,6 @@
 #import "./include/just_audio/JustAudioPlugin.h"
 #import "./include/just_audio/AudioPlayer.h"
+#import "./include/just_audio/MusifyEqualizer.h"
 #import <AVFoundation/AVFoundation.h>
 #include <TargetConditionals.h>
 
@@ -14,6 +15,8 @@
               binaryMessenger:[registrar messenger]];
     JustAudioPlugin* instance = [[JustAudioPlugin alloc] initWithRegistrar:registrar];
     [registrar addMethodCallDelegate:instance channel:channel];
+    // Musify: the equalizer's settings channel.
+    [MusifyEqualizer registerWithRegistrar:registrar];
 }
 
 - (instancetype)initWithRegistrar:(NSObject<FlutterPluginRegistrar> *)registrar {

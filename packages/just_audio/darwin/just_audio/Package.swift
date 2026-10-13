@@ -19,6 +19,11 @@ let package = Package(
             dependencies: [],
             cSettings: [
                 .headerSearchPath("include/just_audio")
+            ],
+            // Musify: MTAudioProcessingTap for the equalizer.
+            linkerSettings: [
+                .linkedFramework("AVFoundation"),
+                .linkedFramework("MediaToolbox")
             ]
         )
     ]

@@ -2,6 +2,7 @@
 #import "./include/just_audio/IndexedAudioSource.h"
 #import "./include/just_audio/IndexedPlayerItem.h"
 #import "./include/just_audio/LoadControl.h"
+#import "./include/just_audio/MusifyEqualizer.h"
 #import <AVFoundation/AVFoundation.h>
 
 @implementation UriAudioSource {
@@ -90,6 +91,8 @@
         }
     }
 
+    // Musify: route the song through the equalizer.
+    [MusifyEqualizer attachToPlayerItem:item];
     return item;
 }
 
