@@ -49,8 +49,8 @@ class _DesktopShellState extends State<DesktopShell>
   @override
   void initState() {
     super.initState();
-    _query.addListener(_onQuery);
-    _searchFocus.addListener(_onQuery);
+    _query.addListener(_onQueryChanged);
+    _searchFocus.addListener(_onFocusChanged);
     searchFocusRequests.addListener(_searchFocus.requestFocus);
   }
 
@@ -71,10 +71,18 @@ class _DesktopShellState extends State<DesktopShell>
     _navigator?.popUntil((route) => route.isFirst);
   }
 
-  /// Typing in (or clicking) the top bar's search shows the Search page.
-  void _onQuery() {
-    if (!_searchFocus.hasFocus && _query.text.isEmpty) return;
-    _showSearch();
+  /// Typing in (or clicking into) the top bar's search shows the Search
+  /// page. Leaving the field doesn't: a result may have just opened.
+  String _lastQuery = '';
+
+  void _onQueryChanged() {
+    if (_query.text == _lastQuery) return;
+    _lastQuery = _query.text;
+    if (_query.text.isNotEmpty) _showSearch();
+  }
+
+  void _onFocusChanged() {
+    if (_searchFocus.hasFocus) _showSearch();
   }
 
   void _showSearch() {

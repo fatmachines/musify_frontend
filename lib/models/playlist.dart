@@ -25,12 +25,16 @@ class YouTubeTrack extends Track {
   final String? thumbnail;
   final Duration? length;
 
+  /// From YouTube Music: the album it's on.
+  final String? album;
+
   YouTubeTrack({
     required this.videoId,
     required this.name,
     this.channel,
     this.thumbnail,
     this.length,
+    this.album,
   }) : super('youtube:$videoId');
 
   @override
@@ -45,6 +49,7 @@ class YouTubeTrack extends Track {
     if (channel != null) 'channel': channel,
     if (thumbnail != null) 'thumbnail': thumbnail,
     if (length != null) 'ms': length!.inMilliseconds,
+    if (album != null) 'album': album,
   };
 
   static YouTubeTrack fromJson(
@@ -59,8 +64,21 @@ class YouTubeTrack extends Track {
       channel: json['channel'] as String?,
       thumbnail: json['thumbnail'] as String?,
       length: length == null ? null : Duration(milliseconds: length),
+      album: json['album'] as String?,
     );
   }
+}
+
+/// An artist on YouTube Music. Their songs come as a playlist with the id
+/// `youtube:artist:<id>` (see MusifyServer.artist).
+class YouTubeArtist {
+  final String id;
+  final String name;
+  final String? thumbnail;
+
+  const YouTubeArtist({required this.id, required this.name, this.thumbnail});
+
+  String get playlistId => 'youtube:artist:$id';
 }
 
 /// A queued YouTube song: plays once, like [QueuedTrack].
@@ -71,6 +89,7 @@ class QueuedYouTubeTrack extends YouTubeTrack implements QueuedTrack {
     super.channel,
     super.thumbnail,
     super.length,
+    super.album,
   });
 }
 
@@ -82,6 +101,7 @@ Track queuedCopy(Track track) => track is YouTubeTrack
         channel: track.channel,
         thumbnail: track.thumbnail,
         length: track.length,
+        album: track.album,
       )
     : QueuedTrack(track.path);
 

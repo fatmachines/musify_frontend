@@ -160,6 +160,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   bool get _isCurrent => _player.isCurrent(_playlist);
 
+  bool get _isArtist => _playlist.id.startsWith('youtube:artist:');
+
   Future<void> _run(Future<void> Function() action) async {
     try {
       await action();
@@ -360,8 +362,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                 child: Opacity(
                   opacity: (1 - coverProgress * 1.1).clamp(0.0, 1.0),
                   child: DecoratedBox(
-                    decoration: const BoxDecoration(
-                      boxShadow: [
+                    decoration: BoxDecoration(
+                      // Round for an artist's picture.
+                      shape: _isArtist ? BoxShape.circle : BoxShape.rectangle,
+                      boxShadow: const [
                         BoxShadow(
                           color: Color(0x80000000),
                           blurRadius: 40,
@@ -494,7 +498,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   Widget _buildWideHeader(BuildContext context) {
     final current = _isCurrent;
     final name = _playlist.name;
-    final kind = Library.isRemote(_playlist)
+    final kind = _isArtist
+        ? 'Artist'
+        : Library.isRemote(_playlist)
         ? 'YouTube playlist'
         : _playlist.isCustom
         ? 'Playlist'
@@ -516,8 +522,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               DecoratedBox(
-                decoration: const BoxDecoration(
-                  boxShadow: [
+                decoration: BoxDecoration(
+                  shape: _isArtist ? BoxShape.circle : BoxShape.rectangle,
+                  boxShadow: const [
                     BoxShadow(
                       color: Color(0x80000000),
                       blurRadius: 40,

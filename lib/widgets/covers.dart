@@ -17,6 +17,12 @@ class PlaylistCover extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (playlist.id == Library.likedId) return LikedCover(size: size);
+    // An artist's picture is round, as everywhere on Spotify.
+    if (playlist.id.startsWith('youtube:artist:')) {
+      return ClipOval(
+        child: ArtworkImage(url: playlist.artworkUrl, size: size),
+      );
+    }
     return SizedBox.square(
       dimension: size,
       child: FutureBuilder<List<Uint8List>>(
@@ -49,6 +55,31 @@ class PlaylistCover extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+}
+
+/// A picture from the web (an artist's), square, with a placeholder until
+/// it's in.
+class ArtworkImage extends StatelessWidget {
+  final String? url;
+  final double size;
+
+  const ArtworkImage({super.key, required this.url, required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    final url = this.url;
+    if (url == null) return _Placeholder(icon: Icons.person, size: size);
+    return FutureBuilder<Uint8List?>(
+      future: MetadataService.image(url),
+      initialData: MetadataService.loadedImage(url),
+      builder: (context, snapshot) {
+        final bytes = snapshot.data;
+        return bytes == null
+            ? _Placeholder(icon: Icons.person, size: size)
+            : _CoverImage(bytes: bytes, size: size);
+      },
     );
   }
 }

@@ -55,6 +55,7 @@ class MetadataService {
       ? TrackInfo(
           title: track.name,
           artist: track.channel,
+          album: track.album,
           duration: track.length,
         )
       : _info[track.path];
@@ -86,6 +87,16 @@ class MetadataService {
   /// Spotify-style mosaic. Picked once per playlist per app run.
   static Future<List<Uint8List>> playlistCovers(Playlist playlist) {
     final key = _playlistKey(playlist);
+    final artwork = playlist.artworkUrl;
+    if (artwork != null) {
+      // Its own picture (a YouTube Music artist's).
+      return _playlistCovers.putIfAbsent(key, () async {
+        final bytes = await _download(artwork);
+        final covers = [?bytes];
+        _loadedPlaylistCovers[key] = covers;
+        return covers;
+      });
+    }
     return _playlistCovers.putIfAbsent(key, () async {
       final candidates = [...playlist.tracks]..shuffle(Random());
       final covers = <Uint8List>[];
@@ -102,6 +113,19 @@ class MetadataService {
       return covers;
     });
   }
+
+  static final _images = <String, Future<Uint8List?>>{};
+  static final _loadedImages = <String, Uint8List?>{};
+
+  /// A picture from the web (e.g. an artist's), fetched once per run.
+  static Future<Uint8List?> image(String url) =>
+      _images.putIfAbsent(url, () async {
+        final bytes = await _download(url);
+        _loadedImages[url] = bytes;
+        return bytes;
+      });
+
+  static Uint8List? loadedImage(String url) => _loadedImages[url];
 
   /// A YouTube thumbnail, or null if there's none or it can't be fetched.
   static Future<Uint8List?> _download(String? url) async {

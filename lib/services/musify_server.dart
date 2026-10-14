@@ -139,9 +139,19 @@ class MusifyServer extends ChangeNotifier {
 
   List<Playlist>? get cachedCharts => _charts;
 
+  (YouTubeArtist?, List<YouTubeTrack>)? _debugSearch;
+  Playlist? _debugArtist;
+
   /// Sets the charts and key without the server, for screenshots and tests.
   @visibleForTesting
-  void debugUse({required String key, required List<Playlist> charts}) {
+  void debugUse({
+    required String key,
+    required List<Playlist> charts,
+    (YouTubeArtist?, List<YouTubeTrack>)? search,
+    Playlist? artist,
+  }) {
+    _debugSearch = search;
+    _debugArtist = artist;
     _url = 'https://musify.example.com';
     _key = key;
     _loaded = true;
@@ -152,8 +162,12 @@ class MusifyServer extends ChangeNotifier {
   static Playlist _playlist(Map<String, dynamic> json) => Playlist(
     id: 'youtube:${json['id']}',
     name: json['title'] as String? ?? 'YouTube playlist',
-    tracks: [
-      for (final t in json['tracks'] as List)
+    tracks: _tracks(json['tracks']),
+  );
+
+  static List<YouTubeTrack> _tracks(Object? list) => [
+    if (list is List)
+      for (final t in list)
         if (t case {'id': final String id})
           YouTubeTrack(
             videoId: id,
@@ -165,9 +179,49 @@ class MusifyServer extends ChangeNotifier {
             length: t['duration'] is num
                 ? Duration(seconds: (t['duration'] as num).round())
                 : null,
+            album: t['album'] as String?,
           ),
-    ],
-  );
+  ];
+
+  static YouTubeArtist? _artist(Object? json) => json is Map
+      ? YouTubeArtist(
+          id: json['id'] as String,
+          name: json['name'] as String? ?? '',
+          thumbnail: json['thumbnail'] as String?,
+        )
+      : null;
+
+  Future<Map<String, dynamic>> _getJson(String path) async {
+    final response = await http
+        .get(Uri.parse('${await _base()}$path'), headers: await _headers())
+        .timeout(const Duration(seconds: 30));
+    if (response.statusCode != 200) {
+      throw ServerError(_errorOf(response, response.body));
+    }
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  /// YouTube Music's songs for [query] (no videos or mixes), and the
+  /// artist when the query is their name.
+  Future<(YouTubeArtist?, List<YouTubeTrack>)> search(String query) async {
+    if (_debugSearch case final found?) return found;
+    final data = await _getJson('/search?q=${Uri.encodeQueryComponent(query)}');
+    return (_artist(data['artist']), _tracks(data['songs']));
+  }
+
+  /// [artist]'s songs, all of them, as a playlist with their picture.
+  Future<Playlist> artist(YouTubeArtist artist) async {
+    if (_debugArtist case final found?) return found;
+    final data = await _getJson(
+      '/artist?id=${Uri.encodeQueryComponent(artist.id)}',
+    );
+    return Playlist(
+      id: artist.playlistId,
+      name: data['name'] as String? ?? artist.name,
+      tracks: _tracks(data['tracks']),
+      artworkUrl: data['thumbnail'] as String? ?? artist.thumbnail,
+    );
+  }
 
   // Songs ---------------------------------------------------------------------
 

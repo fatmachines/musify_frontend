@@ -9,6 +9,9 @@ import '../services/library_search.dart';
 import '../services/metadata_service.dart';
 import '../services/player_service.dart';
 import '../services/youtube/youtube_media.dart';
+import '../services/musify_server.dart';
+import '../services/app_log.dart';
+import '../screens/artist_page.dart';
 import '../theme.dart';
 import '../widgets/navigation.dart';
 import '../widgets/add_to_playlist.dart';
@@ -68,6 +71,9 @@ class _SearchTabState extends State<SearchTab> {
   List<YouTubeTrack>? _youtube;
   bool _youtubeFailed = false;
 
+  /// The artist the search names, from YouTube Music: shown on top.
+  YouTubeArtist? _artist;
+
   @override
   void initState() {
     super.initState();
@@ -117,12 +123,28 @@ class _SearchTabState extends State<SearchTab> {
     _youtubeQuery = query;
     _youtube = null;
     _youtubeFailed = false;
+    _artist = null;
     if (query.isEmpty) return;
     _youtubeSoon = Timer(const Duration(milliseconds: 500), () async {
       try {
-        final results = await YouTubeMedia.instance.search(query);
+        // YouTube Music through the server (songs only, and artists), else
+        // plain YouTube from the phone.
+        YouTubeArtist? artist;
+        List<YouTubeTrack>? results;
+        final server = MusifyServer.instance;
+        if (await server.isSetUp()) {
+          try {
+            (artist, results) = await server.search(query);
+          } catch (e) {
+            AppLog.add('search: server failed, using YouTube: $e');
+          }
+        }
+        results ??= await YouTubeMedia.instance.search(query);
         if (!mounted || query != _youtubeQuery) return;
-        setState(() => _youtube = results);
+        setState(() {
+          _youtube = results;
+          _artist = artist;
+        });
       } catch (e) {
         if (!mounted || query != _youtubeQuery) return;
         setState(() => _youtubeFailed = true);
@@ -296,6 +318,9 @@ class _SearchTabState extends State<SearchTab> {
       );
     }
     final local = playlists.length + songs.length;
+    final artist = _artist;
+    // The artist first, big; then your music, then YouTube's songs.
+    final top = artist == null ? 0 : 1;
     final player = PlayerService.instance;
     return StreamBuilder(
       // Rebuilds rows when the playing song changes.
@@ -306,8 +331,18 @@ class _SearchTabState extends State<SearchTab> {
           bottom: MediaQuery.paddingOf(context).bottom + 16,
         ),
         // Your music, then a "YouTube" heading and what YouTube found.
-        itemCount: local + 1 + (youtube?.length ?? 0),
-        itemBuilder: (context, i) {
+        itemCount: top + local + 1 + (youtube?.length ?? 0),
+        itemBuilder: (context, row) {
+          if (artist != null && row == 0) {
+            return _ArtistCard(
+              artist: artist,
+              onTap: () {
+                _focus.unfocus();
+                openPage(context, ArtistPage(artist: artist));
+              },
+            );
+          }
+          final i = row - top;
           if (i == local) {
             return _YouTubeHeading(
               searching: searching,
@@ -571,6 +606,75 @@ class _LikeToggle extends StatelessWidget {
       icon: Icon(
         liked ? Icons.check_circle : Icons.add_circle_outline,
         color: liked ? AppColors.green : AppColors.subtle,
+      ),
+    );
+  }
+}
+
+/// Spotify's top result for an artist: their picture in a big circle, the
+/// name in large type and "Artist".
+class _ArtistCard extends StatelessWidget {
+  final YouTubeArtist artist;
+  final VoidCallback onTap;
+
+  const _ArtistCard({required this.artist, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(8),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              children: [
+                ClipOval(child: ArtworkImage(url: artist.thumbnail, size: 104)),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        artist.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          height: 1.1,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black26,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Text(
+                          'Artist',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: AppColors.subtle),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
