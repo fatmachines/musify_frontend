@@ -70,6 +70,7 @@ dev_dependencies:
   just_audio_platform_interface: ^4.6.0
   plugin_platform_interface: ^2.1.8
   flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.8
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -150,3 +151,15 @@ flutter_launcher_icons:
   macos:
     generate: true
     image_path: assets/icon/icon_macos.png
+
+# Native splash (before Flutter starts): our icon on Spotify's dark
+# background. Run `dart run flutter_native_splash:create` after changing it.
+flutter_native_splash:
+  color: "#121212"
+  image: assets/icon/splash.png
+  android_12:
+    # Android 12+ draws its own: the bars on the icon's green, in a circle.
+    image: assets/icon/foreground.png
+    icon_background_color: "#1AB75B"
+    color: "#121212"
+  web: false

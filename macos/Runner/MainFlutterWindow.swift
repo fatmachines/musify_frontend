@@ -10,6 +10,10 @@ class MainFlutterWindow: NSWindow {
     // Room for the library sidebar, the page and the player bar.
     self.minSize = NSSize(width: 800, height: 600)
     self.title = "Musify"
+    // The app's dark background until Flutter's first frame (no flash of
+    // white), as the phones' splash screens.
+    self.backgroundColor = NSColor(red: 0x12 / 255, green: 0x12 / 255, blue: 0x12 / 255, alpha: 1)
+    flutterViewController.backgroundColor = self.backgroundColor
 
     RegisterGeneratedPlugins(registry: flutterViewController)
     FolderAccessPlugin.register(
