@@ -54,6 +54,19 @@ class Downloads extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The last folder downloaded into follows it being renamed.
+  static Future<void> followRename(String from, String to) async {
+    final prefs = await SharedPreferences.getInstance();
+    final last = prefs.getString(_lastFolderKey);
+    if (last == null) return;
+    if (last == from || p.isWithin(from, last)) {
+      await prefs.setString(
+        _lastFolderKey,
+        p.normalize(p.join(to, p.relative(last, from: from))),
+      );
+    }
+  }
+
   static Future<String?> lastFolder() async =>
       (await SharedPreferences.getInstance()).getString(_lastFolderKey);
 

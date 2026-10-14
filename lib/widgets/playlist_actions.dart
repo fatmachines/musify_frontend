@@ -100,6 +100,30 @@ Future<void> showPlaylistActions(BuildContext context, Playlist playlist) {
                   }
                 },
               ),
+            // A folder the user added says to rename it in Files.
+            if (!playlist.isCustom)
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: const Text('Rename folder'),
+                subtitle: const Text('Renames it on this device too'),
+                onTap: () async {
+                  Navigator.of(sheet).pop();
+                  final name = await askPlaylistName(
+                    context,
+                    title: 'Rename folder',
+                    initial: playlist.name,
+                    action: 'Save',
+                  );
+                  if (name == null || name.trim() == playlist.name) return;
+                  final error = await Library.instance.renameFolder(
+                    playlist,
+                    name,
+                  );
+                  if (context.mounted) {
+                    showToast(context, error ?? 'Renamed to ${name.trim()}');
+                  }
+                },
+              ),
             if (!system && !remote)
               ListTile(
                 leading: const Icon(Icons.delete_outline),

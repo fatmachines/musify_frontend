@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import '../models/playlist.dart';
 import '../models/song_tag.dart';
 import 'app_log.dart';
+import 'downloads.dart';
 import 'folder_access.dart';
 import 'library_scanner.dart';
 import 'library_store.dart';
@@ -369,6 +370,142 @@ class Library extends ChangeNotifier {
     // The other devices move theirs too.
     SyncService.instance.filesChanged();
     return target;
+  }
+
+  /// Folder playlists renamed this run: old id to new, so a page showing
+  /// one stays on it.
+  final _renamed = <String, String>{};
+
+  /// Where the folder playlist [id] went if it was renamed, else [id].
+  String currentId(String id) {
+    var at = id;
+    for (var i = 0; i < 20 && _renamed.containsKey(at); i++) {
+      at = _renamed[at]!;
+    }
+    return at;
+  }
+
+  /// Renames a folder playlist's folder on the device; its subfolders go
+  /// along. Its songs stay in playlists, Liked Songs and tags, it keeps its
+  /// pin (or stays hidden), what's playing carries on, and the other
+  /// devices rename theirs. Returns null once done, else why it couldn't.
+  Future<String?> renameFolder(Playlist playlist, String name) async {
+    final location = playlist.location;
+    final key = _hideKeys[playlist.id];
+    if (location == null || key == null) return "It isn't a folder";
+    if (location == '.') {
+      return 'This is a folder you added to Musify: rename it in Files '
+          '(Finder on a Mac), then add it again';
+    }
+    name = name.trim();
+    if (name.isEmpty || name.startsWith('.')) return 'Type a name';
+    if (name.contains(RegExp(r'[/\\:]'))) {
+      return r"Folder names can't have / \ or : in them";
+    }
+    final from = playlist.id;
+    final to = p.join(p.dirname(from), name);
+    if (from == to) return null;
+    // Only the case changing is the same folder on a Mac or iPhone.
+    if (from.toLowerCase() != to.toLowerCase() &&
+        FileSystemEntity.typeSync(to) != FileSystemEntityType.notFound) {
+      return 'There already is a "$name" there';
+    }
+    String follow(String path) => p.isWithin(from, path)
+        ? p.join(to, p.relative(path, from: from))
+        : path;
+
+    // What names songs in it, found while they're still where they say.
+    final moved = <SavedTrack, SavedTrack>{};
+    for (final saved in [
+      for (final s in _saved) ...s.tracks,
+      ..._likedSaved,
+      for (final t in _tagsSaved) ...t.tracks,
+    ]) {
+      final path = saved.youtube == null ? _resolve(saved) : null;
+      if (path != null && p.isWithin(from, path)) {
+        moved[saved] = _save(Track(follow(path)));
+      }
+    }
+
+    // What's playing from it picks up where it was, from the new place.
+    final player = PlayerService.instance;
+    final sequence = [
+      for (final source in player.player.sequence) source.tag as Track,
+    ];
+    final affected = sequence.any(
+      (t) => t is! YouTubeTrack && p.isWithin(from, t.path),
+    );
+    final index = player.player.currentIndex;
+    final position = player.player.position;
+    final wasPlaying = player.player.playing;
+    final loop = player.player.loopMode;
+    final current = player.current;
+    if (affected) await player.player.pause();
+
+    try {
+      await Directory(from).rename(to);
+    } on FileSystemException catch (e) {
+      AppLog.add('rename: $from failed: ${e.message}');
+      if (affected && wasPlaying) player.player.play();
+      return "Couldn't rename it: ${e.message}";
+    }
+    AppLog.add('rename: $from -> $to');
+    _renamed[from] = to;
+    for (final old in _folderPlaylists) {
+      if (p.isWithin(from, old.id)) _renamed[old.id] = follow(old.id);
+    }
+
+    SavedTrack again(SavedTrack saved) => moved[saved] ?? saved;
+    _saved = [
+      for (final s in _saved)
+        SavedPlaylist(s.id, s.name, [for (final t in s.tracks) again(t)]),
+    ];
+    _likedSaved = [for (final t in _likedSaved) again(t)];
+    _tagsSaved = [
+      for (final t in _tagsSaved)
+        SavedTag(t.id, t.name, t.color, [for (final s in t.tracks) again(s)]),
+    ];
+    // Pins and hiding go by place in the folder: this one's and those of
+    // the folders inside it.
+    final bar = key.indexOf('|');
+    final oldKey = key;
+    final newKey =
+        '${key.substring(0, bar)}|'
+        '${p.normalize(p.join(p.dirname(location), name))}';
+    String rekey(String k) => k == oldKey
+        ? newKey
+        : k.startsWith('$oldKey/')
+        ? '$newKey${k.substring(oldKey.length)}'
+        : k;
+    _pins = [for (final k in _pins) rekey(k)];
+    _hidden = {for (final k in _hidden) rekey(k)};
+    LibraryStore.savePlaylists(_saved);
+    LibraryStore.saveLiked(_likedSaved);
+    LibraryStore.saveTags(_tagsSaved);
+    LibraryStore.savePinned(_pins);
+    LibraryStore.saveHidden(_hidden);
+    await Downloads.followRename(from, to);
+    await rescan();
+
+    if (affected && index != null) {
+      Track there(Track t) => t is YouTubeTrack || !p.isWithin(from, t.path)
+          ? t
+          : t is QueuedTrack
+          ? QueuedTrack(follow(t.path))
+          : Track(follow(t.path));
+      await player.restore(
+        playlist: current == null ? null : byId(currentId(current.id)),
+        sequence: sequence.map(there).toList(),
+        index: index,
+        position: position,
+        shuffle: player.shuffleOn.value,
+        loop: loop,
+      );
+      if (wasPlaying) player.player.play();
+    }
+    // The other devices rename theirs too.
+    SyncService.instance.filesChanged();
+    return null;
   }
 
   /// Deletes a song's file from the device, then rescans; it leaves every

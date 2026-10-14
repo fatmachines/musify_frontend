@@ -65,8 +65,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   /// The latest version from the library: the user's playlists change as
   /// songs are added, removed or the playlist is renamed.
+  // A renamed folder is followed to its new name.
   Playlist get _playlist =>
-      Library.instance.byId(widget.playlist.id) ?? widget.playlist;
+      Library.instance.byId(Library.instance.currentId(widget.playlist.id)) ??
+      widget.playlist;
 
   @override
   void initState() {
@@ -113,7 +115,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     if (!mounted) return;
     if (!Library.isRemote(widget.playlist) &&
         !Library.instance.scanning &&
-        Library.instance.byId(widget.playlist.id) == null) {
+        Library.instance.byId(Library.instance.currentId(widget.playlist.id)) ==
+            null) {
       // Deleted or hidden.
       Navigator.of(context).maybePop();
       return;

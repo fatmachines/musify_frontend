@@ -166,6 +166,48 @@ void main() {
     expect(reloaded.pinned, hasLength(1));
   });
 
+  test('renaming a folder keeps its songs, pin and playlists', () async {
+    SharedPreferences.setMockInitialValues({
+      'library_folders': [first.path],
+    });
+    await touch(first, 'Rock/Live/l.mp3');
+    final library = Library.fresh();
+    await library.ensureLoaded();
+    final rock = library.all.firstWhere((pl) => pl.name == 'Rock');
+    final song = rock.tracks.single;
+    library.togglePin(rock);
+    library.toggleLike(song);
+    final mix = library.createPlaylist('Mix');
+    library.addTrack(mix, song);
+    final live = library.all.firstWhere((pl) => pl.name == 'Live');
+    library.hidePlaylist(live);
+
+    expect(await library.renameFolder(rock, 'Pop'), contains('already'));
+    expect(await library.renameFolder(rock, 'a/b'), isNotNull);
+    expect(await library.renameFolder(rock, 'Classic Rock'), isNull);
+
+    final renamed = p.join(first.path, 'Classic Rock');
+    expect(Directory(p.join(first.path, 'Rock')).existsSync(), isFalse);
+    expect(File(p.join(renamed, 'a.mp3')).existsSync(), isTrue);
+    expect(names(library), ['Mix', 'Classic Rock', 'Pop']);
+    expect(library.currentId(rock.id), renamed);
+    expect(library.pinned.single.name, 'Classic Rock');
+    final moved = p.join(renamed, 'a.mp3');
+    expect(library.liked.tracks.single.path, moved);
+    expect(library.byId(mix.id)!.tracks.single.path, moved);
+    // The folder inside went along, still hidden.
+    expect(library.hidden.single.id, p.join(renamed, 'Live'));
+
+    // A folder the user added is renamed in Files instead.
+    final top = Library.fresh();
+    SharedPreferences.setMockInitialValues({
+      'library_folders': [second.path],
+    });
+    await top.ensureLoaded();
+    final root = top.all.firstWhere((pl) => pl.location == '.');
+    expect(await top.renameFolder(root, 'New'), contains('Files'));
+  });
+
   test('artists and albums pin to Home and stay pinned', () async {
     SharedPreferences.setMockInitialValues({
       'library_folders': [first.path],
