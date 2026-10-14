@@ -55,8 +55,9 @@ class MusifyApp extends StatefulWidget {
   State<MusifyApp> createState() => _MusifyAppState();
 }
 
-/// Rebuilds everything when the appearance changes (Settings, or the
-/// device's own setting on "System"): the palette is read directly.
+/// Redraws everything when the appearance changes (Settings, or the
+/// device's own setting on "Same as this device"): the palette is read
+/// directly, so every widget is rebuilt, in place (pages stay open).
 class _MusifyAppState extends State<MusifyApp> with WidgetsBindingObserver {
   @override
   void initState() {
@@ -72,7 +73,16 @@ class _MusifyAppState extends State<MusifyApp> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  void _rebuild() => setState(() {});
+  void _rebuild() {
+    setState(() {});
+    // Widgets that didn't change still read the old colours: rebuild all.
+    void mark(Element element) {
+      element.markNeedsBuild();
+      element.visitChildren(mark);
+    }
+
+    (context as Element).visitChildren(mark);
+  }
 
   @override
   void didChangePlatformBrightness() {
@@ -90,9 +100,9 @@ class _MusifyAppState extends State<MusifyApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final brightness = _brightness;
     return MaterialApp(
-      // A new tree for the new colours (pages read them directly).
-      key: ValueKey(brightness),
       title: 'Musify',
+      // Straight to the new colours: every widget is rebuilt anyway.
+      themeAnimationDuration: Duration.zero,
       debugShowCheckedModeBanner: false,
       theme: buildTheme(brightness),
       // Spotify's desktop layout on wide windows (the Mac, iPad landscape),

@@ -1,19 +1,12 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import '../models/playlist.dart';
 import '../screens/name_playlist_screen.dart';
-import '../services/app_log.dart';
-import '../services/folder_access.dart';
 import '../services/library.dart';
 import '../services/player_service.dart';
-import '../services/voice_play.dart';
 import '../theme.dart';
+import '../widgets/folders_sheet.dart';
 import '../widgets/navigation.dart';
-import '../widgets/server_key_dialog.dart';
 import '../widgets/covers.dart';
 import '../widgets/offline_badge.dart';
 import '../widgets/playlist_actions.dart';
@@ -32,32 +25,6 @@ class _LibraryTabState extends State<LibraryTab> {
   void initState() {
     super.initState();
     _library.ensureLoaded();
-  }
-
-  /// Android 13+ grants audio files through READ_MEDIA_AUDIO; older versions
-  /// use READ_EXTERNAL_STORAGE. Whichever applies to the device is the one
-  /// that can come back granted.
-  Future<bool> _ensurePermission() async {
-    if (!Platform.isAndroid) return true;
-    final statuses = await [Permission.audio, Permission.storage].request();
-    if (statuses.values.any((s) => s.isGranted || s.isLimited)) return true;
-
-    if (!mounted) return false;
-    final permanentlyDenied = statuses.values.any((s) => s.isPermanentlyDenied);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Musify needs access to your music files.'),
-        action: permanentlyDenied
-            ? SnackBarAction(label: 'Settings', onPressed: openAppSettings)
-            : null,
-      ),
-    );
-    return false;
-  }
-
-  Future<void> _addFolder() async {
-    if (!await _ensurePermission()) return;
-    await _library.addFolder();
   }
 
   Future<void> _createPlaylist() async {
@@ -88,7 +55,7 @@ class _LibraryTabState extends State<LibraryTab> {
                 subtitle: 'Every folder in it with music becomes a playlist',
                 onTap: () {
                   Navigator.of(sheet).pop();
-                  _addFolder();
+                  addMusicFolder(context);
                 },
               ),
               _MenuTile(
@@ -106,139 +73,6 @@ class _LibraryTabState extends State<LibraryTab> {
         ),
       ),
     );
-  }
-
-  void _showFolders() {
-    showModalBottomSheet<void>(
-      context: context,
-      useRootNavigator: true,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (sheet) => SafeArea(
-        // Sized to its content, scrolling on screens too short for it.
-        child: SingleChildScrollView(
-          child: ListenableBuilder(
-            listenable: _library,
-            builder: (_, _) => Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    'Music folders',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                  ),
-                ),
-                if (_library.folders.isEmpty)
-                  Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Text(
-                      'No folders added yet.',
-                      style: TextStyle(color: AppColors.subtle),
-                    ),
-                  ),
-                for (final folder in _library.folders)
-                  ListTile(
-                    leading: Icon(
-                      _library.folderErrors.containsKey(folder.id)
-                          ? Icons.error_outline
-                          : Icons.folder_outlined,
-                    ),
-                    title: Text(folder.name),
-                    subtitle: Text(
-                      _library.folderErrors.containsKey(folder.id)
-                          ? "Can't be opened. Remove it and add it again."
-                          : folder.path,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: IconButton(
-                      tooltip: 'Remove',
-                      icon: const Icon(Icons.remove_circle_outline),
-                      onPressed: () => _confirmRemove(folder),
-                    ),
-                  ),
-                ListTile(
-                  leading: const Icon(Icons.add),
-                  title: const Text('Add folder'),
-                  onTap: () {
-                    Navigator.of(sheet).pop();
-                    _addFolder();
-                  },
-                ),
-                if (_library.hidden.isNotEmpty) ...[
-                  Divider(color: AppColors.faint, height: 24),
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 4),
-                    child: Text(
-                      'Hidden playlists',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  for (final playlist in _library.hidden)
-                    ListTile(
-                      leading: const Icon(Icons.visibility_off_outlined),
-                      title: Text(playlist.name),
-                      // Only nested folders need their path.
-                      subtitle: playlist.location == playlist.name
-                          ? null
-                          : Text(
-                              playlist.location ?? '',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                      trailing: TextButton(
-                        onPressed: () => _library.unhidePlaylist(playlist),
-                        style: TextButton.styleFrom(
-                          foregroundColor: AppColors.text,
-                        ),
-                        child: const Text('Show'),
-                      ),
-                    ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _confirmRemove(LibraryFolder folder) async {
-    final remove = await showDialog<bool>(
-      context: context,
-      useRootNavigator: true,
-      builder: (dialog) => AlertDialog(
-        backgroundColor: AppColors.elevated,
-        title: Text('Remove "${folder.name}"?'),
-        content: const Text(
-          'Its playlists leave your library. The music files stay on your '
-          'device.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialog).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialog).pop(true),
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
-    );
-    if (remove == true) await _library.removeFolder(folder);
-  }
-
-  Future<void> _copyLog() async {
-    await VoicePlay.collectSiriLog();
-    await Clipboard.setData(ClipboardData(text: AppLog.dump()));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Debug log copied')));
   }
 
   @override
@@ -266,27 +100,6 @@ class _LibraryTabState extends State<LibraryTab> {
             icon: const Icon(Icons.add, size: 30),
             onPressed: _showAddMenu,
           ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert),
-            onSelected: (value) {
-              switch (value) {
-                case 'rescan':
-                  _library.rescan();
-                case 'folders':
-                  _showFolders();
-                case 'log':
-                  _copyLog();
-                case 'server':
-                  showServerKeyDialog(context);
-              }
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'rescan', child: Text('Rescan')),
-              PopupMenuItem(value: 'folders', child: Text('Manage folders')),
-              PopupMenuItem(value: 'server', child: Text('Musify server')),
-              PopupMenuItem(value: 'log', child: Text('Copy debug log')),
-            ],
-          ),
         ],
       ),
       body: ListenableBuilder(
@@ -308,7 +121,7 @@ class _LibraryTabState extends State<LibraryTab> {
             ? 'Add a folder from your device. Every folder in it with music '
                   'becomes a playlist.'
             : 'Nothing playable in your folders.',
-        onAddFolder: _addFolder,
+        onAddFolder: () => addMusicFolder(context),
         onCreatePlaylist: _createPlaylist,
       );
     }
@@ -334,7 +147,7 @@ class _LibraryTabState extends State<LibraryTab> {
                       : "$broken folders can't be opened",
                 ),
                 subtitle: const Text('Tap to manage folders'),
-                onTap: _showFolders,
+                onTap: () => showManageFolders(context),
               ),
             for (final playlist in playlists)
               _PlaylistTile(

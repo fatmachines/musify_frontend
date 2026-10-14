@@ -96,7 +96,29 @@ final class SiriBridge: NSObject, INPlayMediaIntentHandling {
   /// names are only handed over once one has arrived (remembered across
   /// launches).
   private static let siriSeenKey = "musify_siri_request_seen"
-  private var siriEnabled = UserDefaults.standard.bool(forKey: siriSeenKey)
+  private var siriEnabled =
+    UserDefaults.standard.bool(forKey: siriSeenKey) && SiriBridge.siriAllowed
+
+  /// Whether this build may use Siri at all: its provisioning profile lists
+  /// the Siri entitlement. A request seen by an earlier build that had it
+  /// doesn't count once the capability is gone (that crashed on launch).
+  /// App Store builds carry no profile: then only a request decides.
+  static let siriAllowed: Bool = {
+    guard
+      let path = Bundle.main.path(forResource: "embedded", ofType: "mobileprovision"),
+      let data = FileManager.default.contents(atPath: path),
+      let text = String(data: data, encoding: .isoLatin1),
+      let start = text.range(of: "<?xml"),
+      let end = text.range(of: "</plist>"),
+      let plist = try? PropertyListSerialization.propertyList(
+        from: Data(text[start.lowerBound..<end.upperBound].utf8), format: nil)
+        as? [String: Any],
+      let entitlements = plist["Entitlements"] as? [String: Any]
+    else { return true }
+    let allowed = entitlements["com.apple.developer.siri"] != nil
+    if !allowed { NSLog("[Musify] siri: not in this build's capabilities") }
+    return allowed
+  }()
   private var vocabulary: (playlists: [String], artists: [String])?
 
   func attach(messenger: FlutterBinaryMessenger) {
@@ -147,7 +169,7 @@ final class SiriBridge: NSObject, INPlayMediaIntentHandling {
   /// capability enabled.
   private func siriIsEnabled() {
     DispatchQueue.main.async {
-      guard !self.siriEnabled else { return }
+      guard !self.siriEnabled, SiriBridge.siriAllowed else { return }
       self.siriEnabled = true
       UserDefaults.standard.set(true, forKey: Self.siriSeenKey)
       self.applyVocabulary()

@@ -5,16 +5,18 @@ import '../screens/sync_screen.dart';
 import '../services/app_log.dart';
 import '../services/appearance.dart';
 import '../services/equalizer_service.dart';
+import '../services/library.dart';
 import '../services/musify_server.dart';
 import '../services/sync_service.dart';
 import '../services/voice_play.dart';
 import '../theme.dart';
+import '../widgets/folders_sheet.dart';
 import '../widgets/navigation.dart';
 import '../widgets/server_key_dialog.dart';
 import 'equalizer_tab.dart';
 
-/// The equalizer, light or dark, the Musify server, and sync between
-/// devices.
+/// The equalizer, music folders, light or dark, the Musify server, and
+/// sync between devices.
 class SettingsTab extends StatelessWidget {
   const SettingsTab({super.key});
 
@@ -61,6 +63,36 @@ class SettingsTab extends StatelessWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => openPage(context, const EqualizerTab()),
             ),
+          ),
+          const _Heading('Library'),
+          ListTile(
+            leading: const Icon(Icons.folder_outlined),
+            title: const Text('Manage folders'),
+            subtitle: const Text(
+              'Add or remove music folders, hidden playlists',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => showManageFolders(context),
+          ),
+          ListenableBuilder(
+            listenable: Library.instance,
+            builder: (context, _) {
+              final scanning = Library.instance.scanning;
+              return ListTile(
+                leading: scanning
+                    ? SizedBox.square(
+                        dimension: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.green,
+                        ),
+                      )
+                    : const Icon(Icons.refresh),
+                title: Text(scanning ? 'Rescanning…' : 'Rescan'),
+                subtitle: const Text('Look for new and removed songs'),
+                onTap: scanning ? null : Library.instance.rescan,
+              );
+            },
           ),
           const _Heading('Appearance'),
           ValueListenableBuilder<ThemeMode>(
