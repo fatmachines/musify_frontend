@@ -63,16 +63,22 @@ class BottomBar extends StatelessWidget {
               _item(
                 2,
                 'Your Library',
-                (c, s) => LibraryIcon(color: c, filled: s, size: 28),
+                (c, s) => _SvgIcon(
+                  s
+                      ? 'assets/icons/library_filled.svg'
+                      : 'assets/icons/library.svg',
+                  color: c,
+                ),
               ),
               _item(
                 3,
                 'Settings',
                 (c, s) => SyncBadge(
-                  child: Icon(
-                    s ? Icons.settings : Icons.settings_outlined,
+                  child: _SvgIcon(
+                    s
+                        ? 'assets/icons/settings_filled.svg'
+                        : 'assets/icons/settings.svg',
                     color: c,
-                    size: 28,
                   ),
                 ),
               ),
@@ -140,65 +146,6 @@ class _SvgIcon extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Spotify's library mark: two upright bars and a leaning book.
-class LibraryIcon extends StatelessWidget {
-  final Color color;
-  final bool filled;
-  final double size;
-
-  const LibraryIcon({
-    super.key,
-    required this.color,
-    this.filled = false,
-    this.size = 24,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      size: Size.square(size),
-      painter: _LibraryPainter(color, filled),
-    );
-  }
-}
-
-class _LibraryPainter extends CustomPainter {
-  final Color color;
-  final bool filled;
-
-  _LibraryPainter(this.color, this.filled);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final s = size.width;
-    final stroke = Paint()
-      ..color = color
-      ..strokeWidth = s * 0.09
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-    final top = s * 0.14, bottom = s * 0.86;
-
-    canvas.drawLine(Offset(s * 0.18, top), Offset(s * 0.18, bottom), stroke);
-    canvas.drawLine(Offset(s * 0.38, top), Offset(s * 0.38, bottom), stroke);
-
-    final book = Path()
-      ..moveTo(s * 0.54, s * 0.22)
-      ..lineTo(s * 0.70, s * 0.16)
-      ..lineTo(s * 0.88, bottom)
-      ..lineTo(s * 0.70, bottom)
-      ..close();
-    if (filled) {
-      canvas.drawPath(book, Paint()..color = color);
-    } else {
-      canvas.drawPath(book, stroke..strokeJoin = StrokeJoin.round);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_LibraryPainter old) =>
-      old.color != color || old.filled != filled;
 }
 
 /// A green dot on [child] while a device waits for approval to sync.

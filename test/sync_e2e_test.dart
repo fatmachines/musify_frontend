@@ -353,7 +353,45 @@ void main() {
         PlayerService.instance.player.position.inSeconds,
         inInclusiveRange(30, 33),
       );
+
+      // The Mac adds a song: this device notices on its own (no Sync now)
+      // and downloads it.
+      final dSong = utf8.encode('dddd' * 1000);
+      final dSha = sha1.convert(dSong).toString();
+      await mac('PUT', '/sync/blobs/$dSha', token: token, raw: dSong);
+      await mac(
+        'POST',
+        '/sync/files',
+        token: token,
+        body: {
+          'add': [
+            {'path': 'Rock/d.mp3', 'sha1': dSha, 'size': dSong.length},
+          ],
+        },
+      );
+      sync.watch();
+      final dFile = File(p.join(music.path, 'Rock', 'd.mp3'));
+      for (var i = 0; i < 60 && !dFile.existsSync(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+      sync.unwatch();
+      expect(dFile.existsSync(), isTrue, reason: 'downloaded by itself');
+
+      // A song dropped into the folder (as in Finder) is noticed, and as
+      // the Mac lacks it, uploaded.
+      await Future<void>.delayed(const Duration(seconds: 6));
+      final eSong = utf8.encode('eeee' * 1000);
+      final eSha = sha1.convert(eSong).toString();
+      await File(p.join(music.path, 'Jazz', 'e.mp3')).writeAsBytes(eSong);
+      var uploaded = false;
+      for (var i = 0; i < 100 && !uploaded; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        uploaded =
+            (await mac('GET', '/sync/blobs/$eSha', token: token)).$1 == 200;
+      }
+      expect(uploaded, isTrue, reason: 'noticed and uploaded by itself');
     },
     skip: runnable ? false : 'no backend here',
+    timeout: const Timeout(Duration(minutes: 2)),
   );
 }

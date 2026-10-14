@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../models/playlist.dart';
@@ -320,6 +321,7 @@ class _TopBar extends StatelessWidget {
             SyncBadge(
               child: _RoundButton(
                 icon: Icons.settings_outlined,
+                svg: 'assets/icons/settings.svg',
                 tooltip: 'Settings',
                 size: 40,
                 onTap: onSettings,
@@ -339,8 +341,12 @@ class _RoundButton extends StatelessWidget {
   final double size;
   final double iconSize;
 
+  /// Drawn from this SVG instead of [icon].
+  final String? svg;
+
   const _RoundButton({
     required this.icon,
+    this.svg,
     required this.tooltip,
     required this.onTap,
     this.size = 48,
@@ -359,7 +365,19 @@ class _RoundButton extends StatelessWidget {
           onTap: onTap,
           child: SizedBox.square(
             dimension: size,
-            child: Icon(icon, size: iconSize, color: AppColors.text),
+            child: Center(
+              child: svg == null
+                  ? Icon(icon, size: iconSize, color: AppColors.text)
+                  : SvgPicture.asset(
+                      svg!,
+                      width: iconSize - 2,
+                      height: iconSize - 2,
+                      colorFilter: ColorFilter.mode(
+                        AppColors.text,
+                        BlendMode.srcIn,
+                      ),
+                    ),
+            ),
           ),
         ),
       ),

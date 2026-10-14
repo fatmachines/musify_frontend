@@ -90,7 +90,13 @@ class SettingsTab extends StatelessWidget {
                     : const Icon(Icons.refresh),
                 title: Text(scanning ? 'Rescanning…' : 'Rescan'),
                 subtitle: const Text('Look for new and removed songs'),
-                onTap: scanning ? null : Library.instance.rescan,
+                onTap: scanning
+                    ? null
+                    : () async {
+                        await Library.instance.rescan();
+                        // New or removed songs reach the other devices.
+                        SyncService.instance.filesChanged();
+                      },
               );
             },
           ),

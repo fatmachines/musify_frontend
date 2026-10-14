@@ -162,8 +162,10 @@ class SyncService extends ChangeNotifier {
     Timer.periodic(const Duration(seconds: 20), (_) => _tick());
     // A device waiting to be let in (and the Sync screen) look every 3 s.
     Timer.periodic(const Duration(seconds: 3), (_) => _quick());
+    _watchFolder();
     AppLifecycleListener(
-      onResume: () => _tick(pullPlayback: true),
+      // Back in the app: everything, music files too, straight away.
+      onResume: () => _tick(pullPlayback: true, filesNow: true),
       onPause: _pushPlaybackNow,
       onInactive: _pushPlaybackNow,
     );
@@ -394,19 +396,32 @@ class SyncService extends ChangeNotifier {
 
   Future<void>? _filesRunning;
 
-  Future<void> _runFiles() => _filesRunning ??= () async {
-    try {
-      await _syncFiles();
-      lastSynced = DateTime.now();
-    } catch (e) {
-      lastError = '$e';
-      AppLog.add('sync: files failed: $e');
-    } finally {
-      _filesRunning = null;
-      files = null;
-      notifyListeners();
+  /// Something changed while files were syncing: go again after.
+  bool _filesAgain = false;
+
+  Future<void> _runFiles() {
+    if (_filesRunning != null) {
+      _filesAgain = true;
+      return _filesRunning!;
     }
-  }();
+    return _filesRunning = () async {
+      try {
+        do {
+          _filesAgain = false;
+          await _syncFiles();
+        } while (_filesAgain);
+        lastSynced = DateTime.now();
+      } catch (e) {
+        lastError = '$e';
+        AppLog.add('sync: files failed: $e');
+      } finally {
+        _filesRunning = null;
+        _filesEnded = DateTime.now();
+        files = null;
+        notifyListeners();
+      }
+    }();
+  }
 
   Future<void> _libraryChain = Future.value();
 
@@ -530,6 +545,16 @@ class SyncService extends ChangeNotifier {
           d['me'] == true,
         ),
     ];
+    // Music files waiting for this device (to download, or to upload for
+    // another): sync them now rather than at the next file round.
+    final waiting = data['files'] as Map?;
+    if (musicFolder != null &&
+        _filesRunning == null &&
+        ((waiting?['incoming'] as int? ?? 0) > 0 ||
+            (waiting?['wanted'] as int? ?? 0) > 0)) {
+      _lastFiles = DateTime.now();
+      unawaited(_runFiles());
+    }
     requests = [
       for (final r in data['requests'] as List)
         if (!_answered.contains(r['id']))
@@ -979,6 +1004,70 @@ class SyncService extends ChangeNotifier {
   static const _hashesKey = 'sync_file_hashes';
   static const _syncedKey = 'sync_files_synced';
 
+  final _folderWatches = <StreamSubscription<FileSystemEvent>>[];
+  Timer? _folderSettle;
+  DateTime _filesEnded = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// Songs added or deleted in the synced folder outside Musify (Finder):
+  /// synced a few seconds after things settle. Where the system can watch
+  /// folders (the Mac, Android); elsewhere, on coming back to the app.
+  void _watchFolder() {
+    for (final watch in _folderWatches) {
+      watch.cancel();
+    }
+    _folderWatches.clear();
+    final folder = musicFolder;
+    if (folder == null || !FileSystemEntity.isWatchSupported) return;
+    // Linux (and so Android) can't watch a whole tree: each folder then.
+    final deep = !(Platform.isLinux || Platform.isAndroid);
+    void onEvent(FileSystemEvent event) {
+      // A new subfolder needs watching too (where watching isn't deep),
+      // Musify's own downloads' included.
+      if (event is FileSystemCreateEvent && event.isDirectory && !deep) {
+        _watchFolder();
+      }
+      // Musify's own downloads aren't news.
+      if (_filesRunning != null ||
+          DateTime.now().difference(_filesEnded) < const Duration(seconds: 5)) {
+        return;
+      }
+      final name = p.basename(event.path);
+      if (name.startsWith('.') || name.endsWith('.part')) return;
+      _folderSettle?.cancel();
+      _folderSettle = Timer(const Duration(seconds: 5), filesChanged);
+    }
+
+    void watch(Directory dir, {required bool recursive}) {
+      try {
+        _folderWatches.add(
+          dir
+              .watch(recursive: recursive)
+              .listen(
+                onEvent,
+                onError: (Object e) =>
+                    AppLog.add('sync: folder watch stopped: $e'),
+              ),
+        );
+      } catch (e) {
+        AppLog.add('sync: can\'t watch ${dir.path}: $e');
+      }
+    }
+
+    final root = Directory(folder.path);
+    if (!deep) {
+      watch(root, recursive: false);
+      try {
+        for (final entity in root.listSync(recursive: true)) {
+          if (entity is Directory && !p.basename(entity.path).startsWith('.')) {
+            watch(entity, recursive: false);
+          }
+        }
+      } catch (_) {}
+    } else {
+      watch(root, recursive: true);
+    }
+  }
+
   /// Picks the library folder whose music is synced (null: none).
   Future<void> setMusicFolder(LibraryFolder? folder) async {
     _musicFolderId = folder?.id;
@@ -986,13 +1075,18 @@ class SyncService extends ChangeNotifier {
     await prefs.remove(_syncedKey);
     await _save();
     notifyListeners();
+    _watchFolder();
     if (folder != null) _tick(filesNow: true);
   }
 
   /// A song was saved or deleted here: sync the files soon.
   void filesChanged() {
-    _lastFiles = DateTime.fromMillisecondsSinceEpoch(0);
-    Timer(const Duration(seconds: 3), () => _tick(filesNow: true));
+    Timer(const Duration(seconds: 3), () {
+      if (status != SyncStatus.on || musicFolder == null) return;
+      if (!_server.setUpNow) return;
+      _lastFiles = DateTime.now();
+      unawaited(_runFiles());
+    });
   }
 
   Future<void> _syncFiles() async {

@@ -4,6 +4,7 @@ import '../models/playlist.dart';
 import '../screens/name_playlist_screen.dart';
 import '../services/library.dart';
 import '../services/player_service.dart';
+import '../services/sync_service.dart';
 import '../theme.dart';
 import '../widgets/list_scrollbar.dart';
 import '../widgets/folders_sheet.dart';
@@ -135,7 +136,11 @@ class _LibraryTabState extends State<LibraryTab> {
     }
     final broken = _library.folderErrors.length;
     return RefreshIndicator(
-      onRefresh: _library.rescan,
+      onRefresh: () async {
+        await _library.rescan();
+        // New or removed songs reach the other devices.
+        SyncService.instance.filesChanged();
+      },
       // Rebuilds tiles when playback moves to another playlist.
       child: StreamBuilder(
         stream: PlayerService.instance.player.sequenceStateStream,
