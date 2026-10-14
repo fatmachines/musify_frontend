@@ -337,7 +337,7 @@ class _Waiting extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Text(
-            'On your other device, open Settings → Sync and approve '
+            'On your other device, open Sync in Settings and approve '
             '"${SyncService.deviceName}". Joining ${sync.code ?? ''}.',
             textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.subtle, fontSize: 14),
@@ -484,7 +484,7 @@ class _On extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                'Enter it on another device (Settings → Sync → Join), then '
+                'Enter it on another device (Sync in Settings, then Join), then '
                 'approve it here.',
                 style: TextStyle(color: AppColors.subtle, fontSize: 13),
               ),

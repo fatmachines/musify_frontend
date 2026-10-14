@@ -1,9 +1,9 @@
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:audio_metadata_reader/audio_metadata_reader.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/playlist.dart';
@@ -126,6 +126,20 @@ class MetadataService {
       });
 
   static Uint8List? loadedImage(String url) => _loadedImages[url];
+
+  /// Gives [track] (a YouTube song) or the picture at [url] these bytes
+  /// instead of fetching them, for tests and screenshots.
+  @visibleForTesting
+  static void debugArtwork({Track? track, String? url, Uint8List? bytes}) {
+    if (track != null) {
+      _covers[track.path] = Future.value(bytes);
+      _loadedCovers[track.path] = bytes;
+    }
+    if (url != null) {
+      _images[url] = Future.value(bytes);
+      _loadedImages[url] = bytes;
+    }
+  }
 
   /// A YouTube thumbnail, or null if there's none or it can't be fetched.
   static Future<Uint8List?> _download(String? url) async {

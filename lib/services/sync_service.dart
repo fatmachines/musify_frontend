@@ -478,11 +478,15 @@ class SyncService extends ChangeNotifier implements RemoteControl {
     String? code,
     List<SyncDevice> devices = const [],
     List<SyncRequest> requests = const [],
+    String? musicFolderId,
+    FileSyncProgress? files,
   }) {
     _token = token;
     _code = code;
     this.devices = devices;
     this.requests = requests;
+    _musicFolderId = musicFolderId;
+    this.files = files;
     notifyListeners();
   }
 
