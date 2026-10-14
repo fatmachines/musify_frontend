@@ -47,8 +47,10 @@ flutter run            # on a connected phone
 2. **Runner → Signing & Capabilities**: pick your team, and change the bundle
    identifier (`com.fatmachines.musify`) to one of your own.
 3. Keep the capabilities: **Background Modes → Audio** (playing with the
-   screen locked) and **Siri** (voice requests). Siri needs a paid Apple
-   Developer account; with a free one, remove it.
+   screen locked) and **Siri** (voice requests, set in
+   `ios/Runner/Runner.entitlements`). Siri needs a paid Apple Developer
+   account; with a free one, remove it there (the app then simply skips
+   Siri).
 4. `flutter run`, or Run in Xcode.
 
 CarPlay needs Apple's CarPlay audio entitlement, which Apple gives on
