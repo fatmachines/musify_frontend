@@ -68,6 +68,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   @override
   void initState() {
     super.initState();
+    FindShortcut.register(_findShortcut);
     _loadDetails();
     Library.instance.addListener(_onLibraryChanged);
     _player.shuffleOn.addListener(_onShuffleChanged);
@@ -120,6 +121,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   @override
   void dispose() {
+    FindShortcut.unregister(_findShortcut);
     Library.instance.removeListener(_onLibraryChanged);
     _player.shuffleOn.removeListener(_onShuffleChanged);
     for (final s in _subscriptions) {
@@ -200,6 +202,13 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       startIndex: index,
     ),
   );
+
+  /// Cmd+F / Ctrl+F: "Find on this page", if this page is the one showing.
+  bool _findShortcut() {
+    if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? false)) return false;
+    _openSearch();
+    return true;
+  }
 
   void _openSearch() {
     setState(() => _searching = true);

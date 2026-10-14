@@ -18,6 +18,7 @@ import 'library.dart';
 import 'library_scanner.dart';
 import 'library_store.dart';
 import 'musify_server.dart';
+import 'playback_session.dart';
 import 'player_service.dart';
 
 enum SyncStatus { off, waiting, on }
@@ -143,6 +144,8 @@ class SyncService extends ChangeNotifier {
     _started = true;
     await _load();
     await Library.instance.ensureLoaded();
+    // Last time's songs first: what another device played comes after.
+    await PlaybackSession.restored;
     _watchPlayer();
     Timer.periodic(const Duration(seconds: 20), (_) => _tick());
     // A device waiting to be let in (and the Sync screen) look every 3 s.
@@ -778,10 +781,21 @@ class SyncService extends ChangeNotifier {
   int _lastLocalPlayback = 0;
   Timer? _pushSoon;
 
+  /// Only playing counts as this device's activity: pressing play or
+  /// pause, or the song changing while playing. Songs loaded paused (last
+  /// time's at launch, another device's) don't, or the device would take
+  /// over what's playing just by opening.
   void _watchPlayer() {
     final player = PlayerService.instance.player;
-    player.playingStream.listen((_) => _playbackChanged());
-    player.currentIndexStream.listen((_) => _playbackChanged());
+    var wasPlaying = player.playing;
+    player.playingStream.listen((playing) {
+      if (playing == wasPlaying) return;
+      wasPlaying = playing;
+      _playbackChanged();
+    });
+    player.currentIndexStream.listen((_) {
+      if (player.playing) _playbackChanged();
+    });
     Timer.periodic(const Duration(seconds: 15), (_) {
       if (player.playing) _pushPlaybackNow();
     });

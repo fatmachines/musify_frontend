@@ -1,5 +1,6 @@
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'desktop/desktop_shell.dart';
 import 'screens/now_playing.dart';
@@ -21,6 +22,7 @@ import 'theme.dart';
 import 'widgets/bottom_bar.dart';
 import 'widgets/download_sheet.dart';
 import 'widgets/mini_player.dart';
+import 'widgets/navigation.dart';
 import 'widgets/toast.dart';
 
 Future<void> main() async {
@@ -137,6 +139,18 @@ class _HomeShellState extends State<HomeShell>
     super.initState();
     // "Picked up where you left off on …" when sync brings that over.
     _stopHandoff = listenForHandoff(this);
+    HardwareKeyboard.instance.addHandler(_onKey);
+  }
+
+  /// Cmd+F / Ctrl+F on a keyboard (iPad): a playlist's own search.
+  bool _onKey(KeyEvent event) {
+    final keyboard = HardwareKeyboard.instance;
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.keyF &&
+        (keyboard.isMetaPressed || keyboard.isControlPressed)) {
+      return FindShortcut.find();
+    }
+    return false;
   }
 
   /// How far the full player is open: 0 is just the mini player, 1 is full
@@ -170,6 +184,7 @@ class _HomeShellState extends State<HomeShell>
   @override
   void dispose() {
     _stopHandoff();
+    HardwareKeyboard.instance.removeHandler(_onKey);
     _player.dispose();
     super.dispose();
   }

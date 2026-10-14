@@ -27,6 +27,10 @@ class DesktopShell extends StatefulWidget {
 
   /// Whether a window this size gets the desktop layout: wide enough, and
   /// not a phone on its side.
+  /// In place of play/pause on space, for tests.
+  @visibleForTesting
+  static VoidCallback? debugSpace;
+
   static bool fits(Size size) => size.width >= 840 && size.shortestSide >= 560;
 
   @override
@@ -55,6 +59,7 @@ class _DesktopShellState extends State<DesktopShell>
     _searchFocus.addListener(_onFocusChanged);
     searchFocusRequests.addListener(_searchFocus.requestFocus);
     _stopHandoff = listenForHandoff(this);
+    HardwareKeyboard.instance.addHandler(_onKey);
   }
 
   late final VoidCallback _stopHandoff;
@@ -63,6 +68,7 @@ class _DesktopShellState extends State<DesktopShell>
   void dispose() {
     searchFocusRequests.removeListener(_searchFocus.requestFocus);
     _stopHandoff();
+    HardwareKeyboard.instance.removeHandler(_onKey);
     _query.dispose();
     _searchFocus.dispose();
     _player.dispose();
@@ -115,20 +121,8 @@ class _DesktopShellState extends State<DesktopShell>
 
   @override
   Widget build(BuildContext context) {
-    // Space plays and pauses, as in Spotify, unless typing: then the text
-    // field gets it. Key events reach here only after the focused widget
-    // passes on them; text fields take their text another way, so ask.
     return Focus(
       autofocus: true,
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent ||
-            event.logicalKey != LogicalKeyboardKey.space ||
-            _typing()) {
-          return KeyEventResult.ignored;
-        }
-        PlayerService.instance.togglePlayback();
-        return KeyEventResult.handled;
-      },
       child: DesktopScope(
         main: _main,
         child: Stack(
@@ -204,6 +198,25 @@ class _DesktopShellState extends State<DesktopShell>
         ),
       ),
     );
+  }
+
+  /// Space plays and pauses, as in Spotify, wherever the keyboard focus is
+  /// (it moves around: the search field, a slider, nothing), unless typing:
+  /// then the text field gets it. Cmd+F / Ctrl+F finds.
+  bool _onKey(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    // Cmd+F (Ctrl+F elsewhere): the playlist's own search, or the top bar's.
+    final keyboard = HardwareKeyboard.instance;
+    if (event.logicalKey == LogicalKeyboardKey.keyF &&
+        (keyboard.isMetaPressed || keyboard.isControlPressed)) {
+      if (!FindShortcut.find()) _searchFocus.requestFocus();
+      return true;
+    }
+    if (event.logicalKey != LogicalKeyboardKey.space || _typing()) {
+      return false;
+    }
+    (DesktopShell.debugSpace ?? PlayerService.instance.togglePlayback)();
+    return true;
   }
 
   /// Whether a text field has the keyboard (the search, a dialog's field).

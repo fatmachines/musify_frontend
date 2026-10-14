@@ -72,4 +72,32 @@ void main() {
     expect(PlayerService.instance.player.playing, isFalse);
     await tester.pump(const Duration(seconds: 1));
   });
+
+  testWidgets('space plays and pauses after leaving the search field', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(const MusifyApp());
+    await tester.pump();
+    // In and out of the search field: the keyboard focus goes up a level.
+    await tester.tap(find.byType(TextField).first);
+    await tester.pump();
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+    // Space still reaches play/pause.
+    var pressed = 0;
+    DesktopShell.debugSpace = () => pressed++;
+    addTearDown(() => DesktopShell.debugSpace = null);
+    expect(await tester.sendKeyEvent(LogicalKeyboardKey.space), isTrue);
+    expect(pressed, 1);
+    // Typing in the search field again: space is the field's.
+    await tester.tap(find.byType(TextField).first);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    expect(pressed, 1);
+    await tester.pump(const Duration(seconds: 1));
+  });
 }

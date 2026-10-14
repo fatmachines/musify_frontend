@@ -4,12 +4,14 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:just_audio_platform_interface/just_audio_platform_interface.dart';
 import 'package:musify/models/playlist.dart';
 import 'package:musify/services/library.dart';
 import 'package:musify/services/musify_server.dart';
+import 'package:musify/services/playback_session.dart';
 import 'package:musify/services/player_service.dart';
 import 'package:musify/services/sync_service.dart';
 import 'package:path/path.dart' as p;
@@ -27,6 +29,13 @@ const base = 'http://127.0.0.1:8797';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   JustAudioPlatform.instance = FakeJustAudio();
+  // YouTube songs play silence from an asset, copied to the temp folder.
+  final temp = Directory.systemTemp.createTempSync('musify_e2e_tmp');
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        (_) async => temp.path,
+      );
   final runnable = File(python).existsSync() && File(backend).existsSync();
 
   late Process server;
@@ -111,6 +120,8 @@ void main() {
       final library = Library.instance;
       await library.ensureLoaded();
       await MusifyServer.instance.setUp(base, 'k');
+      // As at launch: last time's songs come back first.
+      await PlaybackSession.start();
       final sync = SyncService.instance;
       await sync.start();
 
@@ -278,6 +289,44 @@ void main() {
       expect(
         PlayerService.instance.player.position,
         const Duration(seconds: 90),
+      );
+      // The Mac switches to a YouTube song and plays it for 30 seconds: this
+      // device, idle, picks that up, about 30 seconds in.
+      final (_, again) = await mac('GET', '/sync/state/playback', token: token);
+      // Reports only move forward: after the last one (at now + 5 s).
+      final sent = now + 10000;
+      await mac(
+        'PUT',
+        '/sync/state/playback',
+        token: token,
+        body: {
+          'rev': again['rev'],
+          'data': {
+            'track': {
+              'yt': {
+                'id': 'Zi_XLOBDo_Y',
+                'title': 'Billie Jean',
+                'channel': 'Michael Jackson',
+                'ms': 294000,
+              },
+            },
+            'pos': 30000,
+            'playing': true,
+            'playlist': null,
+            't': sent,
+            'at': sent + 1,
+            'device': 'mac-device-0001',
+            'name': 'Mac',
+          },
+        },
+      );
+      await sync.syncNow();
+      final playing = PlayerService.instance.currentTrack;
+      expect(playing, isA<YouTubeTrack>());
+      expect((playing as YouTubeTrack).name, 'Billie Jean');
+      expect(
+        PlayerService.instance.player.position.inSeconds,
+        inInclusiveRange(30, 33),
       );
     },
     skip: runnable ? false : 'no backend here',

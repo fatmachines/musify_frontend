@@ -30,3 +30,25 @@ Future<T?> openPage<T>(BuildContext context, Widget page) {
 
 Future<void> openPlaylist(BuildContext context, Playlist playlist) =>
     openPage(context, PlaylistScreen(playlist: playlist));
+
+/// Cmd+F / Ctrl+F: the page that can search itself (a playlist's "Find on
+/// this page") takes it; asked in turn, the one on top first.
+class FindShortcut {
+  FindShortcut._();
+
+  static final _pages = <bool Function()>[];
+
+  /// [find] opens the page's search if the page is the one showing, and
+  /// says whether it did.
+  static void register(bool Function() find) => _pages.add(find);
+
+  static void unregister(bool Function() find) => _pages.remove(find);
+
+  /// Whether a page took it.
+  static bool find() {
+    for (final page in _pages.reversed) {
+      if (page()) return true;
+    }
+    return false;
+  }
+}

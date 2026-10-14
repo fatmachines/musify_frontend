@@ -23,6 +23,13 @@ class PlaybackSession {
   static AppLifecycleListener? _lifecycle;
 
   /// Restores the last session, then keeps saving changes.
+  static final _restored = Completer<void>();
+
+  /// Done once last time's songs are back (or there were none): sync
+  /// waits for it, so it doesn't pick up another device's song only to
+  /// have it replaced by this.
+  static Future<void> get restored => _restored.future;
+
   static Future<void> start() async {
     if (_started) return;
     _started = true;
@@ -33,6 +40,8 @@ class PlaybackSession {
       await _restore(service);
     } catch (e) {
       AppLog.add('session: restore failed: $e');
+    } finally {
+      if (!_restored.isCompleted) _restored.complete();
     }
 
     final player = service.player;
