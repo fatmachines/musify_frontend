@@ -12,7 +12,8 @@ import 'tag_sheet.dart';
 import 'toast.dart';
 
 /// A song row: cover, title, tag dots and artist, and a ••• button.
-/// Swipe right to queue it, left to toggle the first tag.
+/// Swipe right to queue it; left to tag it (the tag sheet), or, if tagged,
+/// to take its tags off.
 class SongTile extends StatelessWidget {
   final Track track;
   final VoidCallback onTap;
@@ -41,35 +42,42 @@ class SongTile extends StatelessWidget {
     this.trailing,
   });
 
-  /// Swiping left toggles the first tag; with no tags yet it opens the tag
-  /// sheet to make one.
-  void _quickTag(BuildContext context) {
+  /// Swiping left on a song without tags opens the tag sheet to pick one;
+  /// on a tagged song it takes its tags off.
+  void _swipeTag(BuildContext context) {
     final library = Library.instance;
-    final tag = library.tags.firstOrNull;
-    if (tag == null) {
+    final tags = library.tagsOf(track);
+    if (tags.isEmpty) {
       showTagSheet(context, track);
       return;
     }
-    final had = library.hasTag(track, tag);
-    library.toggleTag(track, tag);
-    showToast(context, had ? 'Removed ${tag.name}' : 'Tagged ${tag.name}');
+    for (final tag in tags) {
+      library.toggleTag(track, tag);
+    }
+    showToast(
+      context,
+      tags.length == 1
+          ? 'Removed ${tags.single.name}'
+          : 'Removed ${tags.length} tags',
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final info = MetadataService.cachedInfo(track);
     final youtube = track is YouTubeTrack;
-    final firstTag = Library.instance.tags.firstOrNull;
+    // Tagged: swiping takes the tags off; else it opens the tag sheet.
+    final tagged = Library.instance.tagsOf(track);
     return SwipeActions(
       rightIcon: Icons.queue_music,
       onSwipeRight: () {
         PlayerService.instance.addToQueue(track);
         showToast(context, 'Added to queue');
       },
-      leftIcon: Icons.sell_outlined,
-      leftColor: firstTag?.color ?? AppColors.subtle,
+      leftIcon: tagged.isEmpty ? Icons.sell_outlined : Icons.label_off_outlined,
+      leftColor: tagged.isEmpty ? AppColors.green : tagged.first.color,
       // YouTube songs aren't in the library, so they can't be tagged.
-      onSwipeLeft: youtube ? null : () => _quickTag(context),
+      onSwipeLeft: youtube ? null : () => _swipeTag(context),
       child: InkWell(
         onTap: onTap,
         child: Padding(

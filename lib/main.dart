@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'desktop/desktop_shell.dart';
 import 'screens/now_playing.dart';
 import 'services/app_log.dart';
+import 'services/musify_server.dart';
 import 'services/appearance.dart';
 import 'services/audio_handler.dart';
 import 'services/equalizer_service.dart';
@@ -25,6 +26,8 @@ import 'widgets/toast.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Appearance.load();
+  // The server's address and key, so screens show them straight away.
+  await MusifyServer.instance.load();
   await PlayerService.init();
   try {
     await AudioService.init(

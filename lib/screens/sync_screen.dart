@@ -12,8 +12,26 @@ import '../widgets/toast.dart';
 /// Sync between the user's devices: turn it on (this device's own code)
 /// or join another device's code, approve devices that ask, pick the
 /// music folder to sync, and see how it's going.
-class SyncScreen extends StatelessWidget {
+class SyncScreen extends StatefulWidget {
   const SyncScreen({super.key});
+
+  @override
+  State<SyncScreen> createState() => _SyncScreenState();
+}
+
+class _SyncScreenState extends State<SyncScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Requests and approvals show up within seconds while this is open.
+    SyncService.instance.watch();
+  }
+
+  @override
+  void dispose() {
+    SyncService.instance.unwatch();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -22,18 +40,14 @@ class SyncScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('Sync')),
       body: ListenableBuilder(
         listenable: Listenable.merge([sync, MusifyServer.instance]),
-        builder: (context, _) => FutureBuilder<bool>(
-          future: MusifyServer.instance.isSetUp(),
-          builder: (context, server) {
-            if (server.data == null) return const SizedBox.shrink();
-            if (server.data == false) return const _NeedsServer();
-            return switch (sync.status) {
-              SyncStatus.off => const _Off(),
-              SyncStatus.waiting => const _Waiting(),
-              SyncStatus.on => const _On(),
-            };
-          },
-        ),
+        builder: (context, _) {
+          if (!MusifyServer.instance.setUpNow) return const _NeedsServer();
+          return switch (sync.status) {
+            SyncStatus.off => const _Off(),
+            SyncStatus.waiting => const _Waiting(),
+            SyncStatus.on => const _On(),
+          };
+        },
       ),
     );
   }
@@ -44,6 +58,87 @@ Future<void> _run(BuildContext context, Future<void> Function() action) async {
     await action();
   } catch (e) {
     if (context.mounted) showToast(context, '$e');
+  }
+}
+
+enum _Look { filled, text, danger, icon }
+
+/// A button that shows it's working: a spinner by its label (or in place
+/// of its icon) and no second press until [onPressed] is done. Errors
+/// become a toast.
+class _ActionButton extends StatefulWidget {
+  final Future<void> Function() onPressed;
+  final String label;
+  final IconData? icon;
+  final _Look look;
+  final bool enabled;
+
+  const _ActionButton({
+    required this.onPressed,
+    required this.label,
+    this.icon,
+    this.look = _Look.filled,
+    this.enabled = true,
+  });
+
+  @override
+  State<_ActionButton> createState() => _ActionButtonState();
+}
+
+class _ActionButtonState extends State<_ActionButton> {
+  bool _working = false;
+
+  Future<void> _press() async {
+    if (_working) return;
+    setState(() => _working = true);
+    await _run(context, widget.onPressed);
+    if (mounted) setState(() => _working = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final onPressed = widget.enabled && !_working ? _press : null;
+    final spinner = SizedBox.square(
+      dimension: 18,
+      child: CircularProgressIndicator(
+        strokeWidth: 2,
+        color: widget.look == _Look.filled ? AppColors.onText : AppColors.green,
+      ),
+    );
+    switch (widget.look) {
+      case _Look.icon:
+        return IconButton(
+          tooltip: widget.label,
+          onPressed: onPressed,
+          icon: _working ? spinner : Icon(widget.icon),
+        );
+      case _Look.filled:
+        final icon = widget.icon;
+        return _working || icon != null
+            ? FilledButton.icon(
+                onPressed: onPressed,
+                icon: _working ? spinner : Icon(icon),
+                label: Text(widget.label),
+              )
+            : FilledButton(onPressed: onPressed, child: Text(widget.label));
+      case _Look.text:
+      case _Look.danger:
+        final style = widget.look == _Look.danger
+            ? TextButton.styleFrom(foregroundColor: const Color(0xFFF15E6C))
+            : null;
+        return _working
+            ? TextButton.icon(
+                onPressed: null,
+                style: style,
+                icon: spinner,
+                label: Text(widget.label),
+              )
+            : TextButton(
+                onPressed: onPressed,
+                style: style,
+                child: Text(widget.label),
+              );
+    }
   }
 }
 
@@ -103,7 +198,12 @@ class _Off extends StatefulWidget {
 
 class _OffState extends State<_Off> {
   final _code = TextEditingController();
-  bool _working = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _code.addListener(() => setState(() {}));
+  }
 
   @override
   void dispose() {
@@ -111,11 +211,9 @@ class _OffState extends State<_Off> {
     super.dispose();
   }
 
-  Future<void> _do(Future<void> Function() action) async {
-    setState(() => _working = true);
-    await _run(context, action);
-    if (mounted) setState(() => _working = false);
-  }
+  /// All eight letters and digits typed (dashes and spaces don't count).
+  bool get _codeComplete =>
+      _code.text.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').length == 8;
 
   @override
   Widget build(BuildContext context) {
@@ -139,10 +237,10 @@ class _OffState extends State<_Off> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Align(
             alignment: Alignment.centerLeft,
-            child: FilledButton.icon(
-              onPressed: _working ? null : () => _do(sync.create),
-              icon: const Icon(Icons.sync),
-              label: const Text('Turn on sync'),
+            child: _ActionButton(
+              onPressed: sync.create,
+              icon: Icons.sync,
+              label: 'Turn on sync',
             ),
           ),
         ),
@@ -178,15 +276,13 @@ class _OffState extends State<_Off> {
                       letterSpacing: 3,
                     ),
                   ),
-                  onSubmitted: (code) => _do(() => sync.join(code)),
                 ),
               ),
               const SizedBox(width: 12),
-              FilledButton(
-                onPressed: _working
-                    ? null
-                    : () => _do(() => sync.join(_code.text)),
-                child: const Text('Join'),
+              _ActionButton(
+                enabled: _codeComplete,
+                onPressed: () => sync.join(_code.text),
+                label: 'Join',
               ),
             ],
           ),
@@ -236,9 +332,10 @@ class _Waiting extends StatelessWidget {
         ),
         const SizedBox(height: 24),
         Center(
-          child: TextButton(
+          child: _ActionButton(
+            look: _Look.text,
             onPressed: sync.cancelJoin,
-            child: const Text('Cancel'),
+            label: 'Cancel',
           ),
         ),
       ],
@@ -315,33 +412,6 @@ class _On extends StatelessWidget {
     await sync.setMusicFolder(picked is LibraryFolder ? picked : null);
   }
 
-  Future<void> _confirmLeave(BuildContext context) async {
-    final leave = await showDialog<bool>(
-      context: context,
-      useRootNavigator: true,
-      builder: (dialog) => AlertDialog(
-        title: const Text('Stop syncing this device?'),
-        content: const Text(
-          'Its playlists, tags and songs stay here; they just stop '
-          'following your other devices.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialog).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialog).pop(true),
-            child: const Text('Stop syncing'),
-          ),
-        ],
-      ),
-    );
-    if (leave == true && context.mounted) {
-      await _run(context, SyncService.instance.leave);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final sync = SyncService.instance;
@@ -354,8 +424,7 @@ class _On extends StatelessWidget {
           _Approval(
             request: request,
             icon: _icon(request.platform),
-            onAnswer: (approve) =>
-                _run(context, () => sync.answer(request, approve: approve)),
+            onAnswer: (approve) => sync.answer(request, approve: approve),
           ),
         // The code, big, to type on another device.
         Container(
@@ -417,11 +486,21 @@ class _On extends StatelessWidget {
                 : Text('Seen ${_ago(device.seen!)}'),
             trailing: device.me
                 ? null
-                : IconButton(
-                    tooltip: 'Remove from sync',
-                    icon: const Icon(Icons.remove_circle_outline),
-                    onPressed: () =>
-                        _run(context, () => sync.removeDevice(device)),
+                : _ActionButton(
+                    look: _Look.icon,
+                    icon: Icons.remove_circle_outline,
+                    label: 'Remove from sync',
+                    onPressed: () async {
+                      if (await _confirm(
+                        context,
+                        'Remove "${device.name}" from sync?',
+                        'It keeps its playlists and songs but stops '
+                            'following this device.',
+                        'Remove',
+                      )) {
+                        await sync.removeDevice(device);
+                      }
+                    },
                   ),
           ),
         const _SectionTitle('Music files'),
@@ -481,19 +560,29 @@ class _On extends StatelessWidget {
                 : 'Synced ${_ago(sync.lastSynced!)}',
           ),
           subtitle: sync.lastError == null ? null : Text(sync.lastError!),
-          trailing: TextButton(
-            onPressed: sync.busy ? null : sync.syncNow,
-            child: const Text('Sync now'),
+          trailing: _ActionButton(
+            look: _Look.text,
+            enabled: !sync.busy,
+            onPressed: sync.syncNow,
+            label: 'Sync now',
           ),
         ),
         const SizedBox(height: 16),
         Center(
-          child: TextButton(
-            onPressed: () => _confirmLeave(context),
-            style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFFF15E6C),
-            ),
-            child: const Text('Stop syncing this device'),
+          child: _ActionButton(
+            look: _Look.danger,
+            onPressed: () async {
+              if (await _confirm(
+                context,
+                'Stop syncing this device?',
+                'Its playlists, tags and songs stay here; they just stop '
+                    'following your other devices.',
+                'Stop syncing',
+              )) {
+                await SyncService.instance.leave();
+              }
+            },
+            label: 'Stop syncing this device',
           ),
         ),
       ],
@@ -509,11 +598,11 @@ String _ago(DateTime time) {
   return '${gone.inDays} d ago';
 }
 
-/// A device asking to join: approve or deny.
-class _Approval extends StatelessWidget {
+/// A device asking to join: approve or deny (both locked while answering).
+class _Approval extends StatefulWidget {
   final SyncRequest request;
   final IconData icon;
-  final void Function(bool approve) onAnswer;
+  final Future<void> Function(bool approve) onAnswer;
 
   const _Approval({
     required this.request,
@@ -522,7 +611,25 @@ class _Approval extends StatelessWidget {
   });
 
   @override
+  State<_Approval> createState() => _ApprovalState();
+}
+
+class _ApprovalState extends State<_Approval> {
+  bool? _answering;
+
+  Future<void> _answer(bool approve) async {
+    if (_answering != null) return;
+    setState(() => _answering = approve);
+    await _run(context, () => widget.onAnswer(approve));
+    if (mounted) setState(() => _answering = null);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    Widget spinner(Color color) => SizedBox.square(
+      dimension: 18,
+      child: CircularProgressIndicator(strokeWidth: 2, color: color),
+    );
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       padding: const EdgeInsets.all(16),
@@ -536,11 +643,11 @@ class _Approval extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, color: AppColors.green),
+              Icon(widget.icon, color: AppColors.green),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  '"${request.name}" wants to sync with this device',
+                  '"${widget.request.name}" wants to sync with this device',
                   style: TextStyle(
                     color: AppColors.text,
                     fontSize: 15,
@@ -555,13 +662,17 @@ class _Approval extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               TextButton(
-                onPressed: () => onAnswer(false),
-                child: const Text('Deny'),
+                onPressed: _answering == null ? () => _answer(false) : null,
+                child: _answering == false
+                    ? spinner(AppColors.green)
+                    : const Text('Deny'),
               ),
               const SizedBox(width: 8),
               FilledButton(
-                onPressed: () => onAnswer(true),
-                child: const Text('Approve'),
+                onPressed: _answering == null ? () => _answer(true) : null,
+                child: _answering == true
+                    ? spinner(AppColors.onText)
+                    : const Text('Approve'),
               ),
             ],
           ),
@@ -569,6 +680,33 @@ class _Approval extends StatelessWidget {
       ),
     );
   }
+}
+
+Future<bool> _confirm(
+  BuildContext context,
+  String title,
+  String message,
+  String action,
+) async {
+  final yes = await showDialog<bool>(
+    context: context,
+    useRootNavigator: true,
+    builder: (dialog) => AlertDialog(
+      title: Text(title),
+      content: Text(message),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialog).pop(false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(dialog).pop(true),
+          child: Text(action),
+        ),
+      ],
+    ),
+  );
+  return yes ?? false;
 }
 
 class _SectionTitle extends StatelessWidget {

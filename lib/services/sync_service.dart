@@ -349,6 +349,45 @@ class SyncService extends ChangeNotifier {
     }
   }
 
+  int _watchers = 0;
+  Timer? _quickTimer;
+  bool _quickRunning = false;
+
+  /// While the Sync screen is open: a quick look every 3 seconds, so a
+  /// device asking to join, or being let in, shows up straight away.
+  void watch() {
+    _watchers++;
+    _quickTimer ??= Timer.periodic(const Duration(seconds: 3), (_) => _quick());
+    _quick();
+  }
+
+  void unwatch() {
+    if (--_watchers > 0) return;
+    _watchers = 0;
+    _quickTimer?.cancel();
+    _quickTimer = null;
+  }
+
+  Future<void> _quick() async {
+    if (_quickRunning || _running != null || !_server.setUpNow) return;
+    _quickRunning = true;
+    try {
+      if (status == SyncStatus.waiting) {
+        await _checkJoin();
+        // Let in: sync everything now.
+        if (status == SyncStatus.on) {
+          unawaited(_tick(pullPlayback: true, filesNow: true));
+        }
+      } else if (status == SyncStatus.on) {
+        await _refreshGroup();
+      }
+    } catch (_) {
+      // The full sync reports problems.
+    } finally {
+      _quickRunning = false;
+    }
+  }
+
   /// Syncs everything now, music files included.
   Future<void> syncNow() =>
       _tick(pullPlayback: true, filesNow: true, queue: true);

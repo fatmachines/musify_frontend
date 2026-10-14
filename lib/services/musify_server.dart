@@ -51,6 +51,17 @@ class MusifyServer extends ChangeNotifier {
   /// Whether there's an address and a key to use.
   Future<bool> isSetUp() async => await url() != null && await key() != null;
 
+  /// The address, known without waiting once loaded (see [url]); for
+  /// screens, which mustn't flicker while it's read.
+  String? get urlNow => _url ?? (_builtInUrl.isEmpty ? null : _builtInUrl);
+
+  bool get setUpNow =>
+      urlNow != null &&
+      (_key ?? (_builtInKey.isEmpty ? null : _builtInKey)) != null;
+
+  /// Reads the saved address and key (once).
+  Future<void> load() => _load();
+
   /// Saves the address and key (null or empty clears them).
   Future<void> setUp(String? url, String? key) async {
     final prefs = await SharedPreferences.getInstance();

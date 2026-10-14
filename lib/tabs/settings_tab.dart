@@ -125,23 +125,20 @@ class SettingsTab extends StatelessWidget {
               MusifyServer.instance,
               SyncService.instance,
             ]),
-            builder: (context, _) => FutureBuilder<String?>(
-              future: MusifyServer.instance.url(),
-              builder: (context, snapshot) {
-                final url = snapshot.data;
-                return ListTile(
-                  leading: const Icon(Icons.cloud_outlined),
-                  title: const Text('Musify server'),
-                  subtitle: Text(
-                    url == null
-                        ? 'Not set up: for downloads, charts and sync'
-                        : Uri.parse(url).host,
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => showServerKeyDialog(context),
-                );
-              },
-            ),
+            builder: (context, _) {
+              final url = MusifyServer.instance.urlNow;
+              return ListTile(
+                leading: const Icon(Icons.cloud_outlined),
+                title: const Text('Musify server'),
+                subtitle: Text(
+                  url == null
+                      ? 'Not set up: for downloads, charts and sync'
+                      : Uri.parse(url).host,
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => showServerKeyDialog(context),
+              );
+            },
           ),
           ListenableBuilder(
             listenable: SyncService.instance,
