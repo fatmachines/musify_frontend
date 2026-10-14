@@ -50,7 +50,7 @@ class SettingsTab extends StatelessWidget {
       ),
       body: ListView(
         padding: EdgeInsets.only(
-          bottom: MediaQuery.paddingOf(context).bottom + 120,
+          bottom: MediaQuery.paddingOf(context).bottom + 24,
         ),
         children: [
           const _Heading('Sound'),

@@ -42,11 +42,16 @@ class _SyncScreenState extends State<SyncScreen> {
         listenable: Listenable.merge([sync, MusifyServer.instance]),
         builder: (context, _) {
           if (!MusifyServer.instance.setUpNow) return const _NeedsServer();
-          return switch (sync.status) {
-            SyncStatus.off => const _Off(),
-            SyncStatus.waiting => const _Waiting(),
-            SyncStatus.on => const _On(),
-          };
+          // Pull down to check again (or sync now).
+          return RefreshIndicator(
+            color: AppColors.green,
+            onRefresh: () => _run(context, sync.refresh),
+            child: switch (sync.status) {
+              SyncStatus.off => const _Off(),
+              SyncStatus.waiting => const _Waiting(),
+              SyncStatus.on => const _On(),
+            },
+          );
         },
       ),
     );
@@ -165,6 +170,7 @@ class _NeedsServer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       children: [
         const _Intro(),
         Padding(
@@ -219,7 +225,11 @@ class _OffState extends State<_Off> {
   Widget build(BuildContext context) {
     final sync = SyncService.instance;
     return ListView(
-      padding: const EdgeInsets.only(bottom: 120),
+      physics: const AlwaysScrollableScrollPhysics(),
+      // Clear of the tab bar and the mini player (in the bottom padding).
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.paddingOf(context).bottom + 24,
+      ),
       children: [
         const _Intro(),
         if (sync.lastError case final error?)
@@ -299,6 +309,7 @@ class _Waiting extends StatelessWidget {
   Widget build(BuildContext context) {
     final sync = SyncService.instance;
     return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       children: [
         const SizedBox(height: 32),
         Center(
@@ -418,7 +429,11 @@ class _On extends StatelessWidget {
     final code = sync.code ?? '';
     final files = sync.files;
     return ListView(
-      padding: const EdgeInsets.only(bottom: 120),
+      physics: const AlwaysScrollableScrollPhysics(),
+      // Clear of the tab bar and the mini player (in the bottom padding).
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.paddingOf(context).bottom + 24,
+      ),
       children: [
         for (final request in sync.requests)
           _Approval(

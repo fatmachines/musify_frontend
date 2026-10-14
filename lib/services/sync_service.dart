@@ -100,7 +100,10 @@ class SyncService extends ChangeNotifier {
   List<SyncRequest> requests = const [];
   DateTime? lastSynced;
   String? lastError;
-  bool busy = false;
+  bool _syncing = false;
+
+  /// Syncing anything: the library, or music files.
+  bool get busy => _syncing || _filesRunning != null;
   FileSyncProgress? files;
 
   /// The library folder whose music is synced, if any.
@@ -142,6 +145,8 @@ class SyncService extends ChangeNotifier {
     await Library.instance.ensureLoaded();
     _watchPlayer();
     Timer.periodic(const Duration(seconds: 20), (_) => _tick());
+    // A device waiting to be let in (and the Sync screen) look every 3 s.
+    Timer.periodic(const Duration(seconds: 3), (_) => _quick());
     AppLifecycleListener(
       onResume: () => _tick(pullPlayback: true),
       onPause: _pushPlaybackNow,
@@ -235,13 +240,26 @@ class SyncService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Requests answered here: gone from the screen at once, and not
+  /// brought back by an answer from the server that left before.
+  final _answered = <String>{};
+
   Future<void> answer(SyncRequest request, {required bool approve}) async {
     final (status, data) = await _call(
       'POST',
       '/sync/requests/${request.id}',
       body: {'approve': approve},
     );
-    if (status != 200) throw SyncFailed(data['error'] as String? ?? '$status');
+    // 404: already answered (on another device, or a press before).
+    if (status != 200 && status != 404) {
+      throw SyncFailed(data['error'] as String? ?? '$status');
+    }
+    _answered.add(request.id);
+    requests = [
+      for (final r in requests)
+        if (r.id != request.id) r,
+    ];
+    notifyListeners();
     await _refreshGroup();
   }
 
@@ -326,59 +344,92 @@ class SyncService extends ChangeNotifier {
       if (!await _server.isSetUp()) return;
       if (status == SyncStatus.waiting) await _checkJoin();
       if (status != SyncStatus.on) return;
-      busy = true;
+      _syncing = true;
       notifyListeners();
       await _refreshGroup();
-      await _syncLibrary();
-      if (pullPlayback) await _pullPlayback();
+      await _syncLibrarySerially();
+      // An idle device follows what another plays (song and position).
+      if (pullPlayback || !PlayerService.instance.player.playing) {
+        await _pullPlayback();
+      }
+      lastError = null;
+      lastSynced = DateTime.now();
+      // Music files go on in the background, so playlists and tags keep
+      // syncing (and the screens refreshing) while songs move. Sync now
+      // waits for them.
       final due =
           DateTime.now().difference(_lastFiles) > const Duration(minutes: 2);
       if (musicFolder != null && (filesNow || due)) {
         _lastFiles = DateTime.now();
-        await _syncFiles();
+        final run = _runFiles();
+        if (filesNow) {
+          _syncing = false;
+          notifyListeners();
+          await run;
+        }
       }
-      lastError = null;
-      lastSynced = DateTime.now();
     } catch (e) {
       lastError = '$e';
       AppLog.add('sync: failed: $e');
     } finally {
-      busy = false;
-      files = null;
+      _syncing = false;
       notifyListeners();
     }
   }
 
+  Future<void>? _filesRunning;
+
+  Future<void> _runFiles() => _filesRunning ??= () async {
+    try {
+      await _syncFiles();
+      lastSynced = DateTime.now();
+    } catch (e) {
+      lastError = '$e';
+      AppLog.add('sync: files failed: $e');
+    } finally {
+      _filesRunning = null;
+      files = null;
+      notifyListeners();
+    }
+  }();
+
+  Future<void> _libraryChain = Future.value();
+
+  /// One library sync at a time (the loop and the files' both start one).
+  Future<void> _syncLibrarySerially() {
+    final run = _libraryChain.then((_) => _syncLibrary());
+    _libraryChain = run.catchError((_) {});
+    return run;
+  }
+
   int _watchers = 0;
-  Timer? _quickTimer;
   bool _quickRunning = false;
 
-  /// While the Sync screen is open: a quick look every 3 seconds, so a
-  /// device asking to join, or being let in, shows up straight away.
+  /// While the Sync screen is open: a quick look at the devices every 3
+  /// seconds, so one asking to join shows up straight away. (A device
+  /// waiting to be let in looks that often anyway.)
   void watch() {
     _watchers++;
-    _quickTimer ??= Timer.periodic(const Duration(seconds: 3), (_) => _quick());
     _quick();
   }
 
   void unwatch() {
-    if (--_watchers > 0) return;
-    _watchers = 0;
-    _quickTimer?.cancel();
-    _quickTimer = null;
+    if (--_watchers < 0) _watchers = 0;
   }
 
   Future<void> _quick() async {
-    if (_quickRunning || _running != null || !_server.setUpNow) return;
+    if (_quickRunning || !_server.setUpNow) return;
+    final waiting = status == SyncStatus.waiting;
+    if (!waiting && !(_watchers > 0 && status == SyncStatus.on)) return;
     _quickRunning = true;
     try {
-      if (status == SyncStatus.waiting) {
+      if (waiting) {
         await _checkJoin();
         // Let in: sync everything now.
         if (status == SyncStatus.on) {
-          unawaited(_tick(pullPlayback: true, filesNow: true));
+          unawaited(_tick(pullPlayback: true, filesNow: true, queue: true));
         }
-      } else if (status == SyncStatus.on) {
+      } else {
         await _refreshGroup();
       }
     } catch (_) {
@@ -386,6 +437,15 @@ class SyncService extends ChangeNotifier {
     } finally {
       _quickRunning = false;
     }
+  }
+
+  /// Pull to refresh: whether this device was let in yet, or a full sync.
+  Future<void> refresh() async {
+    if (status == SyncStatus.waiting) {
+      await _checkJoin();
+      if (status != SyncStatus.on) return;
+    }
+    if (status == SyncStatus.on) await syncNow();
   }
 
   /// Syncs everything now, music files included.
@@ -416,8 +476,14 @@ class SyncService extends ChangeNotifier {
     }
   }
 
+  int _groupAsked = 0;
+
   Future<void> _refreshGroup() async {
+    // Only the latest answer counts: an older one, still on its way, would
+    // bring back what's changed since (like a request just approved).
+    final asked = ++_groupAsked;
     final (status, data) = await _call('GET', '/sync/me');
+    if (asked != _groupAsked) return;
     if (status != 200) throw SyncFailed(data['error'] as String? ?? '$status');
     _code = data['code'] as String;
     devices = [
@@ -436,11 +502,12 @@ class SyncService extends ChangeNotifier {
     ];
     requests = [
       for (final r in data['requests'] as List)
-        SyncRequest(
-          r['id'] as String,
-          r['name'] as String? ?? 'Device',
-          r['platform'] as String? ?? '',
-        ),
+        if (!_answered.contains(r['id']))
+          SyncRequest(
+            r['id'] as String,
+            r['name'] as String? ?? 'Device',
+            r['platform'] as String? ?? '',
+          ),
     ];
     notifyListeners();
   }
@@ -700,13 +767,23 @@ class SyncService extends ChangeNotifier {
     final player = PlayerService.instance.player;
     player.playingStream.listen((_) => _playbackChanged());
     player.currentIndexStream.listen((_) => _playbackChanged());
-    Timer.periodic(const Duration(seconds: 30), (_) {
+    Timer.periodic(const Duration(seconds: 15), (_) {
       if (player.playing) _pushPlaybackNow();
     });
   }
 
+  /// When another device's song was last picked up here: the player's own
+  /// events from that aren't this device playing.
+  DateTime _appliedAt = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// The other device's latest report already followed here.
+  int _lastPulledAt = 0;
+
   void _playbackChanged() {
-    if (_applyingPlayback) return;
+    if (_applyingPlayback ||
+        DateTime.now().difference(_appliedAt) < const Duration(seconds: 2)) {
+      return;
+    }
     _lastLocalPlayback = DateTime.now().millisecondsSinceEpoch;
     _pushSoon?.cancel();
     _pushSoon = Timer(const Duration(seconds: 2), _pushPlaybackNow);
@@ -743,6 +820,8 @@ class SyncService extends ChangeNotifier {
             : _lastLocalPlayback,
         'device': _deviceId,
         'name': deviceName,
+        // When this was sent: where it got to by now can be worked out.
+        'at': DateTime.now().millisecondsSinceEpoch,
       };
       for (var attempt = 0; attempt < 2; attempt++) {
         final (status, data) = await _call(
@@ -773,8 +852,17 @@ class SyncService extends ChangeNotifier {
     final doc = (data['data'] as Map?)?.cast<String, dynamic>();
     if (doc == null || doc['device'] == _deviceId) return;
     final when = doc['t'] as int? ?? 0;
+    final at = doc['at'] as int? ?? when;
     final service = PlayerService.instance;
-    if (when <= _lastLocalPlayback || service.player.playing) return;
+    // Played (or changed) here since: this device's own, kept.
+    if (when < _lastLocalPlayback || service.player.playing) return;
+    if (at <= _lastPulledAt) return;
+    _lastPulledAt = at;
+    // Where it is now, if it's still playing there.
+    var position = doc['pos'] as int? ?? 0;
+    if (doc['playing'] == true) {
+      position += max(0, DateTime.now().millisecondsSinceEpoch - at);
+    }
     final saved = _savedOf((doc['track'] as Map).cast<String, Object?>());
     final library = Library.instance;
     Track? track;
@@ -785,6 +873,13 @@ class SyncService extends ChangeNotifier {
     }
     if (track == null) {
       AppLog.add('sync: ${doc['name']} played a song not on this device');
+      return;
+    }
+    // The same song here already: just move to where it got to.
+    if (service.currentTrack?.path == track.path) {
+      _appliedAt = DateTime.now();
+      await service.player.seek(Duration(milliseconds: position));
+      _lastLocalPlayback = when;
       return;
     }
     Playlist? playlist;
@@ -820,13 +915,14 @@ class SyncService extends ChangeNotifier {
         playlist: playlist,
         sequence: index < 0 || playlist == null ? [track] : tracks,
         index: playlist == null ? 0 : index,
-        position: Duration(milliseconds: doc['pos'] as int? ?? 0),
+        position: Duration(milliseconds: position),
         shuffle: false,
         loop: service.player.loopMode == LoopMode.off
             ? LoopMode.all
             : service.player.loopMode,
       );
       _lastLocalPlayback = when;
+      _appliedAt = DateTime.now();
       AppLog.add('sync: carried on from ${doc['name']}');
       handoff.value = doc['name'] as String?;
     } finally {
@@ -982,7 +1078,7 @@ class SyncService extends ChangeNotifier {
     if (download.isNotEmpty || deleteHere.isNotEmpty) {
       await Library.instance.rescan();
       // Playlists naming the new songs can find them now.
-      await _syncLibrary();
+      await _syncLibrarySerially();
     }
   }
 

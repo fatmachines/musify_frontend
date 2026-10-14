@@ -142,7 +142,13 @@ void main() {
       );
       await sync.syncNow();
       expect(sync.requests.single.name, 'Mac');
+      // Approving while the Sync screen's quick checks run alongside.
+      sync.watch();
       await sync.answer(sync.requests.single, approve: true);
+      expect(sync.requests, isEmpty, reason: 'the approval box goes away');
+      await Future<void>.delayed(const Duration(seconds: 4));
+      expect(sync.requests, isEmpty, reason: 'and stays away');
+      sync.unwatch();
       final (_, status) = await mac('GET', '/sync/join/${joined['request']}');
       expect(status['status'], 'approved');
       final token = status['token'] as String;
@@ -242,6 +248,37 @@ void main() {
         const Duration(seconds: 42),
       );
       expect(sync.handoff.value, 'Mac');
+
+      // The Mac plays on: this device, idle, follows where it's got to.
+      final (_, latest) = await mac(
+        'GET',
+        '/sync/state/playback',
+        token: token,
+      );
+      await mac(
+        'PUT',
+        '/sync/state/playback',
+        token: token,
+        body: {
+          'rev': latest['rev'],
+          'data': {
+            'track': {'sync': 'Pop/b.mp3'},
+            'pos': 90000,
+            'playing': false,
+            'playlist': null,
+            't': now,
+            'at': now + 5000,
+            'device': 'mac-device-0001',
+            'name': 'Mac',
+          },
+        },
+      );
+      await sync.syncNow();
+      expect(PlayerService.instance.currentTrack?.path, endsWith('b.mp3'));
+      expect(
+        PlayerService.instance.player.position,
+        const Duration(seconds: 90),
+      );
     },
     skip: runnable ? false : 'no backend here',
   );
