@@ -434,12 +434,16 @@ class _SearchTabState extends State<SearchTab> {
 
   Widget _grid(List<Widget> cards) => SliverPadding(
     padding: const EdgeInsets.symmetric(horizontal: 16),
-    sliver: SliverGrid.count(
-      crossAxisCount: 2,
-      mainAxisSpacing: 14,
-      crossAxisSpacing: 14,
-      childAspectRatio: 1.75,
-      children: cards,
+    // Two to a row on a phone; on a wide window as many as fit, so the
+    // cards keep their size.
+    sliver: SliverGrid(
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 300,
+        mainAxisSpacing: 14,
+        crossAxisSpacing: 14,
+        childAspectRatio: 1.75,
+      ),
+      delegate: SliverChildListDelegate(cards),
     ),
   );
 }
@@ -734,22 +738,26 @@ class _Hint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(32, 48, 32, 0),
-      child: Column(
-        children: [
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.subtle, fontSize: 14),
-          ),
-        ],
+    // Centred across the page however wide it is.
+    return Align(
+      alignment: Alignment.topCenter,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(32, 48, 32, 0),
+        child: Column(
+          children: [
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.subtle, fontSize: 14),
+            ),
+          ],
+        ),
       ),
     );
   }
