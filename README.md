@@ -66,7 +66,9 @@ or open `macos/Runner.xcworkspace` in Xcode, pick your team under **Runner →
 Signing & Capabilities**, and Run. On a wide window Musify switches to a
 desktop layout (library sidebar, search bar on top, player across the
 bottom; space plays and pauses). The app is sandboxed: music folders are
-added with the open panel and stay readable across launches.
+added with the open panel and stay readable across launches. Debug builds
+(`flutter run`) are `com.fatmachines.musify.dev`, with their own data, so
+they don't clash with a signed release build installed on the same Mac.
 
 To hand the Mac app to others, `scripts/make_dmg.sh` builds it, signs it
 with your Developer ID, packs `dist/Musify-<version>.dmg` and has Apple
