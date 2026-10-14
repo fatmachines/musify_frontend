@@ -275,10 +275,14 @@ class _SeekBarState extends State<_SeekBar> {
       listenable: loaded,
       builder: (context, _) => StreamBuilder<Duration>(
         stream: PlayerService.instance.shownPosition,
+        initialData: PlayerService.instance.shownPositionNow,
         builder: (context, snapshot) {
           final total = player.duration ?? Duration.zero;
           final max = total.inMilliseconds.toDouble();
-          final position = (snapshot.data ?? Duration.zero).inMilliseconds
+          final position = PlayerService
+              .instance
+              .shownPositionNow
+              .inMilliseconds
               .toDouble()
               .clamp(0.0, max);
           // How far a YouTube video has loaded, like YouTube's grey bar.

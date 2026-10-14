@@ -395,10 +395,43 @@ class PlayerService {
 
   /// Where the song is, as the seek bars show it (another device's,
   /// worked out between its reports, while controlling it).
-  Stream<Duration> get shownPosition => Stream.periodic(
-    const Duration(milliseconds: 250),
-    (_) => _remote ? remote!.position ?? player.position : player.position,
-  );
+  /// One stream for every bar; it ticks only while something listens. Bars
+  /// read [shownPositionNow] when they redraw, so a redraw for another
+  /// reason (letting go of the thumb) never shows a stale tick.
+  late final Stream<Duration> shownPosition =
+      Stream.periodic(
+        const Duration(milliseconds: 250),
+        (_) => shownPositionNow,
+      ).asBroadcastStream(
+        onListen: (ticks) => ticks.resume(),
+        onCancel: (ticks) => ticks.pause(),
+      );
+
+  /// [shownPosition] right now. Just after a seek this is where the seek
+  /// went, until the player gets there: seeking (YouTube's especially, or
+  /// another device's) takes a moment, and the bar would otherwise jump
+  /// back to where it was and then forward again.
+  Duration get shownPositionNow {
+    final reported = _remote
+        ? remote!.position ?? player.position
+        : player.position;
+    final target = _seekTarget;
+    if (target == null) return reported;
+    final since = DateTime.now().difference(_seekAt);
+    final expected = shownPlaying.value ? target + since : target;
+    final arrived = (reported - expected).abs() < const Duration(seconds: 2);
+    if (arrived ||
+        since > const Duration(seconds: 6) ||
+        currentTrack?.path != _seekTrack?.path) {
+      _seekTarget = null;
+      return reported;
+    }
+    return expected;
+  }
+
+  Duration? _seekTarget;
+  DateTime _seekAt = DateTime.now();
+  Track? _seekTrack;
 
   /// Works out [shownPlaying] again (sync calls this when the other
   /// device's state changes).
@@ -411,6 +444,9 @@ class PlayerService {
   }
 
   Future<void> seekTo(Duration position) async {
+    _seekTarget = position;
+    _seekAt = DateTime.now();
+    _seekTrack = currentTrack;
     if (_remote) return remote!.send('seek', position);
     return player.seek(position);
   }

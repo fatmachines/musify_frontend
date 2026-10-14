@@ -190,9 +190,10 @@ class _Progress extends StatelessWidget {
       listenable: YouTubeWebPlayer.instance.buffered,
       builder: (context, _) => StreamBuilder<Duration>(
         stream: PlayerService.instance.shownPosition,
+        initialData: PlayerService.instance.shownPositionNow,
         builder: (context, snapshot) {
           final total = player.duration?.inMilliseconds ?? 0;
-          final position = snapshot.data?.inMilliseconds ?? 0;
+          final position = service.shownPositionNow.inMilliseconds;
           final fraction = total == 0
               ? 0.0
               : (position / total).clamp(0.0, 1.0);

@@ -673,10 +673,14 @@ class _SeekState extends State<_Seek> {
       listenable: loaded,
       builder: (context, _) => StreamBuilder<Duration>(
         stream: PlayerService.instance.shownPosition,
+        initialData: PlayerService.instance.shownPositionNow,
         builder: (context, snapshot) {
           final total = (player.duration ?? Duration.zero).inMilliseconds
               .toDouble();
-          final position = (snapshot.data ?? Duration.zero).inMilliseconds
+          final position = PlayerService
+              .instance
+              .shownPositionNow
+              .inMilliseconds
               .toDouble()
               .clamp(0.0, total);
           final value = _dragging ?? position;
