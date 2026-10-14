@@ -76,7 +76,7 @@ class _ServerDialogState extends State<_ServerDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Downloads and YouTube charts come through your own Musify '
             'server (see the musify_backend repo). Enter its address and key:',
             style: TextStyle(color: AppColors.subtle, fontSize: 14),

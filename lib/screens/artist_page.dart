@@ -124,7 +124,7 @@ class _AlbumCard extends StatelessWidget {
             Text(
               [album.year, 'Album'].whereType<String>().join(' • '),
               maxLines: 1,
-              style: const TextStyle(color: AppColors.subtle, fontSize: 13),
+              style: TextStyle(color: AppColors.subtle, fontSize: 13),
             ),
           ],
         ),
@@ -170,7 +170,7 @@ class _LoadingState<T> extends State<_Loading<T>> {
                     children: [
                       Text(
                         "Couldn't load ${widget.title}",
-                        style: const TextStyle(color: AppColors.subtle),
+                        style: TextStyle(color: AppColors.subtle),
                       ),
                       const SizedBox(height: 12),
                       TextButton(
@@ -180,7 +180,7 @@ class _LoadingState<T> extends State<_Loading<T>> {
                       ),
                     ],
                   )
-                : const CircularProgressIndicator(color: AppColors.green),
+                : CircularProgressIndicator(color: AppColors.green),
           ),
         );
       },

@@ -95,9 +95,11 @@ class _NamePlaylistScreenState extends State<_NamePlaylistScreen> {
                     fontSize: 32,
                     fontWeight: FontWeight.w700,
                   ),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     hintText: 'My playlist',
-                    hintStyle: TextStyle(color: Colors.white38),
+                    hintStyle: TextStyle(
+                      color: AppColors.text.withValues(alpha: 0.38),
+                    ),
                     enabledBorder: UnderlineInputBorder(
                       borderSide: BorderSide(color: AppColors.subtle),
                     ),
@@ -114,7 +116,7 @@ class _NamePlaylistScreenState extends State<_NamePlaylistScreen> {
                       onPressed: () => Navigator.of(context).pop(),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.text,
-                        side: const BorderSide(color: AppColors.subtle),
+                        side: BorderSide(color: AppColors.subtle),
                         padding: const EdgeInsets.symmetric(
                           horizontal: 28,
                           vertical: 14,
@@ -134,7 +136,7 @@ class _NamePlaylistScreenState extends State<_NamePlaylistScreen> {
                         onPressed: value.text.trim().isEmpty ? null : _submit,
                         style: FilledButton.styleFrom(
                           backgroundColor: AppColors.green,
-                          disabledBackgroundColor: Colors.white24,
+                          disabledBackgroundColor: AppColors.track,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 32,
                             vertical: 14,

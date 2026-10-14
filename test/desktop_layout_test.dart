@@ -15,17 +15,17 @@ void main() {
 
   test('only wide windows that are not phones get the desktop layout', () {
     expect(DesktopShell.fits(const Size(1440, 900)), isTrue); // Mac
-    expect(DesktopShell.fits(const Size(1194, 834)), isTrue); // iPad, wide
-    expect(DesktopShell.fits(const Size(834, 1194)), isFalse); // iPad, tall
-    expect(DesktopShell.fits(const Size(932, 430)), isFalse); // iPhone, wide
-    expect(DesktopShell.fits(const Size(393, 852)), isFalse); // iPhone
+    expect(DesktopShell.fits(Size(1194, 834)), isTrue); // iPad, wide
+    expect(DesktopShell.fits(Size(834, 1194)), isFalse); // iPad, tall
+    expect(DesktopShell.fits(Size(932, 430)), isFalse); // iPhone, wide
+    expect(DesktopShell.fits(Size(393, 852)), isFalse); // iPhone
   });
 
   testWidgets('typing in the top bar opens Search in the main panel', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
-    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.physicalSize = Size(1440, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(const MusifyApp());

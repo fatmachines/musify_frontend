@@ -95,7 +95,7 @@ class SongTile extends StatelessWidget {
                     Row(
                       children: [
                         if (current && playing) ...[
-                          const Icon(
+                          Icon(
                             Icons.graphic_eq,
                             size: 14,
                             color: AppColors.green,
@@ -114,7 +114,7 @@ class SongTile extends StatelessWidget {
                             '$subtitlePrefix${info?.artist ?? 'Unknown artist'}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppColors.subtle,
                               fontSize: 14,
                             ),
@@ -127,7 +127,7 @@ class SongTile extends StatelessWidget {
               ),
               IconButton(
                 tooltip: 'More',
-                icon: const Icon(Icons.more_horiz, color: AppColors.subtle),
+                icon: Icon(Icons.more_horiz, color: AppColors.subtle),
                 onPressed: onMore,
               ),
               ?trailing,

@@ -60,7 +60,7 @@ Future<void> showSongMenu(
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const Divider(color: Colors.white12, height: 16),
+              Divider(color: AppColors.faint, height: 16),
               if (onPlay != null)
                 ListTile(
                   leading: const Icon(Icons.play_circle_outline),

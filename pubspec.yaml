@@ -50,6 +50,7 @@ dependencies:
   webview_flutter_android: ^4.14.1
   webview_flutter_wkwebview: ^3.27.0
   flutter_svg: ^2.3.0
+  crypto: ^3.0.7
 
 # just_audio with Musify's iOS equalizer added (see packages/just_audio).
 dependency_overrides:

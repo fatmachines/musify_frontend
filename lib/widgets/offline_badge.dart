@@ -38,10 +38,7 @@ class OfflineBadge extends StatelessWidget {
     return Container(
       width: size,
       height: size,
-      decoration: const BoxDecoration(
-        color: AppColors.green,
-        shape: BoxShape.circle,
-      ),
+      decoration: BoxDecoration(color: AppColors.green, shape: BoxShape.circle),
       child: Icon(
         Icons.arrow_downward_rounded,
         size: size * 0.72,

@@ -8,7 +8,8 @@ import '../services/library.dart';
 import '../services/metadata_service.dart';
 import '../services/player_service.dart';
 import '../services/youtube/youtube_web_player.dart';
-import '../tabs/equalizer_tab.dart';
+import '../tabs/settings_tab.dart';
+import '../widgets/bottom_bar.dart';
 import '../tabs/home_tab.dart';
 import '../tabs/library_tab.dart';
 import '../tabs/search_tab.dart';
@@ -16,6 +17,7 @@ import '../theme.dart';
 import '../widgets/covers.dart';
 import '../widgets/download_sheet.dart';
 import '../widgets/navigation.dart';
+import '../widgets/toast.dart';
 
 /// Spotify's desktop layout, for the Mac and other wide windows: a top bar
 /// (back, home, search), "Your Library" down the left, the page in a
@@ -43,7 +45,7 @@ class _DesktopShellState extends State<DesktopShell>
   /// The full player, faded in over everything.
   late final _player = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 220),
+    duration: Duration(milliseconds: 220),
   );
 
   @override
@@ -52,11 +54,15 @@ class _DesktopShellState extends State<DesktopShell>
     _query.addListener(_onQueryChanged);
     _searchFocus.addListener(_onFocusChanged);
     searchFocusRequests.addListener(_searchFocus.requestFocus);
+    _stopHandoff = listenForHandoff(this);
   }
+
+  late final VoidCallback _stopHandoff;
 
   @override
   void dispose() {
     searchFocusRequests.removeListener(_searchFocus.requestFocus);
+    _stopHandoff();
     _query.dispose();
     _searchFocus.dispose();
     _player.dispose();
@@ -100,8 +106,8 @@ class _DesktopShellState extends State<DesktopShell>
     navigator.push(route);
   }
 
-  void _openEqualizer() =>
-      _navigator?.push(MaterialPageRoute(builder: (_) => const EqualizerTab()));
+  void _openSettings() =>
+      _navigator?.push(MaterialPageRoute(builder: (_) => const SettingsTab()));
 
   void _openPlayer() => _player.forward();
 
@@ -128,10 +134,10 @@ class _DesktopShellState extends State<DesktopShell>
         child: Stack(
           children: [
             // YouTube songs play in here, out of sight behind the app.
-            const Positioned(left: 0, top: 0, child: YouTubeWebHost()),
+            Positioned(left: 0, top: 0, child: YouTubeWebHost()),
             DownloadBannerLayout(
               child: Scaffold(
-                backgroundColor: Colors.black,
+                backgroundColor: AppColors.frame,
                 body: Column(
                   children: [
                     _TopBar(
@@ -139,19 +145,19 @@ class _DesktopShellState extends State<DesktopShell>
                       focus: _searchFocus,
                       onBack: () => _navigator?.maybePop(),
                       onHome: _home,
-                      onEqualizer: _openEqualizer,
+                      onSettings: _openSettings,
                     ),
                     Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        padding: EdgeInsets.symmetric(horizontal: 8),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            const SizedBox(
+                            SizedBox(
                               width: 320,
                               child: _Panel(child: _Sidebar()),
                             ),
-                            const SizedBox(width: 8),
+                            SizedBox(width: 8),
                             Expanded(
                               child: _Panel(
                                 child: Navigator(
@@ -161,7 +167,7 @@ class _DesktopShellState extends State<DesktopShell>
                                   // search field.
                                   requestFocus: false,
                                   onGenerateRoute: (_) => MaterialPageRoute(
-                                    builder: (_) => const HomeTab(),
+                                    builder: (_) => HomeTab(),
                                   ),
                                 ),
                               ),
@@ -179,13 +185,13 @@ class _DesktopShellState extends State<DesktopShell>
             AnimatedBuilder(
               animation: _player,
               builder: (context, child) => _player.value == 0
-                  ? const SizedBox.shrink()
+                  ? SizedBox.shrink()
                   : FadeTransition(opacity: _player, child: child),
               child: Material(
                 color: Colors.black.withValues(alpha: 0.85),
                 child: Center(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 520),
+                    constraints: BoxConstraints(maxWidth: 520),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: NowPlaying(onClose: _closePlayer),
@@ -241,8 +247,7 @@ class _Sidebar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Navigator(
-      onGenerateRoute: (_) =>
-          MaterialPageRoute(builder: (_) => const LibraryTab()),
+      onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => LibraryTab()),
     );
   }
 }
@@ -254,14 +259,14 @@ class _TopBar extends StatelessWidget {
   final FocusNode focus;
   final VoidCallback onBack;
   final VoidCallback onHome;
-  final VoidCallback onEqualizer;
+  final VoidCallback onSettings;
 
   const _TopBar({
     required this.query,
     required this.focus,
     required this.onBack,
     required this.onHome,
-    required this.onEqualizer,
+    required this.onSettings,
   });
 
   @override
@@ -284,26 +289,28 @@ class _TopBar extends StatelessWidget {
               iconSize: 16,
               onTap: onBack,
             ),
-            const Spacer(),
+            Spacer(),
             _RoundButton(
               icon: Icons.home_filled,
               tooltip: 'Home',
               onTap: onHome,
             ),
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
             ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 480),
+              constraints: BoxConstraints(maxWidth: 480),
               child: SizedBox(
                 width: 480,
                 child: _SearchField(query: query, focus: focus),
               ),
             ),
-            const Spacer(),
-            _RoundButton(
-              icon: Icons.equalizer_rounded,
-              tooltip: 'Equalizer',
-              size: 40,
-              onTap: onEqualizer,
+            Spacer(),
+            SyncBadge(
+              child: _RoundButton(
+                icon: Icons.settings_outlined,
+                tooltip: 'Settings',
+                size: 40,
+                onTap: onSettings,
+              ),
             ),
           ],
         ),
@@ -333,7 +340,7 @@ class _RoundButton extends StatelessWidget {
       message: tooltip,
       child: Material(
         color: AppColors.surface,
-        shape: const CircleBorder(),
+        shape: CircleBorder(),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
@@ -359,7 +366,7 @@ class _SearchField extends StatelessWidget {
       listenable: Listenable.merge([query, focus]),
       builder: (context, _) => Container(
         height: 48,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
+        padding: EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(24),
@@ -370,8 +377,8 @@ class _SearchField extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Icon(Icons.search, color: AppColors.subtle, size: 26),
-            const SizedBox(width: 10),
+            Icon(Icons.search, color: AppColors.subtle, size: 26),
+            SizedBox(width: 10),
             Expanded(
               child: TextField(
                 controller: query,
@@ -379,8 +386,8 @@ class _SearchField extends StatelessWidget {
                 cursorColor: AppColors.green,
                 autocorrect: false,
                 enableSuggestions: false,
-                style: const TextStyle(fontSize: 15),
-                decoration: const InputDecoration(
+                style: TextStyle(fontSize: 15),
+                decoration: InputDecoration(
                   isCollapsed: true,
                   border: InputBorder.none,
                   hintText: 'What do you want to play?',
@@ -391,7 +398,7 @@ class _SearchField extends StatelessWidget {
             if (query.text.isNotEmpty)
               GestureDetector(
                 onTap: query.clear,
-                child: const Icon(Icons.close, color: AppColors.subtle),
+                child: Icon(Icons.close, color: AppColors.subtle),
               ),
           ],
         ),
@@ -415,7 +422,7 @@ class _PlayerBar extends StatelessWidget {
     return SizedBox(
       height: 88,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: EdgeInsets.symmetric(horizontal: 16),
         child: StreamBuilder<SequenceState?>(
           stream: service.player.sequenceStateStream,
           builder: (context, _) {
@@ -425,7 +432,7 @@ class _PlayerBar extends StatelessWidget {
                 Expanded(
                   flex: 3,
                   child: track == null
-                      ? const SizedBox.shrink()
+                      ? SizedBox.shrink()
                       : _NowPlayingSong(track: track, onOpen: onOpen),
                 ),
                 Expanded(
@@ -434,7 +441,7 @@ class _PlayerBar extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       _Controls(enabled: track != null),
-                      const SizedBox(height: 4),
+                      SizedBox(height: 4),
                       const _Seek(),
                     ],
                   ),
@@ -499,17 +506,17 @@ class _NowPlayingSong extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 2),
+              SizedBox(height: 2),
               Text(
                 info?.artist ?? 'Unknown artist',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: AppColors.subtle, fontSize: 12),
+                style: TextStyle(color: AppColors.subtle, fontSize: 12),
               ),
             ],
           ),
         ),
-        const SizedBox(width: 8),
+        SizedBox(width: 8),
         ListenableBuilder(
           listenable: Library.instance,
           builder: (context, _) {
@@ -562,7 +569,7 @@ class _Controls extends StatelessWidget {
           ),
         ),
         small(Icons.skip_previous_rounded, 'Previous', service.previous),
-        const SizedBox(width: 4),
+        SizedBox(width: 4),
         StreamBuilder<bool>(
           stream: player.playingStream,
           initialData: player.playing,
@@ -572,7 +579,7 @@ class _Controls extends StatelessWidget {
               message: playing ? 'Pause' : 'Play',
               child: Material(
                 color: enabled ? AppColors.text : AppColors.muted,
-                shape: const CircleBorder(),
+                shape: CircleBorder(),
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
                   onTap: enabled ? service.togglePlayback : null,
@@ -580,7 +587,7 @@ class _Controls extends StatelessWidget {
                     dimension: 36,
                     child: Icon(
                       playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                      color: Colors.black,
+                      color: AppColors.onText,
                       size: 24,
                     ),
                   ),
@@ -589,7 +596,7 @@ class _Controls extends StatelessWidget {
             );
           },
         ),
-        const SizedBox(width: 4),
+        SizedBox(width: 4),
         small(Icons.skip_next_rounded, 'Next', service.next),
         StreamBuilder<LoopMode>(
           stream: player.loopModeStream,
@@ -643,7 +650,7 @@ class _SeekState extends State<_Seek> {
           final buffered = service.currentTrack is YouTubeTrack
               ? loaded.value.inMilliseconds.toDouble().clamp(0.0, total)
               : null;
-          const time = TextStyle(color: AppColors.subtle, fontSize: 11);
+          final time = TextStyle(color: AppColors.subtle, fontSize: 11);
           return Row(
             children: [
               SizedBox(
@@ -659,8 +666,8 @@ class _SeekState extends State<_Seek> {
                   data: SliderTheme.of(context).copyWith(
                     trackHeight: 4,
                     activeTrackColor: AppColors.text,
-                    inactiveTrackColor: Colors.white24,
-                    secondaryActiveTrackColor: Colors.white38,
+                    inactiveTrackColor: AppColors.track,
+                    secondaryActiveTrackColor: AppColors.loaded,
                     thumbColor: AppColors.text,
                     overlayShape: SliderComponentShape.noOverlay,
                     thumbShape: const RoundSliderThumbShape(
@@ -727,7 +734,7 @@ class _Volume extends StatelessWidget {
                 data: SliderTheme.of(context).copyWith(
                   trackHeight: 4,
                   activeTrackColor: AppColors.text,
-                  inactiveTrackColor: Colors.white24,
+                  inactiveTrackColor: AppColors.track,
                   thumbColor: AppColors.text,
                   overlayShape: SliderComponentShape.noOverlay,
                   thumbShape: const RoundSliderThumbShape(

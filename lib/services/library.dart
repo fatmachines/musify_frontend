@@ -12,6 +12,7 @@ import 'folder_access.dart';
 import 'library_scanner.dart';
 import 'library_store.dart';
 import 'player_service.dart';
+import 'sync_service.dart';
 
 const _customPrefix = 'custom:';
 const _tagPrefix = 'tag:';
@@ -299,7 +300,54 @@ class Library extends ChangeNotifier {
     }
     AppLog.add('delete: ${track.path}');
     await rescan();
+    // Gone from the user's other devices too, if it was a synced song.
+    SyncService.instance.filesChanged();
     return true;
+  }
+
+  // Sync ----------------------------------------------------------------------
+
+  /// What the user's other devices share (see SyncService): the saved
+  /// form, songs this device can't find included.
+  List<SavedPlaylist> get savedPlaylists => List.unmodifiable(_saved);
+  List<SavedTag> get savedTags => List.unmodifiable(_tagsSaved);
+  List<SavedTrack> get savedLiked => List.unmodifiable(_likedSaved);
+  List<String> get pinKeys => List.unmodifiable(_pins);
+
+  /// [playlist]'s name that survives the folder moving (see pins).
+  String stableKey(Playlist playlist) => _pinKey(playlist);
+
+  /// Where a saved song is on this device, or null.
+  String? resolve(SavedTrack saved) => _resolve(saved);
+
+  /// The saved form of [track] here (which folder, where inside it).
+  SavedTrack saveForm(Track track) => _save(track);
+
+  /// Takes on what sync merged from all devices.
+  void applySync({
+    List<SavedPlaylist>? playlists,
+    List<SavedTag>? tags,
+    List<SavedTrack>? liked,
+    List<String>? pins,
+  }) {
+    if (playlists != null) {
+      _saved = playlists;
+      LibraryStore.savePlaylists(_saved);
+    }
+    if (tags != null) {
+      _tagsSaved = tags;
+      LibraryStore.saveTags(_tagsSaved);
+    }
+    if (liked != null) {
+      _likedSaved = liked;
+      LibraryStore.saveLiked(_likedSaved);
+    }
+    if (pins != null) {
+      _pins = pins;
+      LibraryStore.savePinned(_pins);
+    }
+    _resolveCustom();
+    notifyListeners();
   }
 
   // Liked Songs -----------------------------------------------------------------

@@ -17,7 +17,7 @@ class EqualizerTab extends StatelessWidget {
       builder: (context, _) => Scaffold(
         appBar: AppBar(
           titleSpacing: 16,
-          title: const Row(
+          title: Row(
             children: [
               CircleAvatar(
                 radius: 16,
@@ -103,10 +103,7 @@ class EqualizerTab extends StatelessWidget {
                         ? 'Uses your phone\'s built-in equalizer.'
                         : 'Drag a point up or down to shape the sound. Changes '
                               'apply straight away, to every song.',
-                    style: const TextStyle(
-                      color: AppColors.subtle,
-                      fontSize: 13,
-                    ),
+                    style: TextStyle(color: AppColors.subtle, fontSize: 13),
                   ),
                 ],
               ),
@@ -293,7 +290,7 @@ class _CurvePainter extends CustomPainter {
 
     // 0 dB line and the ±dB guides.
     final guide = Paint()
-      ..color = Colors.white12
+      ..color = AppColors.faint
       ..strokeWidth = 1;
     for (final db in [maxDb, maxDb / 2, minDb / 2, minDb]) {
       canvas.drawLine(Offset(0, y(db)), Offset(size.width, y(db)), guide);
@@ -302,7 +299,7 @@ class _CurvePainter extends CustomPainter {
       Offset(0, y(0)),
       Offset(size.width, y(0)),
       Paint()
-        ..color = Colors.white30
+        ..color = AppColors.text.withValues(alpha: 0.3)
         ..strokeWidth = 1,
     );
 
@@ -350,7 +347,11 @@ class _CurvePainter extends CustomPainter {
 
     for (var i = 0; i < points.length; i++) {
       final big = i == active;
-      canvas.drawCircle(points[i], big ? 9 : 6, Paint()..color = Colors.white);
+      canvas.drawCircle(
+        points[i],
+        big ? 9 : 6,
+        Paint()..color = AppColors.text,
+      );
       canvas.drawCircle(
         points[i],
         big ? 9 : 6,

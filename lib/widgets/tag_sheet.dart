@@ -71,7 +71,7 @@ Future<void> showTagSheet(BuildContext context, Track track) {
                 'Tag',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
               ),
-              const Padding(
+              Padding(
                 padding: EdgeInsets.fromLTRB(24, 4, 24, 8),
                 child: Text(
                   'Mark songs to find them later, e.g. ones to replace with '
@@ -85,7 +85,7 @@ Future<void> showTagSheet(BuildContext context, Track track) {
                   leading: _Dot(color: tag.color),
                   title: Text(tag.name),
                   trailing: library.hasTag(track, tag)
-                      ? const Icon(Icons.check_circle, color: AppColors.green)
+                      ? Icon(Icons.check_circle, color: AppColors.green)
                       : const Icon(Icons.circle_outlined),
                   onTap: () => library.toggleTag(track, tag),
                   onLongPress: () => _confirmDelete(sheet, tag),
@@ -192,7 +192,9 @@ class _NewTagDialogState extends State<_NewTagDialog> {
                       color: c,
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: c == _color ? Colors.white : Colors.transparent,
+                        color: c == _color
+                            ? AppColors.text
+                            : Colors.transparent,
                         width: 3,
                       ),
                     ),

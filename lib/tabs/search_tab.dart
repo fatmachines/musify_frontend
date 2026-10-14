@@ -174,7 +174,7 @@ class _SearchTabState extends State<SearchTab> {
         child: Column(
           children: [
             if (!_active && !_fieldElsewhere)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.fromLTRB(16, 12, 16, 16),
                 child: Row(
                   children: [
@@ -228,7 +228,7 @@ class _SearchTabState extends State<SearchTab> {
                 child: Row(
                   children: [
                     if (!active) ...[
-                      const Icon(Icons.search, color: Colors.black, size: 28),
+                      Icon(Icons.search, color: AppColors.onText, size: 28),
                       const SizedBox(width: 8),
                     ],
                     Expanded(
@@ -242,7 +242,7 @@ class _SearchTabState extends State<SearchTab> {
                         autocorrect: false,
                         enableSuggestions: false,
                         style: TextStyle(
-                          color: active ? AppColors.text : Colors.black,
+                          color: active ? AppColors.text : AppColors.onText,
                           fontSize: 16,
                         ),
                         decoration: InputDecoration(
@@ -252,7 +252,9 @@ class _SearchTabState extends State<SearchTab> {
                               ? 'Songs, artists, playlists'
                               : 'What do you want to listen to?',
                           hintStyle: TextStyle(
-                            color: active ? AppColors.subtle : Colors.black87,
+                            color: active
+                                ? AppColors.subtle
+                                : AppColors.onText.withValues(alpha: 0.87),
                             fontSize: 16,
                             fontWeight: active
                                 ? FontWeight.w400
@@ -264,7 +266,7 @@ class _SearchTabState extends State<SearchTab> {
                     if (_query.text.isNotEmpty)
                       GestureDetector(
                         onTap: _query.clear,
-                        child: const Icon(
+                        child: Icon(
                           Icons.cancel,
                           color: AppColors.subtle,
                           size: 22,
@@ -513,7 +515,9 @@ class _BrowseCard extends StatelessWidget {
                 playlist.name,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
+                // White on the card, light theme or dark.
                 style: const TextStyle(
+                  color: Colors.white,
                   fontSize: 17,
                   fontWeight: FontWeight.w800,
                 ),
@@ -556,10 +560,7 @@ class _PlaylistRow extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     'Playlist • $songs ${songs == 1 ? 'song' : 'songs'}',
-                    style: const TextStyle(
-                      color: AppColors.subtle,
-                      fontSize: 14,
-                    ),
+                    style: TextStyle(color: AppColors.subtle, fontSize: 14),
                   ),
                 ],
               ),
@@ -660,7 +661,7 @@ class _ArtistCard extends StatelessWidget {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.black26,
+                          color: AppColors.faint,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Text(
@@ -674,7 +675,7 @@ class _ArtistCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right, color: AppColors.subtle),
+                Icon(Icons.chevron_right, color: AppColors.subtle),
               ],
             ),
           ),
@@ -712,7 +713,7 @@ class _YouTubeHeading extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           if (searching)
-            const SizedBox.square(
+            SizedBox.square(
               dimension: 16,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
@@ -720,10 +721,7 @@ class _YouTubeHeading extends StatelessWidget {
               ),
             )
           else if (note != null)
-            Text(
-              note,
-              style: const TextStyle(color: AppColors.subtle, fontSize: 14),
-            ),
+            Text(note, style: TextStyle(color: AppColors.subtle, fontSize: 14)),
         ],
       ),
     );
@@ -754,7 +752,7 @@ class _Hint extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.subtle, fontSize: 14),
+              style: TextStyle(color: AppColors.subtle, fontSize: 14),
             ),
           ],
         ),

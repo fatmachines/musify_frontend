@@ -8,6 +8,7 @@ import '../models/playlist.dart';
 import 'app_log.dart';
 import 'library.dart';
 import 'musify_server.dart';
+import 'sync_service.dart';
 
 /// Saves YouTube songs into library folders as M4A, through Musify's
 /// server (AAC as YouTube has it, with title, artist and cover). Then
@@ -100,8 +101,11 @@ class Downloads extends ChangeNotifier {
     notifyListeners();
     _callbacks.remove(track.videoId)?.call(file, error);
     // Once the queue is done, the library picks the new songs (and any new
-    // playlist folder) up.
-    if (_waiting.isEmpty) await Library.instance.rescan();
+    // playlist folder) up, and the user's other devices get them.
+    if (_waiting.isEmpty) {
+      await Library.instance.rescan();
+      SyncService.instance.filesChanged();
+    }
     _next();
   }
 

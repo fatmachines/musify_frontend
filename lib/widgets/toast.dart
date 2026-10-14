@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/sync_service.dart';
 import '../theme.dart';
 
 /// A short message near the bottom of the screen, above everything (the
@@ -72,8 +73,8 @@ class _ToastState extends State<_Toast> with SingleTickerProviderStateMixin {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Text(
                 widget.message,
-                style: const TextStyle(
-                  color: Colors.black,
+                style: TextStyle(
+                  color: AppColors.onText,
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                 ),
@@ -84,4 +85,23 @@ class _ToastState extends State<_Toast> with SingleTickerProviderStateMixin {
       ),
     );
   }
+}
+
+/// Shows "Picked up where you left off on (device)" when sync brought over
+/// what another device was playing. For the app's shells; returns how to
+/// stop.
+VoidCallback listenForHandoff(State state) {
+  final handoff = SyncService.instance.handoff;
+  void show() {
+    final name = handoff.value;
+    if (name == null || !state.mounted) return;
+    handoff.value = null;
+    showToastOn(
+      Overlay.of(state.context, rootOverlay: true),
+      'Picked up where you left off on $name',
+    );
+  }
+
+  handoff.addListener(show);
+  return () => handoff.removeListener(show);
 }

@@ -35,19 +35,22 @@ class NowPlaying extends StatelessWidget {
       initialData: service.currentTrack,
       builder: (context, snapshot) {
         final track = snapshot.data;
-        if (track == null) return const ColoredBox(color: AppColors.background);
+        if (track == null) return ColoredBox(color: AppColors.background);
         return FutureBuilder<Color?>(
           future: trackColor(track),
           initialData: loadedTrackColor(track),
           builder: (context, color) {
             final accent = color.data ?? _fallbackColor;
             return AnimatedContainer(
-              duration: const Duration(milliseconds: 400),
+              duration: Duration(milliseconds: 400),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [accent, Color.lerp(accent, Colors.black, 0.7)!],
+                  colors: [
+                    AppColors.tint(accent),
+                    AppColors.backdrop(accent, 0.7),
+                  ],
                 ),
               ),
               // Sits outside any Scaffold, so it brings its own Material
@@ -82,7 +85,7 @@ class _Body extends StatelessWidget {
     final playlist = PlayerService.instance.current;
     final lyrics = info?.lyrics;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         children: [
           SizedBox(
@@ -93,12 +96,12 @@ class _Body extends StatelessWidget {
                 // press circles are round them), the buttons nudged out so
                 // the icons still line up with the cover's edges.
                 Transform.translate(
-                  offset: const Offset(-8, 0),
+                  offset: Offset(-8, 0),
                   child: IconButton(
                     tooltip: 'Close',
                     iconSize: 32,
                     onPressed: onClose,
-                    icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                    icon: Icon(Icons.keyboard_arrow_down_rounded),
                   ),
                 ),
                 Expanded(
@@ -107,18 +110,15 @@ class _Body extends StatelessWidget {
                     textAlign: TextAlign.center,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                   ),
                 ),
                 Transform.translate(
-                  offset: const Offset(12, 0),
+                  offset: Offset(12, 0),
                   child: IconButton(
                     tooltip: 'More',
                     onPressed: () => _showMore(context, track),
-                    icon: const Icon(Icons.more_horiz),
+                    icon: Icon(Icons.more_horiz),
                   ),
                 ),
               ],
@@ -162,53 +162,50 @@ class _Body extends StatelessWidget {
                       info?.title ?? track.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppColors.text,
                         fontSize: 22,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    SizedBox(height: 4),
                     Text(
                       info?.artist ?? 'Unknown artist',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.subtle,
-                        fontSize: 16,
-                      ),
+                      style: TextStyle(color: AppColors.subtle, fontSize: 16),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          const _SeekBar(),
-          const SizedBox(height: 4),
-          const _Controls(),
-          const SizedBox(height: 8),
+          SizedBox(height: 16),
+          _SeekBar(),
+          SizedBox(height: 4),
+          _Controls(),
+          SizedBox(height: 8),
           Row(
             children: [
-              const _RepeatButton(),
-              const Spacer(),
+              _RepeatButton(),
+              Spacer(),
               IconButton(
                 tooltip: 'Share',
                 onPressed: () => _share(context, track),
-                icon: const Icon(Icons.ios_share, size: 22),
+                icon: Icon(Icons.ios_share, size: 22),
               ),
               IconButton(
                 tooltip: 'Queue',
                 onPressed: () => showQueueSheet(context),
-                icon: const Icon(Icons.queue_music, size: 24),
+                icon: Icon(Icons.queue_music, size: 24),
               ),
             ],
           ),
           if (lyrics != null) ...[
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             _LyricsCard(track: track, lyrics: lyrics),
           ],
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
         ],
       ),
     );
@@ -233,10 +230,10 @@ class _LikeButton extends StatelessWidget {
           // Flush with the cover's right edge.
           padding: EdgeInsets.zero,
           alignment: Alignment.centerRight,
-          constraints: const BoxConstraints.tightFor(width: 48, height: 44),
+          constraints: BoxConstraints.tightFor(width: 48, height: 44),
           onPressed: () => Library.instance.toggleLike(track),
           icon: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 180),
+            duration: Duration(milliseconds: 180),
             transitionBuilder: (child, animation) =>
                 ScaleTransition(scale: animation, child: child),
             child: Icon(
@@ -292,16 +289,12 @@ class _SeekBarState extends State<_SeekBar> {
                   trackHeight: 4,
                   padding: EdgeInsets.zero,
                   activeTrackColor: AppColors.text,
-                  inactiveTrackColor: Colors.white24,
-                  secondaryActiveTrackColor: Colors.white54,
+                  inactiveTrackColor: AppColors.track,
+                  secondaryActiveTrackColor: AppColors.loaded,
                   thumbColor: AppColors.text,
-                  overlayColor: Colors.white24,
-                  thumbShape: const RoundSliderThumbShape(
-                    enabledThumbRadius: 6,
-                  ),
-                  overlayShape: const RoundSliderOverlayShape(
-                    overlayRadius: 14,
-                  ),
+                  overlayColor: AppColors.track,
+                  thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6),
+                  overlayShape: RoundSliderOverlayShape(overlayRadius: 14),
                 ),
                 child: SizedBox(
                   height: 24,
@@ -322,7 +315,7 @@ class _SeekBarState extends State<_SeekBar> {
               Row(
                 children: [
                   Text(_format(shown), style: _timeStyle),
-                  const Spacer(),
+                  Spacer(),
                   Text('-${_format(total - shown)}', style: _timeStyle),
                 ],
               ),
@@ -333,7 +326,8 @@ class _SeekBarState extends State<_SeekBar> {
     );
   }
 
-  static const _timeStyle = TextStyle(color: AppColors.subtle, fontSize: 11);
+  static TextStyle get _timeStyle =>
+      TextStyle(color: AppColors.subtle, fontSize: 11);
 }
 
 String _format(Duration d) {
@@ -390,7 +384,7 @@ class _Controls extends StatelessWidget {
                     child: Icon(
                       playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
                       size: 38,
-                      color: Colors.black,
+                      color: AppColors.onText,
                     ),
                   ),
                 ),
@@ -512,7 +506,7 @@ class _LyricsCard extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.12),
+          color: AppColors.faint,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Column(
@@ -593,7 +587,7 @@ void _showMore(BuildContext context, Track track) {
           mainAxisSize: MainAxisSize.min,
           children: [
             _sheetHeader(track),
-            const Divider(color: Colors.white12, height: 16),
+            Divider(color: AppColors.faint, height: 16),
             ListTile(
               leading: const Icon(Icons.add_circle_outline),
               title: const Text('Add to playlist'),
@@ -655,7 +649,7 @@ void _showMore(BuildContext context, Track track) {
                   LoopMode.off => 'Off',
                   LoopMode.all => 'All',
                   LoopMode.one => 'One',
-                }, style: const TextStyle(color: AppColors.subtle)),
+                }, style: TextStyle(color: AppColors.subtle)),
                 onTap: service.cycleRepeat,
               ),
             ),
@@ -719,7 +713,7 @@ void _showSleepTimer(BuildContext context) {
               ),
               if (timer != null)
                 ListTile(
-                  title: const Text(
+                  title: Text(
                     'Turn off timer',
                     style: TextStyle(color: AppColors.green),
                   ),
@@ -763,7 +757,7 @@ class _SleepCountdownState extends State<_SleepCountdown> {
     final text = endsAt == null
         ? 'Stops at the end of this track'
         : 'Stops in ${_format(endsAt.difference(DateTime.now()))}';
-    return Text(text, style: const TextStyle(color: AppColors.green));
+    return Text(text, style: TextStyle(color: AppColors.green));
   }
 }
 

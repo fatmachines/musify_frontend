@@ -46,11 +46,7 @@ class MiniPlayer extends StatelessWidget {
               margin: const EdgeInsets.fromLTRB(8, 0, 8, 10),
               height: 60,
               decoration: BoxDecoration(
-                color: Color.lerp(
-                  color.data ?? _fallbackColor,
-                  Colors.black,
-                  0.3,
-                ),
+                color: AppColors.backdrop(color.data ?? _fallbackColor, 0.3),
                 borderRadius: BorderRadius.circular(8),
               ),
               clipBehavior: Clip.antiAlias,
@@ -114,7 +110,7 @@ class _TrackText extends StatelessWidget {
               info?.title ?? track.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppColors.text,
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
@@ -125,7 +121,7 @@ class _TrackText extends StatelessWidget {
               info?.artist ?? 'Unknown artist',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: AppColors.subtle, fontSize: 13),
+              style: TextStyle(color: AppColors.subtle, fontSize: 13),
             ),
           ],
         );
@@ -188,10 +184,10 @@ class _Progress extends StatelessWidget {
               height: 2,
               child: Stack(
                 children: [
-                  Container(color: Colors.white24),
+                  Container(color: AppColors.track),
                   FractionallySizedBox(
                     widthFactor: buffered,
-                    child: Container(color: Colors.white54),
+                    child: Container(color: AppColors.loaded),
                   ),
                   FractionallySizedBox(
                     widthFactor: fraction,

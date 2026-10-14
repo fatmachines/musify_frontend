@@ -93,7 +93,7 @@ class _HomeTabState extends State<HomeTab> {
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                     child: Row(
                       children: [
-                        const CircleAvatar(
+                        CircleAvatar(
                           radius: 16,
                           backgroundColor: AppColors.green,
                           child: Icon(
@@ -198,7 +198,7 @@ extension on _HomeTabState {
         const _SectionTitle('Charts'),
         SliverToBoxAdapter(
           child: _chartsError == null
-              ? const SizedBox(
+              ? SizedBox(
                   height: 120,
                   child: Center(
                     child: CircularProgressIndicator(color: AppColors.green),
@@ -314,7 +314,9 @@ class _ChartCard extends StatelessWidget {
                       children: [
                         const Text(
                           'Top 100',
+                          // White on the card, light theme or dark.
                           style: TextStyle(
+                            color: Colors.white,
                             fontSize: 24,
                             fontWeight: FontWeight.w800,
                             height: 1,
@@ -324,6 +326,7 @@ class _ChartCard extends StatelessWidget {
                         Text(
                           region.toUpperCase(),
                           style: const TextStyle(
+                            color: Colors.white,
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 1.2,
@@ -342,7 +345,7 @@ class _ChartCard extends StatelessWidget {
               '${chart.tracks.length == 1 ? 'song' : 'songs'}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: AppColors.subtle, fontSize: 13),
+              style: TextStyle(color: AppColors.subtle, fontSize: 13),
             ),
           ],
         ),
@@ -380,7 +383,7 @@ class _Notice extends StatelessWidget {
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(color: AppColors.subtle, fontSize: 14),
+              style: TextStyle(color: AppColors.subtle, fontSize: 14),
             ),
           ),
           TextButton(onPressed: onAction, child: Text(action)),
@@ -429,7 +432,7 @@ class _PinTile extends StatelessWidget {
               ),
             ),
             if (playing)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.only(left: 4),
                 child: Icon(Icons.graphic_eq, size: 16, color: AppColors.green),
               ),
@@ -453,7 +456,7 @@ class _PinHint extends StatelessWidget {
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(8),
       ),
-      child: const Row(
+      child: Row(
         children: [
           Icon(Icons.push_pin_outlined, color: AppColors.green),
           SizedBox(width: 12),

@@ -60,7 +60,7 @@ Future<void> showAddToPlaylist(BuildContext context, Track track) {
                 title: const Text('Liked Songs'),
                 subtitle: Text(_songs(library.liked.tracks.length)),
                 trailing: library.isLiked(track)
-                    ? const Icon(Icons.check_circle, color: AppColors.green)
+                    ? Icon(Icons.check_circle, color: AppColors.green)
                     : const Icon(Icons.add_circle_outline),
                 onTap: () {
                   final already = library.isLiked(track);
@@ -73,7 +73,7 @@ Future<void> showAddToPlaylist(BuildContext context, Track track) {
                 },
               ),
               if (playlists.isEmpty)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.all(24),
                   child: Text(
                     'You have no playlists yet.',
@@ -91,7 +91,7 @@ Future<void> showAddToPlaylist(BuildContext context, Track track) {
                   ),
                   subtitle: Text(_songs(playlist.tracks.length)),
                   trailing: library.contains(playlist, track)
-                      ? const Icon(Icons.check_circle, color: AppColors.green)
+                      ? Icon(Icons.check_circle, color: AppColors.green)
                       : const Icon(Icons.add_circle_outline),
                   onTap: () {
                     final already = library.contains(playlist, track);

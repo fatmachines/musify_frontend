@@ -1,0 +1,619 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../services/folder_access.dart';
+import '../services/library.dart';
+import '../services/musify_server.dart';
+import '../services/sync_service.dart';
+import '../theme.dart';
+import '../widgets/server_key_dialog.dart';
+import '../widgets/toast.dart';
+
+/// Sync between the user's devices: turn it on (this device's own code)
+/// or join another device's code, approve devices that ask, pick the
+/// music folder to sync, and see how it's going.
+class SyncScreen extends StatelessWidget {
+  const SyncScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final sync = SyncService.instance;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Sync')),
+      body: ListenableBuilder(
+        listenable: Listenable.merge([sync, MusifyServer.instance]),
+        builder: (context, _) => FutureBuilder<bool>(
+          future: MusifyServer.instance.isSetUp(),
+          builder: (context, server) {
+            if (server.data == null) return const SizedBox.shrink();
+            if (server.data == false) return const _NeedsServer();
+            return switch (sync.status) {
+              SyncStatus.off => const _Off(),
+              SyncStatus.waiting => const _Waiting(),
+              SyncStatus.on => const _On(),
+            };
+          },
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _run(BuildContext context, Future<void> Function() action) async {
+  try {
+    await action();
+  } catch (e) {
+    if (context.mounted) showToast(context, '$e');
+  }
+}
+
+class _Intro extends StatelessWidget {
+  const _Intro();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: Text(
+        'Keep your devices in step: playlists, tags, Liked Songs and Home '
+        'pins; what\'s playing, to carry on from another device; and, if '
+        'you pick a folder, your music files themselves.',
+        style: TextStyle(color: AppColors.subtle, fontSize: 14, height: 1.4),
+      ),
+    );
+  }
+}
+
+class _NeedsServer extends StatelessWidget {
+  const _NeedsServer();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      children: [
+        const _Intro(),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Sync goes through your Musify server. Set it up first.',
+                style: TextStyle(color: AppColors.text, fontSize: 15),
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => showServerKeyDialog(context),
+                child: const Text('Set up Musify server'),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Off extends StatefulWidget {
+  const _Off();
+
+  @override
+  State<_Off> createState() => _OffState();
+}
+
+class _OffState extends State<_Off> {
+  final _code = TextEditingController();
+  bool _working = false;
+
+  @override
+  void dispose() {
+    _code.dispose();
+    super.dispose();
+  }
+
+  Future<void> _do(Future<void> Function() action) async {
+    setState(() => _working = true);
+    await _run(context, action);
+    if (mounted) setState(() => _working = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sync = SyncService.instance;
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 120),
+      children: [
+        const _Intro(),
+        if (sync.lastError case final error?)
+          _Note(icon: Icons.info_outline, text: error),
+        const _SectionTitle('Start syncing'),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            'Get a sync code for this device, then enter it on your other '
+            'devices.',
+            style: TextStyle(color: AppColors.subtle, fontSize: 14),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton.icon(
+              onPressed: _working ? null : () => _do(sync.create),
+              icon: const Icon(Icons.sync),
+              label: const Text('Turn on sync'),
+            ),
+          ),
+        ),
+        const _SectionTitle('Or join another device'),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            'Enter the sync code shown on your other device. It will ask you '
+            'to approve this one.',
+            style: TextStyle(color: AppColors.subtle, fontSize: 14),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _code,
+                  textCapitalization: TextCapitalization.characters,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  cursorColor: AppColors.green,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    letterSpacing: 3,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'ABCD-1234',
+                    hintStyle: TextStyle(
+                      color: AppColors.muted,
+                      letterSpacing: 3,
+                    ),
+                  ),
+                  onSubmitted: (code) => _do(() => sync.join(code)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilledButton(
+                onPressed: _working
+                    ? null
+                    : () => _do(() => sync.join(_code.text)),
+                child: const Text('Join'),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Waiting extends StatelessWidget {
+  const _Waiting();
+
+  @override
+  Widget build(BuildContext context) {
+    final sync = SyncService.instance;
+    return ListView(
+      children: [
+        const SizedBox(height: 32),
+        Center(
+          child: SizedBox.square(
+            dimension: 40,
+            child: CircularProgressIndicator(color: AppColors.green),
+          ),
+        ),
+        const SizedBox(height: 24),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Text(
+            'Waiting for approval',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColors.text,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Text(
+            'On your other device, open Settings → Sync and approve '
+            '"${SyncService.deviceName}". Joining ${sync.code ?? ''}.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.subtle, fontSize: 14),
+          ),
+        ),
+        const SizedBox(height: 24),
+        Center(
+          child: TextButton(
+            onPressed: sync.cancelJoin,
+            child: const Text('Cancel'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _On extends StatelessWidget {
+  const _On();
+
+  IconData _icon(String platform) => switch (platform) {
+    'ios' => Icons.phone_iphone,
+    'android' => Icons.phone_android,
+    'macos' => Icons.laptop_mac,
+    _ => Icons.devices_other,
+  };
+
+  Future<void> _pickFolder(BuildContext context) async {
+    final sync = SyncService.instance;
+    final folders = Library.instance.folders;
+    final picked = await showModalBottomSheet<Object>(
+      context: context,
+      useRootNavigator: true,
+      showDragHandle: true,
+      builder: (sheet) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                'Music to sync',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                'Songs in this folder go to your other devices, and theirs '
+                'come here, in the same subfolders.',
+                style: TextStyle(color: AppColors.subtle, fontSize: 13),
+              ),
+            ),
+            for (final folder in folders)
+              ListTile(
+                leading: const Icon(Icons.folder_outlined),
+                title: Text(folder.name),
+                trailing: sync.musicFolder?.id == folder.id
+                    ? Icon(Icons.check_circle, color: AppColors.green)
+                    : null,
+                onTap: () => Navigator.of(sheet).pop(folder),
+              ),
+            if (folders.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  'Add a music folder in Your Library first.',
+                  style: TextStyle(color: AppColors.subtle),
+                ),
+              ),
+            ListTile(
+              leading: const Icon(Icons.block),
+              title: const Text("Don't sync music files"),
+              trailing: sync.musicFolder == null
+                  ? Icon(Icons.check_circle, color: AppColors.green)
+                  : null,
+              onTap: () => Navigator.of(sheet).pop(false),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null) return;
+    await sync.setMusicFolder(picked is LibraryFolder ? picked : null);
+  }
+
+  Future<void> _confirmLeave(BuildContext context) async {
+    final leave = await showDialog<bool>(
+      context: context,
+      useRootNavigator: true,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Stop syncing this device?'),
+        content: const Text(
+          'Its playlists, tags and songs stay here; they just stop '
+          'following your other devices.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialog).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialog).pop(true),
+            child: const Text('Stop syncing'),
+          ),
+        ],
+      ),
+    );
+    if (leave == true && context.mounted) {
+      await _run(context, SyncService.instance.leave);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sync = SyncService.instance;
+    final code = sync.code ?? '';
+    final files = sync.files;
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 120),
+      children: [
+        for (final request in sync.requests)
+          _Approval(
+            request: request,
+            icon: _icon(request.platform),
+            onAnswer: (approve) =>
+                _run(context, () => sync.answer(request, approve: approve)),
+          ),
+        // The code, big, to type on another device.
+        Container(
+          margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Your sync code',
+                style: TextStyle(color: AppColors.subtle, fontSize: 13),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: SelectableText(
+                      code,
+                      style: TextStyle(
+                        color: AppColors.text,
+                        fontSize: 34,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 4,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Copy',
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: code));
+                      showToast(context, 'Sync code copied');
+                    },
+                    icon: const Icon(Icons.copy),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Enter it on another device (Settings → Sync → Join), then '
+                'approve it here.',
+                style: TextStyle(color: AppColors.subtle, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+        const _SectionTitle('Devices'),
+        for (final device in sync.devices)
+          ListTile(
+            leading: Icon(_icon(device.platform)),
+            title: Text(
+              device.me ? '${device.name} (this device)' : device.name,
+            ),
+            subtitle: device.seen == null || device.me
+                ? null
+                : Text('Seen ${_ago(device.seen!)}'),
+            trailing: device.me
+                ? null
+                : IconButton(
+                    tooltip: 'Remove from sync',
+                    icon: const Icon(Icons.remove_circle_outline),
+                    onPressed: () =>
+                        _run(context, () => sync.removeDevice(device)),
+                  ),
+          ),
+        const _SectionTitle('Music files'),
+        ListTile(
+          leading: const Icon(Icons.folder_outlined),
+          title: Text(sync.musicFolder?.name ?? "Not syncing music files"),
+          subtitle: const Text(
+            'Same songs, in the same folders, on every device',
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => _pickFolder(context),
+        ),
+        if (files != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Syncing ${files.done + 1} of ${files.total}: ${files.current}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: AppColors.subtle, fontSize: 13),
+                ),
+                const SizedBox(height: 8),
+                LinearProgressIndicator(
+                  value: files.total == 0
+                      ? null
+                      : (files.done + files.fraction) / files.total,
+                  color: AppColors.green,
+                  backgroundColor: AppColors.faint,
+                ),
+              ],
+            ),
+          ),
+        const _SectionTitle('Status'),
+        ListTile(
+          leading: sync.busy
+              ? SizedBox.square(
+                  dimension: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.green,
+                  ),
+                )
+              : Icon(
+                  sync.lastError == null ? Icons.check_circle : Icons.error,
+                  color: sync.lastError == null
+                      ? AppColors.green
+                      : const Color(0xFFF15E6C),
+                ),
+          title: Text(
+            sync.busy
+                ? 'Syncing…'
+                : sync.lastSynced == null
+                ? 'Not synced yet'
+                : 'Synced ${_ago(sync.lastSynced!)}',
+          ),
+          subtitle: sync.lastError == null ? null : Text(sync.lastError!),
+          trailing: TextButton(
+            onPressed: sync.busy ? null : sync.syncNow,
+            child: const Text('Sync now'),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Center(
+          child: TextButton(
+            onPressed: () => _confirmLeave(context),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFF15E6C),
+            ),
+            child: const Text('Stop syncing this device'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _ago(DateTime time) {
+  final gone = DateTime.now().difference(time);
+  if (gone.inSeconds < 60) return 'just now';
+  if (gone.inMinutes < 60) return '${gone.inMinutes} min ago';
+  if (gone.inHours < 24) return '${gone.inHours} h ago';
+  return '${gone.inDays} d ago';
+}
+
+/// A device asking to join: approve or deny.
+class _Approval extends StatelessWidget {
+  final SyncRequest request;
+  final IconData icon;
+  final void Function(bool approve) onAnswer;
+
+  const _Approval({
+    required this.request,
+    required this.icon,
+    required this.onAnswer,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.green.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.green),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: AppColors.green),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '"${request.name}" wants to sync with this device',
+                  style: TextStyle(
+                    color: AppColors.text,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: () => onAnswer(false),
+                child: const Text('Deny'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: () => onAnswer(true),
+                child: const Text('Approve'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  final String text;
+
+  const _SectionTitle(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: AppColors.text,
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _Note extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _Note({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: AppColors.subtle),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(color: AppColors.subtle, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

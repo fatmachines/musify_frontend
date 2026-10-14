@@ -42,7 +42,7 @@ Future<void> showPlaylistActions(BuildContext context, Playlist playlist) {
                 '$songs ${songs == 1 ? 'song' : 'songs'}',
               ),
             ),
-            const Divider(color: Colors.white12, height: 16),
+            Divider(color: AppColors.faint, height: 16),
             if (youtube > 0)
               ListTile(
                 leading: const Icon(Icons.download_rounded),

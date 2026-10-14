@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/playlist.dart';
 import '../services/library.dart';
 import '../services/metadata_service.dart';
+import '../theme.dart';
 
 /// Playlist artwork: a 2x2 grid of four different song covers, or a single
 /// cover when the folder has fewer, or a placeholder when it has none.
@@ -150,8 +151,10 @@ class _Placeholder extends StatelessWidget {
     return Container(
       width: size,
       height: size,
-      color: const Color(0xFF282828),
-      child: Icon(icon, size: size * 0.45, color: const Color(0xFFB3B3B3)),
+      color: AppColors.elevated == AppColors.background
+          ? AppColors.chip
+          : AppColors.elevated,
+      child: Icon(icon, size: size * 0.45, color: AppColors.subtle),
     );
   }
 }

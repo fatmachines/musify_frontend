@@ -18,8 +18,13 @@ playlists, see the charts, and download songs into your folders.
   Australia and India.
 - **Downloads**: save a YouTube song, or a whole playlist, as M4A with title,
   artist and cover into one of your folders.
+- **Sync** between your devices: playlists, tags, Liked Songs, Home pins,
+  what's playing (pause on one, carry on from another) and, if you choose a
+  folder, the music files themselves, mirrored in the same subfolders. A
+  device joins with another's sync code, once approved there.
+- **Light or dark**, or as the device is set (Settings).
 
-Charts and downloads need your own
+Charts, downloads and sync need your own
 [Musify backend](https://github.com/fatmachines/musify_backend), a small
 server running yt-dlp: YouTube doesn't let phones download. Everything else
 works without it.

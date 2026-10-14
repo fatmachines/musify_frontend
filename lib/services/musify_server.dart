@@ -107,6 +107,42 @@ class MusifyServer extends ChangeNotifier {
     return (jsonDecode(response.body) as Map)['ytdlp'] as String;
   }
 
+  // Sync ----------------------------------------------------------------------
+
+  /// A request for sync (see SyncService): its status and JSON answer.
+  /// [token] is this device's sync token.
+  Future<(int, Map<String, dynamic>)> syncCall(
+    String method,
+    String path, {
+    Object? body,
+    String? token,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final request = http.Request(method, await syncUri(path))
+      ..headers.addAll(await syncHeaders(token));
+    if (body != null) {
+      request.headers['Content-Type'] = 'application/json';
+      request.body = jsonEncode(body);
+    }
+    final response = await http.Response.fromStream(
+      await request.send().timeout(timeout),
+    );
+    Map<String, dynamic> data;
+    try {
+      data = jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (_) {
+      data = {'error': 'the server answered ${response.statusCode}'};
+    }
+    return (response.statusCode, data);
+  }
+
+  Future<Uri> syncUri(String path) async => Uri.parse('${await _base()}$path');
+
+  Future<Map<String, String>> syncHeaders(String? token) async => {
+    ...await _headers(),
+    'X-Musify-Sync': ?token,
+  };
+
   // Playlists -----------------------------------------------------------------
 
   List<Playlist>? _charts;

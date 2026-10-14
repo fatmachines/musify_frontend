@@ -14,7 +14,7 @@ void main() {
 
   testWidgets('tapping Search again starts a search', (tester) async {
     SharedPreferences.setMockInitialValues({});
-    await tester.pumpWidget(const MusifyApp());
+    await tester.pumpWidget(MusifyApp());
     await tester.tap(find.text('Search'));
     await tester.pumpAndSettle();
     expect(searchFocused(tester), isFalse);

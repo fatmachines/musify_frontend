@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 import '../models/playlist.dart';
 import '../services/downloads.dart';
 import '../services/library.dart';
+import '../services/sync_service.dart';
 import '../theme.dart';
 import 'server_key_dialog.dart';
 import 'toast.dart';
@@ -71,7 +72,7 @@ Future<String?> pickDownloadFolder(
             ),
           ),
           if (folders.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.all(24),
               child: Text(
                 'Add a music folder in Your Library first.',
@@ -173,12 +174,15 @@ class DownloadBannerLayout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final downloads = Downloads.instance;
+    final sync = SyncService.instance;
     final media = MediaQuery.of(context);
     final top = media.padding.top;
     return ListenableBuilder(
-      listenable: downloads,
+      listenable: Listenable.merge([downloads, sync]),
       builder: (context, child) => TweenAnimationBuilder<double>(
-        tween: Tween(end: downloads.current == null ? 0 : 1),
+        tween: Tween(
+          end: downloads.current == null && sync.files == null ? 0 : 1,
+        ),
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeOutCubic,
         builder: (context, shown, child) => Column(
@@ -235,16 +239,25 @@ class _DownloadBannerState extends State<_DownloadBanner> {
   @override
   Widget build(BuildContext context) {
     final downloads = Downloads.instance;
+    final sync = SyncService.instance;
     return ListenableBuilder(
-      listenable: downloads,
+      listenable: Listenable.merge([downloads, sync]),
       builder: (context, _) {
         final track = downloads.current;
+        final files = sync.files;
         if (track != null) {
           _count =
               '${downloads.batchDone + 1}/${downloads.batchTotal} '
               'downloading…';
           _name = track.name;
           _progress = downloads.progressOf(track) ?? 0;
+        } else if (files != null) {
+          // Music files moving between this device and the others.
+          _count = '${files.done + 1}/${files.total} syncing…';
+          _name = files.current;
+          _progress = files.total == 0
+              ? 0
+              : (files.done + files.fraction) / files.total;
         }
         return Material(
           color: AppColors.surface,
@@ -260,7 +273,7 @@ class _DownloadBannerState extends State<_DownloadBanner> {
                       children: [
                         Text(
                           _count,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
                             color: AppColors.green,
@@ -277,7 +290,7 @@ class _DownloadBannerState extends State<_DownloadBanner> {
                         ),
                         Text(
                           '${(_progress * 100).round()}%',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
                             color: AppColors.subtle,
                           ),
@@ -290,7 +303,7 @@ class _DownloadBannerState extends State<_DownloadBanner> {
                   value: _progress > 0 ? _progress : null,
                   minHeight: 3,
                   color: AppColors.green,
-                  backgroundColor: Colors.white12,
+                  backgroundColor: AppColors.faint,
                 ),
               ],
             ),

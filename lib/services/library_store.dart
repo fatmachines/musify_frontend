@@ -12,13 +12,24 @@ class SavedTrack {
   final String? relative;
   final Map<String, Object?>? youtube;
 
-  const SavedTrack(this.path, {this.folderId, this.relative, this.youtube});
+  /// From another device (sync): how that device named the song, kept so
+  /// it isn't lost while this device can't find the file.
+  final Map<String, Object?>? ref;
+
+  const SavedTrack(
+    this.path, {
+    this.folderId,
+    this.relative,
+    this.youtube,
+    this.ref,
+  });
 
   Map<String, Object?> toJson() => {
     'path': path,
     if (folderId != null) 'folder': folderId,
     if (relative != null) 'rel': relative,
     if (youtube != null) 'youtube': youtube,
+    if (ref != null) 'ref': ref,
   };
 
   static SavedTrack fromJson(Map<String, Object?> json) => SavedTrack(
@@ -26,6 +37,7 @@ class SavedTrack {
     folderId: json['folder'] as String?,
     relative: json['rel'] as String?,
     youtube: (json['youtube'] as Map?)?.cast<String, Object?>(),
+    ref: (json['ref'] as Map?)?.cast<String, Object?>(),
   );
 }
 

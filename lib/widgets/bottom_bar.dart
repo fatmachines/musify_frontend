@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../services/sync_service.dart';
 import '../theme.dart';
 
-/// Spotify-style tab bar: no indicator, white when selected and grey when
-/// not, laid over the content on a gradient that fades it out to black.
+/// Spotify-style tab bar: no indicator, the text colour when selected and
+/// grey when not, laid over the content on a gradient that fades it out
+/// (to black, or white in the light theme).
 class BottomBar extends StatelessWidget {
   final int index;
   final ValueChanged<int> onSelect;
@@ -23,12 +25,19 @@ class BottomBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final bottom = MediaQuery.paddingOf(context).bottom;
     return Container(
-      decoration: const BoxDecoration(
+      // Black in the dark theme, white in the light one.
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0x00000000), Color(0xE6000000), Color(0xFF000000)],
-          stops: [0, 0.45, 1],
+          colors: [
+            AppColors.frame.withValues(alpha: 0),
+            AppColors.dark
+                ? AppColors.frame.withValues(alpha: 0.9)
+                : AppColors.background.withValues(alpha: 0.92),
+            AppColors.dark ? AppColors.frame : AppColors.background,
+          ],
+          stops: const [0, 0.45, 1],
         ),
       ),
       padding: EdgeInsets.only(top: 16, bottom: bottom > 0 ? bottom : 8),
@@ -58,11 +67,13 @@ class BottomBar extends StatelessWidget {
               ),
               _item(
                 3,
-                'Equalizer',
-                (c, s) => Icon(
-                  s ? Icons.equalizer_rounded : Icons.equalizer_outlined,
-                  color: c,
-                  size: 28,
+                'Settings',
+                (c, s) => SyncBadge(
+                  child: Icon(
+                    s ? Icons.settings : Icons.settings_outlined,
+                    color: c,
+                    size: 28,
+                  ),
                 ),
               ),
             ],
@@ -188,4 +199,25 @@ class _LibraryPainter extends CustomPainter {
   @override
   bool shouldRepaint(_LibraryPainter old) =>
       old.color != color || old.filled != filled;
+}
+
+/// A green dot on [child] while a device waits for approval to sync.
+class SyncBadge extends StatelessWidget {
+  final Widget child;
+
+  const SyncBadge({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final sync = SyncService.instance;
+    return ListenableBuilder(
+      listenable: sync,
+      builder: (context, _) => Badge(
+        isLabelVisible: sync.requests.isNotEmpty,
+        backgroundColor: AppColors.green,
+        smallSize: 10,
+        child: child,
+      ),
+    );
+  }
 }

@@ -258,7 +258,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   Widget _buildPage(BuildContext context) {
     final tracks = _playlist.tracks;
     final shown = _tagFiltered();
-    final barColor = Color.lerp(_accent, Colors.black, 0.4)!;
+    final barColor = AppColors.backdrop(_accent, 0.4);
     final collapse = _collapse;
     return Stack(
       children: [
@@ -345,7 +345,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [_accent, AppColors.background],
+          colors: [AppColors.tint(_accent), AppColors.background],
           stops: const [0, 0.85],
         ),
       ),
@@ -394,7 +394,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   _playlist.name,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppColors.text,
                     fontSize: 26,
                     fontWeight: FontWeight.w800,
@@ -414,7 +414,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
+                    Row(
                       children: [
                         CircleAvatar(
                           radius: 12,
@@ -439,7 +439,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.phone_iphone,
                           size: 16,
                           color: AppColors.subtle,
@@ -450,7 +450,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                             _summary(),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppColors.subtle,
                               fontSize: 13,
                             ),
@@ -482,7 +482,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   /// The playlist's ••• in a translucent circle.
   Widget _optionsButton({double size = 36}) => Material(
-    color: Colors.white.withValues(alpha: 0.12),
+    color: AppColors.faint,
     shape: const CircleBorder(),
     clipBehavior: Clip.antiAlias,
     child: InkWell(
@@ -517,7 +517,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [_accent, AppColors.background],
+          colors: [AppColors.tint(_accent), AppColors.background],
           stops: const [0, 0.9],
         ),
       ),
@@ -571,7 +571,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                     const SizedBox(height: 16),
                     Row(
                       children: [
-                        const CircleAvatar(
+                        CircleAvatar(
                           radius: 12,
                           backgroundColor: AppColors.green,
                           child: Icon(
@@ -618,7 +618,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               IconButton(
                 tooltip: 'Find on this page',
                 onPressed: _openSearch,
-                icon: const Icon(Icons.search, color: AppColors.subtle),
+                icon: Icon(Icons.search, color: AppColors.subtle),
               ),
             ],
           ),
@@ -746,7 +746,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                     child: Text(
                       "Couldn't find \"$query\"",
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppColors.text,
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
@@ -815,10 +815,10 @@ class _FindBar extends StatelessWidget {
         height: _findBarHeight,
         padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.12),
+          color: AppColors.faint,
           borderRadius: BorderRadius.circular(6),
         ),
-        child: const Row(
+        child: Row(
           children: [
             Icon(Icons.search, size: 22, color: AppColors.text),
             SizedBox(width: 8),
@@ -854,7 +854,7 @@ class _SearchField extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.search, size: 22, color: AppColors.subtle),
+          Icon(Icons.search, size: 22, color: AppColors.subtle),
           const SizedBox(width: 8),
           Expanded(
             child: TextField(
@@ -862,8 +862,8 @@ class _SearchField extends StatelessWidget {
               focusNode: focusNode,
               cursorColor: AppColors.green,
               textInputAction: TextInputAction.search,
-              style: const TextStyle(color: AppColors.text, fontSize: 14),
-              decoration: const InputDecoration(
+              style: TextStyle(color: AppColors.text, fontSize: 14),
+              decoration: InputDecoration(
                 isCollapsed: true,
                 border: InputBorder.none,
                 hintText: 'Find on this page',
@@ -874,7 +874,7 @@ class _SearchField extends StatelessWidget {
           if (controller.text.isNotEmpty)
             GestureDetector(
               onTap: controller.clear,
-              child: const Icon(Icons.close, size: 20, color: AppColors.subtle),
+              child: Icon(Icons.close, size: 20, color: AppColors.subtle),
             ),
         ],
       ),
@@ -982,7 +982,7 @@ class _EmptyPlaylist extends StatelessWidget {
                       '"Add to playlist". Song menus in your folders have it '
                       'too.',
             textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.subtle, fontSize: 14),
+            style: TextStyle(color: AppColors.subtle, fontSize: 14),
           ),
         ],
       ),

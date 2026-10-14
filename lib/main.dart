@@ -4,13 +4,15 @@ import 'package:flutter/material.dart';
 import 'desktop/desktop_shell.dart';
 import 'screens/now_playing.dart';
 import 'services/app_log.dart';
+import 'services/appearance.dart';
 import 'services/audio_handler.dart';
 import 'services/equalizer_service.dart';
 import 'services/playback_session.dart';
 import 'services/player_service.dart';
+import 'services/sync_service.dart';
 import 'services/voice_play.dart';
 import 'services/youtube/youtube_web_player.dart';
-import 'tabs/equalizer_tab.dart';
+import 'tabs/settings_tab.dart';
 import 'tabs/home_tab.dart';
 import 'tabs/library_tab.dart';
 import 'tabs/search_tab.dart';
@@ -18,14 +20,16 @@ import 'theme.dart';
 import 'widgets/bottom_bar.dart';
 import 'widgets/download_sheet.dart';
 import 'widgets/mini_player.dart';
+import 'widgets/toast.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Appearance.load();
   await PlayerService.init();
   try {
     await AudioService.init(
       builder: MusifyAudioHandler.new,
-      config: const AudioServiceConfig(
+      config: AudioServiceConfig(
         androidNotificationChannelId: 'com.fatmachines.musify.playback',
         androidNotificationChannelName: 'Playback',
         androidNotificationOngoing: true,
@@ -34,24 +38,63 @@ Future<void> main() async {
   } catch (e) {
     AppLog.add('audio service setup failed: $e');
   }
-  runApp(const MusifyApp());
+  runApp(MusifyApp());
   // Brings back what was playing last time, paused, and keeps it saved.
   PlaybackSession.start();
+  // Playlists, tags and what's playing, with the user's other devices.
+  SyncService.instance.start();
   EqualizerService.instance.init();
   VoicePlay.init();
   YouTubeWebPlayer.instance.attach();
 }
 
-class MusifyApp extends StatelessWidget {
+class MusifyApp extends StatefulWidget {
   const MusifyApp({super.key});
 
   @override
+  State<MusifyApp> createState() => _MusifyAppState();
+}
+
+/// Rebuilds everything when the appearance changes (Settings, or the
+/// device's own setting on "System"): the palette is read directly.
+class _MusifyAppState extends State<MusifyApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    Appearance.mode.addListener(_rebuild);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    Appearance.mode.removeListener(_rebuild);
+    super.dispose();
+  }
+
+  void _rebuild() => setState(() {});
+
+  @override
+  void didChangePlatformBrightness() {
+    if (Appearance.mode.value == ThemeMode.system) _rebuild();
+  }
+
+  Brightness get _brightness => switch (Appearance.mode.value) {
+    ThemeMode.light => Brightness.light,
+    ThemeMode.dark => Brightness.dark,
+    ThemeMode.system =>
+      WidgetsBinding.instance.platformDispatcher.platformBrightness,
+  };
+
+  @override
   Widget build(BuildContext context) {
+    final brightness = _brightness;
     return MaterialApp(
+      // A new tree for the new colours (pages read them directly).
+      key: ValueKey(brightness),
       title: 'Musify',
       debugShowCheckedModeBanner: false,
-      themeMode: ThemeMode.dark,
-      darkTheme: buildTheme(),
+      theme: buildTheme(brightness),
       // Spotify's desktop layout on wide windows (the Mac, iPad landscape),
       // the phone's tabs otherwise.
       home: Builder(
@@ -74,6 +117,15 @@ class _HomeShellState extends State<HomeShell>
     with SingleTickerProviderStateMixin {
   int _index = 0;
 
+  late final VoidCallback _stopHandoff;
+
+  @override
+  void initState() {
+    super.initState();
+    // "Picked up where you left off on …" when sync brings that over.
+    _stopHandoff = listenForHandoff(this);
+  }
+
   /// How far the full player is open: 0 is just the mini player, 1 is full
   /// screen. Drags move it directly; releases animate to either end.
   late final _player = AnimationController(
@@ -85,7 +137,7 @@ class _HomeShellState extends State<HomeShell>
   // the bottom bar visible and survive switching tabs.
   final _navigatorKeys = List.generate(4, (_) => GlobalKey<NavigatorState>());
 
-  static const _tabs = [HomeTab(), SearchTab(), LibraryTab(), EqualizerTab()];
+  static const _tabs = [HomeTab(), SearchTab(), LibraryTab(), SettingsTab()];
 
   /// Tapping the open tab goes back to its first page; on Search, tapping
   /// it again from there starts a search.
@@ -104,6 +156,7 @@ class _HomeShellState extends State<HomeShell>
 
   @override
   void dispose() {
+    _stopHandoff();
     _player.dispose();
     super.dispose();
   }

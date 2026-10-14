@@ -130,7 +130,7 @@ class _LibraryTabState extends State<LibraryTab> {
                   ),
                 ),
                 if (_library.folders.isEmpty)
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.all(24),
                     child: Text(
                       'No folders added yet.',
@@ -167,7 +167,7 @@ class _LibraryTabState extends State<LibraryTab> {
                   },
                 ),
                 if (_library.hidden.isNotEmpty) ...[
-                  const Divider(color: Colors.white12, height: 24),
+                  Divider(color: AppColors.faint, height: 24),
                   const Padding(
                     padding: EdgeInsets.only(bottom: 4),
                     child: Text(
@@ -246,7 +246,7 @@ class _LibraryTabState extends State<LibraryTab> {
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 16,
-        title: const Row(
+        title: Row(
           children: [
             CircleAvatar(
               radius: 16,
@@ -436,7 +436,7 @@ class _PlaylistTile extends StatelessWidget {
                           detail,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppColors.subtle,
                             fontSize: 13,
                           ),
@@ -448,7 +448,7 @@ class _PlaylistTile extends StatelessWidget {
               ),
             ),
             if (playing)
-              const Icon(Icons.volume_up, color: AppColors.green, size: 20),
+              Icon(Icons.volume_up, color: AppColors.green, size: 20),
           ],
         ),
       ),
@@ -480,7 +480,7 @@ class _EmptyState extends StatelessWidget {
             Text(
               title,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppColors.text,
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
@@ -490,7 +490,7 @@ class _EmptyState extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.subtle, fontSize: 14),
+              style: TextStyle(color: AppColors.subtle, fontSize: 14),
             ),
             const SizedBox(height: 24),
             FilledButton(
