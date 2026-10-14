@@ -23,6 +23,7 @@ import 'widgets/bottom_bar.dart';
 import 'widgets/download_sheet.dart';
 import 'widgets/mini_player.dart';
 import 'widgets/navigation.dart';
+import 'widgets/playing_elsewhere.dart';
 import 'widgets/toast.dart';
 
 Future<void> main() async {
@@ -252,10 +253,20 @@ class _HomeShellState extends State<HomeShell>
               bottomNavigationBar: BottomBar(
                 index: _index,
                 onSelect: _onSelect,
-                header: MiniPlayer(
-                  onOpen: _openPlayer,
-                  onDragUpdate: _dragPlayer,
-                  onDragEnd: _releasePlayer,
+                header: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    MiniPlayer(
+                      onOpen: _openPlayer,
+                      onDragUpdate: _dragPlayer,
+                      onDragEnd: _releasePlayer,
+                    ),
+                    // Another device has the music: say so, play here.
+                    const PlayingElsewhereStrip(
+                      margin: EdgeInsets.fromLTRB(8, 0, 8, 8),
+                      radius: BorderRadius.all(Radius.circular(8)),
+                    ),
+                  ],
                 ),
               ),
             ),

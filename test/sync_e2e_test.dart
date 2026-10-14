@@ -283,7 +283,7 @@ void main() {
         PlayerService.instance.player.position,
         const Duration(seconds: 42),
       );
-      expect(sync.handoff.value, 'Mac');
+      expect(sync.handoff.value, contains('Mac'));
 
       // The Mac plays on: this device, idle, follows where it's got to.
       final (_, latest) = await mac(
@@ -409,6 +409,72 @@ void main() {
       expect(File(p.join(music.path, 'Chill', 'b.mp3')).existsSync(), isTrue);
       expect(bSong.existsSync(), isFalse);
       expect((await mac('GET', '/sync/blobs/$bSha', token: token)).$1, 404);
+
+      // Remote control. The Mac plays: this device shows it, its controls
+      // show the Mac playing, and pausing here asks the Mac to pause.
+      final (_, lately) = await mac(
+        'GET',
+        '/sync/state/playback',
+        token: token,
+      );
+      final playedAt = DateTime.now().millisecondsSinceEpoch + 20000;
+      await mac(
+        'PUT',
+        '/sync/state/playback',
+        token: token,
+        body: {
+          'rev': lately['rev'],
+          'data': {
+            'track': {'sync': 'Rock/d.mp3'},
+            'pos': 10000,
+            'playing': true,
+            'playlist': null,
+            't': playedAt,
+            'at': DateTime.now().millisecondsSinceEpoch,
+            'device': 'mac-device-0001',
+            'name': 'Mac',
+          },
+        },
+      );
+      for (var i = 0; i < 40 && sync.playingElsewhere.value == null; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+      expect(sync.playingElsewhere.value, 'Mac');
+      final service = PlayerService.instance;
+      expect(service.player.playing, isFalse);
+      expect(service.shownPlaying.value, isTrue, reason: "the Mac's state");
+      await service.togglePlayback();
+      expect(service.shownPlaying.value, isFalse, reason: 'shown at once');
+      expect(service.player.playing, isFalse, reason: 'nothing plays here');
+      final (_, command) = await mac(
+        'GET',
+        '/sync/state/command',
+        token: token,
+      );
+      expect(command['data']['to'], 'mac-device-0001');
+      expect(command['data']['action'], 'pause');
+
+      // The Mac asks this device to play: it does, and says so.
+      await mac(
+        'PUT',
+        '/sync/state/command',
+        token: token,
+        body: {
+          'rev': command['rev'],
+          'data': {
+            'id': 'cmd-from-mac',
+            'to': sync.devices.firstWhere((d) => d.me).id,
+            'action': 'play',
+            'from': 'Mac',
+            't': DateTime.now().millisecondsSinceEpoch,
+          },
+        },
+      );
+      for (var i = 0; i < 40 && !service.player.playing; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+      expect(service.player.playing, isTrue);
+      await service.player.pause();
     },
     skip: runnable ? false : 'no backend here',
     timeout: const Timeout(Duration(minutes: 2)),

@@ -379,8 +379,41 @@ class PlayerService {
     _loaded = null;
   });
 
-  Future<void> togglePlayback() =>
-      player.playing ? player.pause() : player.play();
+  /// Set by sync while another device has the music: the controls here
+  /// (play/pause, next, previous, seek) steer that one, and show its state.
+  RemoteControl? remote;
+
+  bool get _remote => remote?.active ?? false;
+
+  /// Playing, as the controls show it: this device's, or the device being
+  /// controlled.
+  late final shownPlaying = () {
+    final shown = ValueNotifier<bool>(player.playing);
+    player.playingStream.listen((_) => refreshShown());
+    return shown;
+  }();
+
+  /// Where the song is, as the seek bars show it (another device's,
+  /// worked out between its reports, while controlling it).
+  Stream<Duration> get shownPosition => Stream.periodic(
+    const Duration(milliseconds: 250),
+    (_) => _remote ? remote!.position ?? player.position : player.position,
+  );
+
+  /// Works out [shownPlaying] again (sync calls this when the other
+  /// device's state changes).
+  void refreshShown() =>
+      shownPlaying.value = _remote ? remote!.playing : player.playing;
+
+  Future<void> togglePlayback() async {
+    if (_remote) return remote!.send(remote!.playing ? 'pause' : 'play');
+    return player.playing ? player.pause() : player.play();
+  }
+
+  Future<void> seekTo(Duration position) async {
+    if (_remote) return remote!.send('seek', position);
+    return player.seek(position);
+  }
 
   /// The song [offset] places away from the current one in play order, or
   /// null at either end with repeat off. Unlike just_audio's own
@@ -410,10 +443,14 @@ class PlayerService {
     if (index != null) await player.seek(Duration.zero, index: index);
   }
 
-  Future<void> next() => skip(1);
+  Future<void> next() async {
+    if (_remote) return remote!.send('next');
+    return skip(1);
+  }
 
   /// Like Spotify: restarts the song unless it has only just begun.
   Future<void> previous() async {
+    if (_remote) return remote!.send('previous');
     if (player.position > const Duration(seconds: 3) ||
         _neighbourIndex(-1) == null) {
       await player.seek(Duration.zero);
@@ -464,4 +501,18 @@ class PlayerService {
     player.pause();
     setSleepTimer();
   }
+}
+
+/// Another device being played from here (see SyncService).
+abstract class RemoteControl {
+  /// Whether the controls here steer it now.
+  bool get active;
+
+  bool get playing;
+
+  /// Where its song has got to, by now.
+  Duration? get position;
+
+  /// 'play', 'pause', 'next', 'previous' or 'seek' (to [position]).
+  Future<void> send(String action, [Duration? position]);
 }

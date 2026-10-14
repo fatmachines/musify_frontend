@@ -84,7 +84,7 @@ class FileSyncProgress {
 /// Joining: a device turns sync on (its own group and code) or asks to
 /// join another's code; a device already in sync approves it. Then both
 /// have the same code.
-class SyncService extends ChangeNotifier {
+class SyncService extends ChangeNotifier implements RemoteControl {
   SyncService._();
 
   static final instance = SyncService._();
@@ -159,6 +159,8 @@ class SyncService extends ChangeNotifier {
     // Last time's songs first: what another device played comes after.
     await PlaybackSession.restored;
     _watchPlayer();
+    // While another device plays, the controls here steer it.
+    PlayerService.instance.remote = this;
     Timer.periodic(const Duration(seconds: 20), (_) => _tick());
     // A device waiting to be let in (and the Sync screen) look every 3 s.
     Timer.periodic(const Duration(seconds: 3), (_) => _quick());
@@ -828,6 +830,15 @@ class SyncService extends ChangeNotifier {
     player.playingStream.listen((playing) {
       if (playing == wasPlaying) return;
       wasPlaying = playing;
+      // Pressing play here while another device plays takes over from it,
+      // where it has got to.
+      if (playing && !_applyingPlayback) {
+        final there = _elsewherePosition();
+        if (there != null &&
+            (player.position - there).abs() > const Duration(seconds: 2)) {
+          player.seek(there);
+        }
+      }
       _playbackChanged();
     });
     player.currentIndexStream.listen((_) {
@@ -836,6 +847,197 @@ class SyncService extends ChangeNotifier {
     Timer.periodic(const Duration(seconds: 15), (_) {
       if (player.playing) _pushPlaybackNow();
     });
+    // Who's playing, every few seconds: a device taken over from pauses,
+    // an idle one follows (and shows "Playing on …"), the playing one
+    // obeys the others' controls.
+    Timer.periodic(const Duration(seconds: 3), (_) => _checkPlayback());
+  }
+
+  /// The other device playing right now (its name), shown as "Playing on
+  /// …" with a way to play here instead; null if none.
+  final playingElsewhere = ValueNotifier<String?>(null);
+
+  Map<String, dynamic>? _remoteDoc;
+
+  /// Where the song playing on another device has got to by now.
+  Duration? _elsewherePosition() {
+    final doc = _remoteDoc;
+    if (doc == null || playingElsewhere.value == null) return null;
+    final at = doc['at'] as int? ?? doc['t'] as int? ?? 0;
+    final elapsed = playing
+        ? max<int>(0, DateTime.now().millisecondsSinceEpoch - at)
+        : 0;
+    return Duration(milliseconds: (doc['pos'] as int? ?? 0) + elapsed);
+  }
+
+  /// "Play here": what another device is playing carries on on this one,
+  /// and that one pauses.
+  Future<void> playHere() async {
+    final player = PlayerService.instance.player;
+    final there = _elsewherePosition();
+    if (there != null) await player.seek(there);
+    unawaited(player.play());
+  }
+
+  bool _checking = false;
+
+  Future<void> _checkPlayback() async {
+    if (_checking || status != SyncStatus.on || !_server.setUpNow) return;
+    _checking = true;
+    try {
+      final (code, data) = await _call('GET', '/sync/state/playback');
+      if (code != 200) return;
+      _playbackRev = data['rev'] as int? ?? _playbackRev;
+      final doc = (data['data'] as Map?)?.cast<String, dynamic>();
+      _noteElsewhere(doc);
+      await _obeyCommand();
+      if (doc == null || doc['device'] == _deviceId) return;
+      final player = PlayerService.instance.player;
+      final when = doc['t'] as int? ?? 0;
+      if (player.playing) {
+        // Another device started playing after this one did: it has the
+        // music now. Paused here without that counting as this device's
+        // doing (or it would take it back).
+        if (doc['playing'] == true && when > _lastLocalPlayback) {
+          _appliedAt = DateTime.now();
+          await player.pause();
+          AppLog.add('sync: ${doc['name']} took over playing');
+          handoff.value = 'Now playing on ${doc['name']}';
+        }
+      } else {
+        await _followPlayback(doc);
+      }
+    } catch (_) {
+      // The next check tries again.
+    } finally {
+      _checking = false;
+    }
+  }
+
+  void _noteElsewhere(Map<String, dynamic>? doc) {
+    _remoteDoc = doc;
+    final gone =
+        DateTime.now().millisecondsSinceEpoch - (doc?['at'] as int? ?? 0);
+    // Playing there and still reporting, or paused there a little while
+    // ago: that device has the music (and the controls here steer it).
+    final current =
+        doc != null &&
+        doc['device'] != _deviceId &&
+        (doc['playing'] == true
+            ? gone < const Duration(seconds: 45).inMilliseconds
+            : gone < const Duration(minutes: 10).inMilliseconds);
+    playingElsewhere.value = current
+        ? doc['name'] as String? ?? 'another device'
+        : null;
+    PlayerService.instance.refreshShown();
+  }
+
+  // Remote control -------------------------------------------------------------
+
+  /// Pressed here, not yet reported back by the other device: shown
+  /// straight away.
+  ({bool playing, DateTime until})? _pressed;
+
+  @override
+  bool get active =>
+      playingElsewhere.value != null && !PlayerService.instance.player.playing;
+
+  @override
+  bool get playing {
+    final pressed = _pressed;
+    if (pressed != null && DateTime.now().isBefore(pressed.until)) {
+      return pressed.playing;
+    }
+    return _remoteDoc?['playing'] == true;
+  }
+
+  @override
+  Duration? get position => _elsewherePosition();
+
+  int _commandRev = 0;
+  String? _lastCommand;
+
+  @override
+  Future<void> send(String action, [Duration? position]) async {
+    final to = _remoteDoc?['device'] as String?;
+    if (to == null) return;
+    if (action == 'play' || action == 'pause') {
+      _pressed = (
+        playing: action == 'play',
+        until: DateTime.now().add(const Duration(seconds: 8)),
+      );
+      PlayerService.instance.refreshShown();
+    }
+    if (action == 'seek' && position != null) {
+      // Shown there at once; the other device reports it soon.
+      _remoteDoc = {
+        ...?_remoteDoc,
+        'pos': position.inMilliseconds,
+        'at': DateTime.now().millisecondsSinceEpoch,
+      };
+    }
+    final command = {
+      'id': _newId(),
+      'to': to,
+      'action': action,
+      'pos': position?.inMilliseconds,
+      'from': deviceName,
+      't': DateTime.now().millisecondsSinceEpoch,
+    };
+    for (var attempt = 0; attempt < 3; attempt++) {
+      final (code, data) = await _call(
+        'PUT',
+        '/sync/state/command',
+        body: {'rev': _commandRev, 'data': command},
+      );
+      if (code == 200) {
+        _commandRev = data['rev'] as int;
+        AppLog.add('sync: asked ${_remoteDoc?['name']} to $action');
+        return;
+      }
+      if (code != 409) {
+        throw SyncFailed(data['error'] as String? ?? '$code');
+      }
+      _commandRev = ((data['latest'] as Map?)?['rev'] as int?) ?? 0;
+    }
+  }
+
+  /// Does what another device asked this one (the one playing) to do.
+  Future<void> _obeyCommand() async {
+    final (code, data) = await _call('GET', '/sync/state/command');
+    if (code != 200) return;
+    _commandRev = data['rev'] as int? ?? _commandRev;
+    final command = (data['data'] as Map?)?.cast<String, dynamic>();
+    if (command == null ||
+        command['to'] != _deviceId ||
+        command['id'] == _lastCommand) {
+      return;
+    }
+    _lastCommand = command['id'] as String?;
+    final sent = command['t'] as int? ?? 0;
+    if (DateTime.now().millisecondsSinceEpoch - sent >
+        const Duration(seconds: 30).inMilliseconds) {
+      return;
+    }
+    final service = PlayerService.instance;
+    final player = service.player;
+    AppLog.add('sync: ${command['from']} asked to ${command['action']}');
+    switch (command['action']) {
+      case 'play':
+        unawaited(player.play());
+      case 'pause':
+        await player.pause();
+      case 'next':
+        await service.skip(1);
+      case 'previous':
+        await service.previous();
+      case 'seek':
+        await player.seek(Duration(milliseconds: command['pos'] as int? ?? 0));
+    }
+    // Told back straight away, so the other device's controls catch up.
+    _lastLocalPlayback = DateTime.now().millisecondsSinceEpoch;
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    await _pushPlaybackNow();
   }
 
   /// When another device's song was last picked up here: the player's own
@@ -900,7 +1102,15 @@ class SyncService extends ChangeNotifier {
           return;
         }
         if (status != 409) return;
-        _playbackRev = ((data['latest'] as Map?)?['rev'] as int?) ?? 0;
+        final latest = (data['latest'] as Map?)?.cast<String, dynamic>();
+        _playbackRev = (latest?['rev'] as int?) ?? 0;
+        // Someone else's newer one: theirs stands (the check pauses here).
+        final theirs = (latest?['data'] as Map?)?.cast<String, dynamic>();
+        if (theirs != null &&
+            theirs['device'] != _deviceId &&
+            (theirs['t'] as int? ?? 0) > (doc['t'] as int)) {
+          return;
+        }
       }
     } catch (e) {
       AppLog.add('sync: playback not saved: $e');
@@ -916,6 +1126,11 @@ class SyncService extends ChangeNotifier {
     if (status != 200) return;
     _playbackRev = data['rev'] as int? ?? 0;
     final doc = (data['data'] as Map?)?.cast<String, dynamic>();
+    _noteElsewhere(doc);
+    await _followPlayback(doc);
+  }
+
+  Future<void> _followPlayback(Map<String, dynamic>? doc) async {
     if (doc == null || doc['device'] == _deviceId) return;
     final when = doc['t'] as int? ?? 0;
     final at = doc['at'] as int? ?? when;
@@ -943,8 +1158,12 @@ class SyncService extends ChangeNotifier {
     }
     // The same song here already: just move to where it got to.
     if (service.currentTrack?.path == track.path) {
-      _appliedAt = DateTime.now();
-      await service.player.seek(Duration(milliseconds: position));
+      final target = Duration(milliseconds: position);
+      if ((service.player.position - target).abs() >
+          const Duration(seconds: 3)) {
+        _appliedAt = DateTime.now();
+        await service.player.seek(target);
+      }
       _lastLocalPlayback = when;
       return;
     }
@@ -990,13 +1209,14 @@ class SyncService extends ChangeNotifier {
       _lastLocalPlayback = when;
       _appliedAt = DateTime.now();
       AppLog.add('sync: carried on from ${doc['name']}');
-      handoff.value = doc['name'] as String?;
+      handoff.value = 'Picked up where you left off on ${doc['name']}';
     } finally {
       _applyingPlayback = false;
     }
   }
 
-  /// Set to the other device's name when its song was picked up here.
+  /// A message for the user when playing moves between devices ("Picked
+  /// up where you left off on …", "Now playing on …").
   final handoff = ValueNotifier<String?>(null);
 
   // Music files -----------------------------------------------------------------

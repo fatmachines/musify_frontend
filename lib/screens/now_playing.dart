@@ -13,6 +13,7 @@ import '../services/youtube/youtube_web_player.dart';
 import '../theme.dart';
 import '../utils/cover_color.dart';
 import '../widgets/add_to_playlist.dart';
+import '../widgets/playing_elsewhere.dart';
 import '../widgets/download_sheet.dart';
 import '../widgets/covers.dart';
 import '../widgets/tag_sheet.dart';
@@ -184,6 +185,11 @@ class _Body extends StatelessWidget {
           _SeekBar(),
           SizedBox(height: 4),
           _Controls(),
+          // Another device has the music: say so, and offer to play here.
+          const PlayingElsewhereStrip(
+            margin: EdgeInsets.only(top: 12),
+            radius: BorderRadius.all(Radius.circular(8)),
+          ),
           SizedBox(height: 8),
           Row(
             children: [
@@ -268,7 +274,7 @@ class _SeekBarState extends State<_SeekBar> {
     return ListenableBuilder(
       listenable: loaded,
       builder: (context, _) => StreamBuilder<Duration>(
-        stream: player.positionStream,
+        stream: PlayerService.instance.shownPosition,
         builder: (context, snapshot) {
           final total = player.duration ?? Duration.zero;
           final max = total.inMilliseconds.toDouble();
@@ -306,7 +312,9 @@ class _SeekBarState extends State<_SeekBar> {
                         ? (v) => setState(() => _dragging = v)
                         : null,
                     onChangeEnd: (v) {
-                      player.seek(Duration(milliseconds: v.round()));
+                      PlayerService.instance.seekTo(
+                        Duration(milliseconds: v.round()),
+                      );
                       setState(() => _dragging = null);
                     },
                   ),
@@ -343,7 +351,6 @@ class _Controls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final service = PlayerService.instance;
-    final player = service.player;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -365,11 +372,10 @@ class _Controls extends StatelessWidget {
           onPressed: service.previous,
           icon: const Icon(Icons.skip_previous_rounded),
         ),
-        StreamBuilder<bool>(
-          stream: player.playingStream,
-          initialData: player.playing,
-          builder: (context, snapshot) {
-            final playing = snapshot.data ?? false;
+        ValueListenableBuilder<bool>(
+          // This device's, or the other device's being played from here.
+          valueListenable: PlayerService.instance.shownPlaying,
+          builder: (context, playing, _) {
             return Semantics(
               button: true,
               label: playing ? 'Pause' : 'Play',

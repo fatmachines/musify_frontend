@@ -96,10 +96,7 @@ VoidCallback listenForHandoff(State state) {
     final name = handoff.value;
     if (name == null || !state.mounted) return;
     handoff.value = null;
-    showToastOn(
-      Overlay.of(state.context, rootOverlay: true),
-      'Picked up where you left off on $name',
-    );
+    showToastOn(Overlay.of(state.context, rootOverlay: true), name);
   }
 
   handoff.addListener(show);

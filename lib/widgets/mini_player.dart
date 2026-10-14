@@ -5,6 +5,7 @@ import '../services/metadata_service.dart';
 import '../services/player_service.dart';
 import '../services/youtube/youtube_web_player.dart';
 import '../theme.dart';
+import '../services/sync_service.dart';
 import '../utils/cover_color.dart';
 import 'covers.dart';
 import 'track_swiper.dart';
@@ -117,11 +118,35 @@ class _TrackText extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 2),
-            Text(
-              info?.artist ?? 'Unknown artist',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: AppColors.subtle, fontSize: 13),
+            // Playing on another device: its name, in green, as Spotify.
+            ValueListenableBuilder<String?>(
+              valueListenable: SyncService.instance.playingElsewhere,
+              builder: (context, elsewhere, _) => Row(
+                children: [
+                  if (elsewhere != null) ...[
+                    Icon(Icons.speaker_group, size: 14, color: AppColors.green),
+                    const SizedBox(width: 4),
+                  ],
+                  Expanded(
+                    child: Text(
+                      elsewhere == null
+                          ? info?.artist ?? 'Unknown artist'
+                          : 'Playing on $elsewhere',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: elsewhere == null
+                            ? AppColors.subtle
+                            : AppColors.green,
+                        fontSize: 13,
+                        fontWeight: elsewhere == null
+                            ? FontWeight.w400
+                            : FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         );
@@ -136,11 +161,10 @@ class _PlayPause extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final service = PlayerService.instance;
-    return StreamBuilder<bool>(
-      stream: service.player.playingStream,
-      initialData: service.player.playing,
-      builder: (context, snapshot) {
-        final playing = snapshot.data ?? false;
+    return ValueListenableBuilder<bool>(
+      // This device's, or the other device's being played from here.
+      valueListenable: PlayerService.instance.shownPlaying,
+      builder: (context, playing, _) {
         return IconButton(
           tooltip: playing ? 'Pause' : 'Play',
           iconSize: 32,
@@ -165,7 +189,7 @@ class _Progress extends StatelessWidget {
     return ListenableBuilder(
       listenable: YouTubeWebPlayer.instance.buffered,
       builder: (context, _) => StreamBuilder<Duration>(
-        stream: player.positionStream,
+        stream: PlayerService.instance.shownPosition,
         builder: (context, snapshot) {
           final total = player.duration?.inMilliseconds ?? 0;
           final position = snapshot.data?.inMilliseconds ?? 0;

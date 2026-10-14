@@ -18,6 +18,7 @@ import '../theme.dart';
 import '../widgets/covers.dart';
 import '../widgets/download_sheet.dart';
 import '../widgets/navigation.dart';
+import '../widgets/playing_elsewhere.dart';
 import '../widgets/toast.dart';
 
 /// Spotify's desktop layout, for the Mac and other wide windows: a top bar
@@ -171,6 +172,8 @@ class _DesktopShellState extends State<DesktopShell>
                         ),
                       ),
                     ),
+                    // Another device has the music: Spotify's green strip.
+                    const PlayingElsewhereStrip(),
                     _PlayerBar(onOpen: _openPlayer),
                   ],
                 ),
@@ -601,11 +604,10 @@ class _Controls extends StatelessWidget {
         ),
         small(Icons.skip_previous_rounded, 'Previous', service.previous),
         SizedBox(width: 4),
-        StreamBuilder<bool>(
-          stream: player.playingStream,
-          initialData: player.playing,
-          builder: (context, snapshot) {
-            final playing = snapshot.data ?? false;
+        ValueListenableBuilder<bool>(
+          // This device's, or the other device's being played from here.
+          valueListenable: PlayerService.instance.shownPlaying,
+          builder: (context, playing, _) {
             return Tooltip(
               message: playing ? 'Pause' : 'Play',
               child: Material(
@@ -670,7 +672,7 @@ class _SeekState extends State<_Seek> {
     return ListenableBuilder(
       listenable: loaded,
       builder: (context, _) => StreamBuilder<Duration>(
-        stream: player.positionStream,
+        stream: PlayerService.instance.shownPosition,
         builder: (context, snapshot) {
           final total = (player.duration ?? Duration.zero).inMilliseconds
               .toDouble();
@@ -713,7 +715,9 @@ class _SeekState extends State<_Seek> {
                         ? (v) => setState(() => _dragging = v)
                         : null,
                     onChangeEnd: (v) {
-                      player.seek(Duration(milliseconds: v.round()));
+                      PlayerService.instance.seekTo(
+                        Duration(milliseconds: v.round()),
+                      );
                       setState(() => _dragging = null);
                     },
                   ),
