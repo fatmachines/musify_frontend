@@ -640,6 +640,10 @@ class SyncService extends ChangeNotifier implements RemoteControl {
 
   Object _pinRefOf(String key) {
     if (key.startsWith('ref:')) return jsonDecode(key.substring(4)) as Object;
+    // An artist or album: its name and picture come along for the tile.
+    if (Library.instance.page(key) case final page?) {
+      return {'id': key, 'name': page.name, 'art': ?page.artworkUrl};
+    }
     final bar = key.indexOf('|');
     if (bar < 0) return {'id': key};
     final folderId = key.substring(0, bar);
@@ -654,6 +658,17 @@ class SyncService extends ChangeNotifier implements RemoteControl {
   }
 
   String _pinKeyOf(Object ref) {
+    if (ref case {'id': final String id, 'name': final String name}) {
+      Library.instance.rememberPage(
+        Playlist(
+          id: id,
+          name: name,
+          tracks: const [],
+          artworkUrl: ref['art'] as String?,
+        ),
+      );
+      return id;
+    }
     if (ref case {'id': final String id}) return id;
     if (ref case {'sync': final String location}) {
       final music = musicFolder;

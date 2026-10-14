@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../models/playlist.dart';
+import '../services/local_copies.dart';
 import '../services/library.dart';
 import '../services/library_search.dart';
 import '../services/metadata_service.dart';
@@ -363,7 +364,9 @@ class _SearchTabState extends State<SearchTab> {
             if (i > local) {
               final index = i - local - 1;
               final track = youtube![index];
-              final current = player.currentTrack?.path == track.path;
+              final current =
+                  player.currentTrack?.path ==
+                  LocalCopies.instance.resolve(track).path;
               void play() => player.playYouTube(youtube, index);
               return SongTile(
                 track: track,

@@ -19,7 +19,14 @@ Future<void> showPlaylistActions(BuildContext context, Playlist playlist) {
   final pinned = library.isPinned(playlist);
   final remote = Library.isRemote(playlist);
   final youtube = playlist.tracks.whereType<YouTubeTrack>().length;
-  final kind = playlist.isCustom ? 'Playlist' : 'Folder';
+  final page = Library.isPage(playlist);
+  final kind = playlist.id.startsWith('youtube:artist:')
+      ? 'Artist'
+      : playlist.id.startsWith('youtube:album:')
+      ? 'Album'
+      : playlist.isCustom
+      ? 'Playlist'
+      : 'Folder';
   return showModalBottomSheet<void>(
     context: context,
     useRootNavigator: true,
@@ -37,9 +44,11 @@ Future<void> showPlaylistActions(BuildContext context, Playlist playlist) {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
+              // A pinned page's songs load when it opens.
               subtitle: Text(
-                '$kind • '
-                '$songs ${songs == 1 ? 'song' : 'songs'}',
+                page && songs == 0
+                    ? kind
+                    : '$kind • $songs ${songs == 1 ? 'song' : 'songs'}',
               ),
             ),
             Divider(color: AppColors.faint, height: 16),
@@ -56,8 +65,9 @@ Future<void> showPlaylistActions(BuildContext context, Playlist playlist) {
                   downloadPlaylistWithPicker(context, playlist);
                 },
               ),
-            // YouTube playlists aren't in the library to pin or change.
-            if (!remote)
+            // YouTube playlists aren't in the library to pin or change;
+            // artists and albums can be pinned.
+            if (!remote || page)
               ListTile(
                 leading: Icon(
                   pinned ? Icons.push_pin : Icons.push_pin_outlined,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/playlist.dart';
 import '../services/library.dart';
+import '../services/local_copies.dart';
 import '../services/metadata_service.dart';
 import '../services/player_service.dart';
 import '../theme.dart';
@@ -111,7 +112,17 @@ class SongTile extends StatelessWidget {
                           const SizedBox(width: 4),
                         ],
                         if (youtube)
-                          const YouTubeBadge()
+                          // Green once it's on the device.
+                          ListenableBuilder(
+                            listenable: LocalCopies.instance,
+                            builder: (context, _) =>
+                                LocalCopies.instance.copyOf(
+                                      track as YouTubeTrack,
+                                    ) ==
+                                    null
+                                ? const YouTubeBadge()
+                                : const OfflineBadge(),
+                          )
                         else ...[
                           TagDots(track: track),
                           const OfflineBadge(),

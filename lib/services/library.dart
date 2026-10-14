@@ -73,6 +73,7 @@ class Library extends ChangeNotifier {
     final byKey = {
       for (final p in [...all, for (final t in _tags) tagPlaylist(t)])
         _pinKey(p): p,
+      ..._pages,
     };
     return [for (final key in _pins) ?byKey[key]];
   }
@@ -81,15 +82,41 @@ class Library extends ChangeNotifier {
 
   void togglePin(Playlist playlist) {
     final key = _pinKey(playlist);
-    _pins = _pins.contains(key)
-        ? [
+    final pinning = !_pins.contains(key);
+    _pins = pinning
+        ? [..._pins, key]
+        : [
             for (final k in _pins)
               if (k != key) k,
-          ]
-        : [..._pins, key];
+          ];
+    if (isPage(playlist)) {
+      pinning ? rememberPage(playlist) : _pages.remove(playlist.id);
+      LibraryStore.savePages(_pages.values.toList());
+    }
     notifyListeners();
     LibraryStore.savePinned(_pins);
   }
+
+  /// YouTube Music artists and albums pinned to Home, by page id: enough
+  /// to show the tile and open the page (the songs load when it opens).
+  Map<String, Playlist> _pages = {};
+
+  /// An artist's or album's page, which can be pinned though it isn't in
+  /// the library.
+  static bool isPage(Playlist playlist) =>
+      playlist.id.startsWith('youtube:artist:') ||
+      playlist.id.startsWith('youtube:album:');
+
+  /// The pinned page [id] (its name and picture), or null.
+  Playlist? page(String id) => _pages[id];
+
+  /// Keeps [playlist]'s name and picture for its Home tile.
+  void rememberPage(Playlist playlist) => _pages[playlist.id] = Playlist(
+    id: playlist.id,
+    name: playlist.name,
+    tracks: const [],
+    artworkUrl: playlist.artworkUrl,
+  );
 
   Map<String, Set<String>> _tagged = {};
 
@@ -178,6 +205,7 @@ class Library extends ChangeNotifier {
     _saved = await LibraryStore.loadPlaylists();
     _hidden = await LibraryStore.loadHidden();
     _pins = await LibraryStore.loadPinned();
+    _pages = {for (final p in await LibraryStore.loadPages()) p.id: p};
     _likedSaved = await LibraryStore.loadLiked();
     _tagsSaved = await LibraryStore.loadTags() ?? const [_defaultTag];
     await rescan();
@@ -403,6 +431,7 @@ class Library extends ChangeNotifier {
     if (pins != null) {
       _pins = pins;
       LibraryStore.savePinned(_pins);
+      LibraryStore.savePages(_pages.values.toList());
     }
     _resolveCustom();
     notifyListeners();

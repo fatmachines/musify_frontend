@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/playlist.dart';
+import '../screens/artist_page.dart';
 import '../screens/playlist_screen.dart';
 
 /// Present in the wide (desktop) layout: where pages open, so a playlist
@@ -28,8 +29,37 @@ Future<T?> openPage<T>(BuildContext context, Widget page) {
   return navigator.push<T>(MaterialPageRoute(builder: (_) => page));
 }
 
-Future<void> openPlaylist(BuildContext context, Playlist playlist) =>
-    openPage(context, PlaylistScreen(playlist: playlist));
+/// Opens [playlist]'s page. A pinned artist or album (no songs yet) opens
+/// its page, which loads them.
+Future<void> openPlaylist(BuildContext context, Playlist playlist) {
+  const artist = 'youtube:artist:', album = 'youtube:album:';
+  final id = playlist.id;
+  if (playlist.tracks.isEmpty && id.startsWith(artist)) {
+    return openPage(
+      context,
+      ArtistPage(
+        artist: YouTubeArtist(
+          id: id.substring(artist.length),
+          name: playlist.name,
+          thumbnail: playlist.artworkUrl,
+        ),
+      ),
+    );
+  }
+  if (playlist.tracks.isEmpty && id.startsWith(album)) {
+    return openPage(
+      context,
+      AlbumPage(
+        album: YouTubeAlbum(
+          id: id.substring(album.length),
+          title: playlist.name,
+          thumbnail: playlist.artworkUrl,
+        ),
+      ),
+    );
+  }
+  return openPage(context, PlaylistScreen(playlist: playlist));
+}
 
 /// Cmd+F / Ctrl+F: the page that can search itself (a playlist's "Find on
 /// this page") takes it; asked in turn, the one on top first.

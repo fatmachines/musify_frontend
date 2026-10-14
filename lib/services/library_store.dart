@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/playlist.dart';
+
 /// A song saved in a user's playlist. Besides its path it remembers which
 /// library folder it came from and where inside it, so it can still be found
 /// if that folder's path changes (iOS can move app data on reinstall). A
@@ -97,6 +99,7 @@ class LibraryStore {
   static const _likedKey = 'liked_songs_v1';
   static const _tagsKey = 'song_tags_v1';
   static const _pinnedKey = 'home_pins_v1';
+  static const _pagesKey = 'home_pinned_pages_v1';
 
   /// Library folder paths (Android; iOS keeps bookmarks natively).
   static Future<List<String>> loadFolderPaths() async {
@@ -173,6 +176,33 @@ class LibraryStore {
   static Future<void> savePinned(List<String> pins) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_pinnedKey, pins);
+  }
+
+  /// Artist and album pages pinned to Home: id, name and picture.
+  static Future<List<Playlist>> loadPages() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_pagesKey);
+    if (raw == null) return [];
+    return [
+      for (final page in jsonDecode(raw) as List)
+        Playlist(
+          id: page['id'] as String,
+          name: page['name'] as String,
+          tracks: const [],
+          artworkUrl: page['art'] as String?,
+        ),
+    ];
+  }
+
+  static Future<void> savePages(List<Playlist> pages) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _pagesKey,
+      jsonEncode([
+        for (final page in pages)
+          {'id': page.id, 'name': page.name, 'art': page.artworkUrl},
+      ]),
+    );
   }
 
   static Future<List<SavedPlaylist>> loadPlaylists() async {

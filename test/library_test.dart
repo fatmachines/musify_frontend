@@ -166,6 +166,34 @@ void main() {
     expect(reloaded.pinned, hasLength(1));
   });
 
+  test('artists and albums pin to Home and stay pinned', () async {
+    SharedPreferences.setMockInitialValues({
+      'library_folders': [first.path],
+    });
+    final library = Library.fresh();
+    await library.ensureLoaded();
+    final artist = Playlist(
+      id: 'youtube:artist:UC123',
+      name: 'Michael Jackson',
+      tracks: [YouTubeTrack(videoId: 'v1', name: 'Billie Jean')],
+      artworkUrl: 'https://example.com/mj.jpg',
+    );
+    expect(Library.isPage(artist), isTrue);
+    library.togglePin(artist);
+    expect(library.isPinned(artist), isTrue);
+
+    final reloaded = Library.fresh();
+    await reloaded.ensureLoaded();
+    final pin = reloaded.pinned.single;
+    expect(pin.id, artist.id);
+    expect(pin.name, 'Michael Jackson');
+    expect(pin.artworkUrl, artist.artworkUrl);
+    // Only enough to open the page, which loads the songs.
+    expect(pin.tracks, isEmpty);
+    reloaded.togglePin(pin);
+    expect(reloaded.pinned, isEmpty);
+  });
+
   test('YouTube songs can be liked and put in playlists', () async {
     SharedPreferences.setMockInitialValues({
       'library_folders': [first.path],

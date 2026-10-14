@@ -3,12 +3,14 @@ import 'package:path/path.dart' as p;
 
 import '../models/playlist.dart';
 import '../services/library.dart';
+import '../services/local_copies.dart';
 import '../services/metadata_service.dart';
 import '../services/player_service.dart';
 import '../theme.dart';
 import 'add_to_playlist.dart';
 import 'covers.dart';
 import 'download_sheet.dart';
+import 'offline_badge.dart';
 import 'tag_sheet.dart';
 import 'toast.dart';
 
@@ -27,6 +29,10 @@ Future<void> showSongMenu(
   final liked = library.isLiked(track);
   // YouTube songs can be liked and put in playlists, but not tagged.
   final youtube = track is YouTubeTrack;
+  // A YouTube song already on the device: its file.
+  final copy = track is YouTubeTrack
+      ? LocalCopies.instance.copyOf(track)
+      : null;
   return showModalBottomSheet<void>(
     context: context,
     useRootNavigator: true,
@@ -103,7 +109,17 @@ Future<void> showSongMenu(
                   title: const Text('Tag'),
                   onTap: () => then(() => showTagSheet(context, track)),
                 ),
-              if (track is YouTubeTrack)
+              if (copy != null)
+                ListTile(
+                  leading: const OfflineBadge(size: 24),
+                  title: const Text('Downloaded'),
+                  subtitle: Text(
+                    'Plays from ${p.basename(copy.path)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                )
+              else if (track is YouTubeTrack)
                 ListTile(
                   leading: const Icon(Icons.download_rounded),
                   title: const Text('Download'),

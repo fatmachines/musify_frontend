@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/playlist.dart';
+import '../services/local_copies.dart';
 import '../services/app_log.dart';
 import '../services/library.dart';
 import '../services/metadata_service.dart';
@@ -15,6 +16,7 @@ import '../widgets/covers.dart';
 import '../widgets/playlist_actions.dart';
 import '../widgets/song_menu.dart';
 import '../widgets/song_tile.dart';
+import '../widgets/toast.dart';
 
 const _searchDuration = Duration(milliseconds: 220);
 const _findBarHeight = 38.0;
@@ -422,6 +424,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                 ),
               ),
               const SizedBox(width: 10),
+              ?_pinButton(),
               _optionsButton(),
             ],
           ),
@@ -495,6 +498,47 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           _buildTagChips(),
           const SizedBox(height: 8),
         ],
+      ),
+    );
+  }
+
+  /// An artist's or album's pin to Home (green when pinned), so it opens
+  /// from there; null on other playlists.
+  Widget? _pinButton({double size = 36}) {
+    if (!Library.isPage(_playlist)) return null;
+    final library = Library.instance;
+    return Padding(
+      padding: const EdgeInsets.only(right: 10),
+      child: ListenableBuilder(
+        listenable: library,
+        builder: (context, _) {
+          final pinned = library.isPinned(_playlist);
+          return Material(
+            color: AppColors.faint,
+            shape: const CircleBorder(),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: () {
+                library.togglePin(_playlist);
+                showToast(
+                  context,
+                  pinned ? 'Unpinned from Home' : 'Pinned to Home',
+                );
+              },
+              child: Tooltip(
+                message: pinned ? 'Unpin from Home' : 'Pin to Home',
+                child: SizedBox.square(
+                  dimension: size,
+                  child: Icon(
+                    pinned ? Icons.push_pin : Icons.push_pin_outlined,
+                    size: 20,
+                    color: pinned ? AppColors.green : null,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -632,6 +676,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               const SizedBox(width: 20),
               _ShuffleButton(active: current && _shuffle, onTap: _onShuffle),
               const SizedBox(width: 12),
+              ?_pinButton(size: 40),
               _optionsButton(size: 40),
               const Spacer(),
               IconButton(
@@ -804,7 +849,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   Widget _buildTrack(int index) {
     final track = _playlist.tracks[index];
-    final current = _isCurrent && track.path == _currentPath;
+    final current =
+        _isCurrent && LocalCopies.instance.resolve(track).path == _currentPath;
     return SongTile(
       track: track,
       current: current,

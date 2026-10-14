@@ -9,6 +9,7 @@ import '../models/playlist.dart';
 import 'app_log.dart';
 import 'equalizer_service.dart';
 import 'library.dart';
+import 'local_copies.dart';
 
 /// An active sleep timer: either a time to stop at, or the end of the
 /// current song.
@@ -203,7 +204,9 @@ class PlayerService {
     required bool shuffle,
     int? startIndex,
   }) => _serial(() async {
-    final tracks = playlist.tracks;
+    // YouTube songs on the device play from their files.
+    final copies = LocalCopies.instance;
+    final tracks = playlist.tracks.map(copies.resolve).toList();
     if (tracks.isEmpty) return;
     final index = startIndex ?? (shuffle ? Random().nextInt(tracks.length) : 0);
     final queued = upcomingQueue;
@@ -216,7 +219,13 @@ class PlayerService {
       ...queued.map(_source),
       ...after.map(_source),
     ], initialIndex: before.length);
-    _loaded = playlist;
+    _loaded = Playlist(
+      id: playlist.id,
+      name: playlist.name,
+      tracks: tracks,
+      location: playlist.location,
+      artworkUrl: playlist.artworkUrl,
+    );
     shuffleOn.value = shuffle;
     if (!_loopChosen) {
       _loopChosen = true;
@@ -295,7 +304,7 @@ class PlayerService {
   Future<void> addToQueue(Track track) => _enqueue(track, next: false);
 
   Future<void> _enqueue(Track track, {required bool next}) => _serial(() async {
-    final source = _source(queuedCopy(track));
+    final source = _source(queuedCopy(LocalCopies.instance.resolve(track)));
     final current = player.currentIndex;
     if (current == null || player.sequence.isEmpty) {
       // Nothing loaded: the song waits, paused, in the mini player.
@@ -363,7 +372,7 @@ class PlayerService {
     _loopChosen = true;
     _lastSource = null;
     await player.setAudioSources(
-      sequence.map(_source).toList(),
+      sequence.map(LocalCopies.instance.resolve).map(_source).toList(),
       initialIndex: index,
       initialPosition: position,
     );

@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/playlist.dart';
 import 'app_log.dart';
 import 'library.dart';
+import 'local_copies.dart';
 import 'musify_server.dart';
 import 'sync_service.dart';
 
@@ -91,6 +92,7 @@ class Downloads extends ChangeNotifier {
     String? error;
     try {
       file = await _save(track, folder);
+      await LocalCopies.instance.remember(track, file.path);
     } catch (e) {
       error = '$e';
       AppLog.add('download: ${track.name} failed: $e');
@@ -136,7 +138,9 @@ class Downloads extends ChangeNotifier {
     // The playlist's songs already on the device come along as copies.
     var copyFailed = 0;
     if (convert) {
-      for (final track in playlist.tracks) {
+      for (final song in playlist.tracks) {
+        // A YouTube song on the device already comes as its file.
+        final track = LocalCopies.instance.resolve(song);
         if (track is YouTubeTrack) continue;
         final target = File(p.join(folder.path, p.basename(track.path)));
         if (target.existsSync()) continue;
@@ -153,6 +157,7 @@ class Downloads extends ChangeNotifier {
       for (final track in playlist.tracks)
         if (track is YouTubeTrack &&
             !isQueued(track) &&
+            LocalCopies.instance.copyOf(track) == null &&
             !File(p.join(folder.path, '${_fileName(track)}.m4a')).existsSync())
           track,
     ];

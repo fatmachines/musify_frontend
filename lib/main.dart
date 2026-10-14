@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import 'desktop/desktop_shell.dart';
 import 'screens/now_playing.dart';
+import 'services/local_copies.dart';
 import 'services/app_log.dart';
 import 'services/musify_server.dart';
 import 'services/appearance.dart';
@@ -49,6 +50,8 @@ Future<void> main() async {
   PlaybackSession.start();
   // Playlists, tags and what's playing, with the user's other devices.
   SyncService.instance.start();
+  // YouTube songs already on the device play from there.
+  LocalCopies.instance.start();
   EqualizerService.instance.init();
   VoicePlay.init();
   YouTubeWebPlayer.instance.attach();
