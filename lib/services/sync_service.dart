@@ -43,6 +43,9 @@ class SyncRequest {
 
 /// Music files moving between this device and the others.
 class FileSyncProgress {
+  /// What's happening: "Checking songs" (reading them, the first time),
+  /// "Uploading" or "Downloading".
+  final String action;
   final int done;
   final int total;
   final String current;
@@ -50,7 +53,16 @@ class FileSyncProgress {
   /// Of the current file, 0 to 1.
   final double fraction;
 
-  const FileSyncProgress(this.done, this.total, this.current, this.fraction);
+  const FileSyncProgress(
+    this.action,
+    this.done,
+    this.total,
+    this.current,
+    this.fraction,
+  );
+
+  /// "Uploading 3/40", for the banner.
+  String get label => '$action ${min(done + 1, total)}/$total';
 }
 
 /// Keeps a user's devices in step through their Musify server (see the
@@ -992,8 +1004,8 @@ class SyncService extends ChangeNotifier {
     final synced = (jsonDecode(prefs.getString(_syncedKey) ?? '{}') as Map)
         .cast<String, dynamic>();
 
-    // This device's songs, hashed (unchanged ones remembered).
-    final local = await _hashInBackground(folder.path, {...hashes});
+    // This device's songs, fingerprinted (unchanged ones remembered).
+    final local = await _hashFolderWithProgress(folder.path, hashes);
     hashes
       ..clear()
       ..addAll({
@@ -1025,13 +1037,9 @@ class SyncService extends ChangeNotifier {
       );
     }
 
-    final total = upload.length + download.length;
-    var done = 0;
-    void progress(String name, double fraction) {
-      files = FileSyncProgress(done, total, name, fraction);
-      notifyListeners();
-    }
-
+    // Songs the server already has (from another device, say) are only
+    // listed, not sent again.
+    var needed = <String>{};
     if (upload.isNotEmpty) {
       final (s, missing) = await _call(
         'POST',
@@ -1041,25 +1049,39 @@ class SyncService extends ChangeNotifier {
         },
       );
       if (s != 200) throw SyncFailed(missing['error'] as String? ?? '$s');
-      final needed = {...(missing['missing'] as List).cast<String>()};
-      for (final rel in upload) {
-        final file = local[rel]!;
-        if (needed.remove(file.sha1)) {
-          progress(p.basename(rel), 0);
-          await _upload(
-            File(p.joinAll([folder.path, ...rel.split('/')])),
-            file.sha1,
-            (f) => progress(p.basename(rel), f),
-          );
-        }
-        done++;
-      }
+      needed = {...(missing['missing'] as List).cast<String>()};
+    }
+    final sending = [
+      for (final rel in upload)
+        if (needed.contains(local[rel]!.sha1)) rel,
+    ];
+    AppLog.add(
+      'sync: files: ${local.length} here, ${remote.length} listed; '
+      'uploading ${sending.length} (${upload.length - sending.length} '
+      'already there), downloading ${download.length}, deleting '
+      '${deleteHere.length} here and ${deleteThere.length} elsewhere',
+    );
+    await prefs.setString(_syncedKey, jsonEncode(synced));
+
+    var done = 0;
+    var total = sending.length;
+    var action = 'Uploading';
+    void progress(String name, double fraction) {
+      files = FileSyncProgress(action, done, total, name, fraction);
+      notifyListeners();
+    }
+
+    // Listed for the other devices as they go (every 10), so an
+    // interruption doesn't hold back what's already up.
+    final waiting = <String>[];
+    Future<void> announce() async {
+      if (waiting.isEmpty) return;
       final (added, result) = await _call(
         'POST',
         '/sync/files',
         body: {
           'add': [
-            for (final rel in upload)
+            for (final rel in waiting)
               {'path': rel, 'sha1': local[rel]!.sha1, 'size': local[rel]!.size},
           ],
         },
@@ -1067,12 +1089,33 @@ class SyncService extends ChangeNotifier {
       if (added != 200) {
         throw SyncFailed(result['error'] as String? ?? '$added');
       }
-      for (final rel in upload) {
+      for (final rel in waiting) {
         synced[rel] = local[rel]!.sha1;
       }
-      AppLog.add('sync: uploaded ${upload.length} songs');
+      waiting.clear();
+      await prefs.setString(_syncedKey, jsonEncode(synced));
     }
 
+    for (final rel in upload) {
+      final file = local[rel]!;
+      if (needed.remove(file.sha1)) {
+        progress(p.basename(rel), 0);
+        await _upload(
+          File(p.joinAll([folder.path, ...rel.split('/')])),
+          file.sha1,
+          (f) => progress(p.basename(rel), f),
+        );
+        done++;
+      }
+      waiting.add(rel);
+      if (waiting.length >= 10) await announce();
+    }
+    await announce();
+    if (upload.isNotEmpty) AppLog.add('sync: uploaded ${upload.length} songs');
+
+    done = 0;
+    total = download.length;
+    action = 'Downloading';
     for (final rel in download) {
       final sha1 = remote[rel]!['sha1'] as String;
       progress(p.basename(rel), 0);
@@ -1080,6 +1123,7 @@ class SyncService extends ChangeNotifier {
       await _download(sha1, target, (f) => progress(p.basename(rel), f));
       synced[rel] = sha1;
       done++;
+      if (done % 10 == 0) await prefs.setString(_syncedKey, jsonEncode(synced));
     }
     if (download.isNotEmpty) {
       AppLog.add('sync: downloaded ${download.length} songs');
@@ -1109,6 +1153,50 @@ class SyncService extends ChangeNotifier {
       // Playlists naming the new songs can find them now.
       await _syncLibrarySerially();
     }
+  }
+
+  /// Every song in [root], by its path inside it, fingerprinted (SHA-1).
+  /// Songs unchanged since [known] (size and time) keep theirs; the rest
+  /// are read a few at a time, shown as "Checking songs".
+  Future<Map<String, _LocalFile>> _hashFolderWithProgress(
+    String root,
+    Map<String, dynamic> known,
+  ) async {
+    final found = <String, _LocalFile>{};
+    final toRead = <(String, int, int)>[];
+    for (final (rel, size, modified) in await _listInBackground(root)) {
+      final cached = known[rel];
+      if (cached is List &&
+          cached.length == 3 &&
+          cached[0] == size &&
+          cached[1] == modified) {
+        found[rel] = _LocalFile(size, modified, cached[2] as String);
+      } else {
+        toRead.add((rel, size, modified));
+      }
+    }
+    if (toRead.isNotEmpty) {
+      AppLog.add('sync: checking ${toRead.length} songs');
+    }
+    for (var i = 0; i < toRead.length; i += 8) {
+      final batch = toRead.sublist(i, min(i + 8, toRead.length));
+      files = FileSyncProgress(
+        'Checking songs',
+        i,
+        toRead.length,
+        p.basename(batch.first.$1),
+        0,
+      );
+      notifyListeners();
+      final sums = await _sha1InBackground([
+        for (final (rel, _, _) in batch) p.joinAll([root, ...rel.split('/')]),
+      ]);
+      for (var k = 0; k < batch.length; k++) {
+        final (rel, size, modified) = batch[k];
+        found[rel] = _LocalFile(size, modified, sums[k]);
+      }
+    }
+    return found;
   }
 
   Future<void> _upload(
@@ -1276,17 +1364,21 @@ class _LocalFile {
   const _LocalFile(this.size, this.modified, this.sha1);
 }
 
-/// [_hashFolder] in another isolate. A function of its own so the closure
-/// sent there holds only these two (not the sync service and its timers).
-Future<Map<String, _LocalFile>> _hashInBackground(
-  String root,
-  Map<String, dynamic> known,
-) => Isolate.run(() => _hashFolder(root, known));
+/// The songs in [root] (path inside it, size, time), in another isolate.
+/// A function of its own so the closure sent there holds only [root] (not
+/// the sync service and its timers).
+Future<List<(String, int, int)>> _listInBackground(String root) =>
+    Isolate.run(() => _listFolder(root));
 
-/// Every song in [root], by its path inside it (with /), hashed; files
-/// whose size and time match [known] keep their hash.
-Map<String, _LocalFile> _hashFolder(String root, Map<String, dynamic> known) {
-  final found = <String, _LocalFile>{};
+Future<List<String>> _sha1InBackground(List<String> paths) => Isolate.run(
+  () => [
+    for (final path in paths)
+      sha1.convert(File(path).readAsBytesSync()).toString(),
+  ],
+);
+
+List<(String, int, int)> _listFolder(String root) {
+  final found = <(String, int, int)>[];
   final dir = Directory(root);
   if (!dir.existsSync()) return found;
   for (final entity in dir.listSync(recursive: true, followLinks: false)) {
@@ -1295,18 +1387,7 @@ Map<String, _LocalFile> _hashFolder(String root, Map<String, dynamic> known) {
     if (rel.split('/').any((part) => part.startsWith('.'))) continue;
     if (!audioExtensions.contains(p.extension(rel).toLowerCase())) continue;
     final stat = entity.statSync();
-    final size = stat.size;
-    final modified = stat.modified.millisecondsSinceEpoch;
-    final cached = known[rel];
-    if (cached is List &&
-        cached.length == 3 &&
-        cached[0] == size &&
-        cached[1] == modified) {
-      found[rel] = _LocalFile(size, modified, cached[2] as String);
-      continue;
-    }
-    final digest = sha1.convert(entity.readAsBytesSync());
-    found[rel] = _LocalFile(size, modified, digest.toString());
+    found.add((rel, stat.size, stat.modified.millisecondsSinceEpoch));
   }
   return found;
 }

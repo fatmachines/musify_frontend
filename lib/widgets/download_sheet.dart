@@ -253,7 +253,7 @@ class _DownloadBannerState extends State<_DownloadBanner> {
           _progress = downloads.progressOf(track) ?? 0;
         } else if (files != null) {
           // Music files moving between this device and the others.
-          _count = '${files.done + 1}/${files.total} syncing…';
+          _count = '${files.label}…';
           _name = files.current;
           _progress = files.total == 0
               ? 0

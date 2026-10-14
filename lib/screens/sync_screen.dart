@@ -537,7 +537,7 @@ class _On extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Syncing ${files.done + 1} of ${files.total}: ${files.current}',
+                  '${files.label}: ${files.current}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: AppColors.subtle, fontSize: 13),
