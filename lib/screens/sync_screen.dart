@@ -46,10 +46,12 @@ class _SyncScreenState extends State<SyncScreen> {
           return RefreshIndicator(
             color: AppColors.green,
             onRefresh: () => _run(context, sync.refresh),
+            // Not const: they read the sync service directly, so each
+            // change has to rebuild them (a const one would be skipped).
             child: switch (sync.status) {
-              SyncStatus.off => const _Off(),
-              SyncStatus.waiting => const _Waiting(),
-              SyncStatus.on => const _On(),
+              SyncStatus.off => _Off(),
+              SyncStatus.waiting => _Waiting(),
+              SyncStatus.on => _On(),
             },
           );
         },

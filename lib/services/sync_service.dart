@@ -439,6 +439,21 @@ class SyncService extends ChangeNotifier {
     }
   }
 
+  /// Sets what the Sync screen shows, without a server, for tests.
+  @visibleForTesting
+  void debugShow({
+    String? token,
+    String? code,
+    List<SyncDevice> devices = const [],
+    List<SyncRequest> requests = const [],
+  }) {
+    _token = token;
+    _code = code;
+    this.devices = devices;
+    this.requests = requests;
+    notifyListeners();
+  }
+
   /// Pull to refresh: whether this device was let in yet, or a full sync.
   Future<void> refresh() async {
     if (status == SyncStatus.waiting) {
