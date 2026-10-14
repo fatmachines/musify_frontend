@@ -68,6 +68,11 @@ desktop layout (library sidebar, search bar on top, player across the
 bottom; space plays and pauses). The app is sandboxed: music folders are
 added with the open panel and stay readable across launches.
 
+To hand the Mac app to others, `scripts/make_dmg.sh` builds it, signs it
+with your Developer ID, packs `dist/Musify-<version>.dmg` and has Apple
+notarize it, so it opens without a warning. The script's header lists the
+one-time setup (certificate and notarization credentials).
+
 ### Android
 
 Change `applicationId` in `android/app/build.gradle.kts` if you publish your
