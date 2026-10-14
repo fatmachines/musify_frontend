@@ -368,10 +368,11 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          // The name, and the playlist's options in a circle beside it.
+          // The name, and the playlist's options in a circle right after
+          // it.
           Row(
             children: [
-              Expanded(
+              Flexible(
                 child: Text(
                   _playlist.name,
                   maxLines: 2,
@@ -384,7 +385,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Material(
                 color: Colors.white.withValues(alpha: 0.12),
                 shape: const CircleBorder(),
