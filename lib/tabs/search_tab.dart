@@ -13,6 +13,7 @@ import '../services/musify_server.dart';
 import '../services/app_log.dart';
 import '../screens/artist_page.dart';
 import '../theme.dart';
+import '../widgets/list_scrollbar.dart';
 import '../widgets/navigation.dart';
 import '../widgets/add_to_playlist.dart';
 import '../widgets/covers.dart';
@@ -65,6 +66,8 @@ class _SearchTabState extends State<SearchTab> {
   /// drop the keyboard.
   final _fieldKey = GlobalKey();
 
+  final _resultsScroll = ScrollController();
+
   /// YouTube results, fetched once typing pauses.
   Timer? _youtubeSoon;
   String _youtubeQuery = '';
@@ -100,6 +103,7 @@ class _SearchTabState extends State<SearchTab> {
     _focus.removeListener(_onFocusChanged);
     searchFocusRequests.removeListener(_focus.requestFocus);
     _youtubeSoon?.cancel();
+    _resultsScroll.dispose();
     if (!_fieldElsewhere) {
       _query.dispose();
       _focus.dispose();
@@ -327,65 +331,70 @@ class _SearchTabState extends State<SearchTab> {
     return StreamBuilder(
       // Rebuilds rows when the playing song changes.
       stream: player.player.sequenceStateStream,
-      builder: (context, _) => ListView.builder(
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.paddingOf(context).bottom + 16,
-        ),
-        // Your music, then a "YouTube" heading and what YouTube found.
-        itemCount: top + local + 1 + (youtube?.length ?? 0),
-        itemBuilder: (context, row) {
-          if (artist != null && row == 0) {
-            return _ArtistCard(
-              artist: artist,
-              onTap: () {
-                _focus.unfocus();
-                openPage(context, ArtistPage(artist: artist));
-              },
-            );
-          }
-          final i = row - top;
-          if (i == local) {
-            return _YouTubeHeading(
-              searching: searching,
-              failed: _youtubeFailed,
-              empty: youtube?.isEmpty ?? false,
-            );
-          }
-          if (i > local) {
-            final index = i - local - 1;
-            final track = youtube![index];
+      builder: (context, _) => ListScrollbar(
+        controller: _resultsScroll,
+        padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
+        child: ListView.builder(
+          controller: _resultsScroll,
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.paddingOf(context).bottom + 16,
+          ),
+          // Your music, then a "YouTube" heading and what YouTube found.
+          itemCount: top + local + 1 + (youtube?.length ?? 0),
+          itemBuilder: (context, row) {
+            if (artist != null && row == 0) {
+              return _ArtistCard(
+                artist: artist,
+                onTap: () {
+                  _focus.unfocus();
+                  openPage(context, ArtistPage(artist: artist));
+                },
+              );
+            }
+            final i = row - top;
+            if (i == local) {
+              return _YouTubeHeading(
+                searching: searching,
+                failed: _youtubeFailed,
+                empty: youtube?.isEmpty ?? false,
+              );
+            }
+            if (i > local) {
+              final index = i - local - 1;
+              final track = youtube![index];
+              final current = player.currentTrack?.path == track.path;
+              void play() => player.playYouTube(youtube, index);
+              return SongTile(
+                track: track,
+                subtitlePrefix: 'Song • ',
+                current: current,
+                playing: current && player.player.playing,
+                onTap: play,
+                onMore: () => showSongMenu(context, track, onPlay: play),
+                trailing: _AddButton(track: track),
+              );
+            }
+            if (i < playlists.length) {
+              return _PlaylistRow(
+                playlist: playlists[i],
+                onTap: () => _open(playlists[i]),
+              );
+            }
+            final track = songs[i - playlists.length];
             final current = player.currentTrack?.path == track.path;
-            void play() => player.playYouTube(youtube, index);
             return SongTile(
               track: track,
               subtitlePrefix: 'Song • ',
               current: current,
               playing: current && player.player.playing,
-              onTap: play,
-              onMore: () => showSongMenu(context, track, onPlay: play),
-              trailing: _AddButton(track: track),
+              onTap: () => _play(track),
+              onMore: () =>
+                  showSongMenu(context, track, onPlay: () => _play(track)),
+              trailing: _LikeToggle(track: track),
             );
-          }
-          if (i < playlists.length) {
-            return _PlaylistRow(
-              playlist: playlists[i],
-              onTap: () => _open(playlists[i]),
-            );
-          }
-          final track = songs[i - playlists.length];
-          final current = player.currentTrack?.path == track.path;
-          return SongTile(
-            track: track,
-            subtitlePrefix: 'Song • ',
-            current: current,
-            playing: current && player.player.playing,
-            onTap: () => _play(track),
-            onMore: () =>
-                showSongMenu(context, track, onPlay: () => _play(track)),
-            trailing: _LikeToggle(track: track),
-          );
-        },
+          },
+        ),
       ),
     );
   }

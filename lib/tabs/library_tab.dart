@@ -5,6 +5,7 @@ import '../screens/name_playlist_screen.dart';
 import '../services/library.dart';
 import '../services/player_service.dart';
 import '../theme.dart';
+import '../widgets/list_scrollbar.dart';
 import '../widgets/folders_sheet.dart';
 import '../widgets/navigation.dart';
 import '../widgets/covers.dart';
@@ -20,6 +21,13 @@ class LibraryTab extends StatefulWidget {
 
 class _LibraryTabState extends State<LibraryTab> {
   final _library = Library.instance;
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -131,30 +139,41 @@ class _LibraryTabState extends State<LibraryTab> {
       // Rebuilds tiles when playback moves to another playlist.
       child: StreamBuilder(
         stream: PlayerService.instance.player.sequenceStateStream,
-        builder: (context, _) => ListView(
+        builder: (context, _) => ListScrollbar(
+          controller: _scroll,
           padding: EdgeInsets.only(
-            top: 8,
-            bottom: MediaQuery.paddingOf(context).bottom + 8,
+            bottom: MediaQuery.paddingOf(context).bottom,
           ),
-          children: [
-            if (_library.scanning) const LinearProgressIndicator(minHeight: 2),
-            if (broken > 0)
-              ListTile(
-                leading: const Icon(Icons.error_outline, color: Colors.orange),
-                title: Text(
-                  broken == 1
-                      ? "A folder can't be opened"
-                      : "$broken folders can't be opened",
+          child: ListView(
+            controller: _scroll,
+            padding: EdgeInsets.only(
+              top: 8,
+              bottom: MediaQuery.paddingOf(context).bottom + 8,
+            ),
+            children: [
+              if (_library.scanning)
+                const LinearProgressIndicator(minHeight: 2),
+              if (broken > 0)
+                ListTile(
+                  leading: const Icon(
+                    Icons.error_outline,
+                    color: Colors.orange,
+                  ),
+                  title: Text(
+                    broken == 1
+                        ? "A folder can't be opened"
+                        : "$broken folders can't be opened",
+                  ),
+                  subtitle: const Text('Tap to manage folders'),
+                  onTap: () => showManageFolders(context),
                 ),
-                subtitle: const Text('Tap to manage folders'),
-                onTap: () => showManageFolders(context),
-              ),
-            for (final playlist in playlists)
-              _PlaylistTile(
-                playlist: playlist,
-                playing: PlayerService.instance.isCurrent(playlist),
-              ),
-          ],
+              for (final playlist in playlists)
+                _PlaylistTile(
+                  playlist: playlist,
+                  playing: PlayerService.instance.isCurrent(playlist),
+                ),
+            ],
+          ),
         ),
       ),
     );

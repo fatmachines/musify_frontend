@@ -9,6 +9,7 @@ import '../services/metadata_service.dart';
 import '../services/player_service.dart';
 import '../theme.dart';
 import '../utils/cover_color.dart';
+import '../widgets/list_scrollbar.dart';
 import '../widgets/navigation.dart';
 import '../widgets/covers.dart';
 import '../widgets/playlist_actions.dart';
@@ -271,28 +272,37 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     final collapse = _collapse;
     return Stack(
       children: [
-        CustomScrollView(
+        ListScrollbar(
           controller: _scroll,
-          slivers: [
-            SliverToBoxAdapter(
-              child: _wide ? _buildWideHeader(context) : _buildHeader(context),
-            ),
-            if (widget.beforeTracks case final extra?)
-              SliverToBoxAdapter(child: extra),
-            if (tracks.isEmpty)
+          padding: EdgeInsets.only(
+            top: _barBottom,
+            bottom: MediaQuery.paddingOf(context).bottom,
+          ),
+          child: CustomScrollView(
+            controller: _scroll,
+            slivers: [
               SliverToBoxAdapter(
-                child: _EmptyPlaylist(liked: _playlist.id == Library.likedId),
+                child: _wide
+                    ? _buildWideHeader(context)
+                    : _buildHeader(context),
               ),
-            SliverList.builder(
-              itemCount: shown.length,
-              itemBuilder: (context, i) => _buildTrack(shown[i]),
-            ),
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height: MediaQuery.paddingOf(context).bottom + 24,
+              if (widget.beforeTracks case final extra?)
+                SliverToBoxAdapter(child: extra),
+              if (tracks.isEmpty)
+                SliverToBoxAdapter(
+                  child: _EmptyPlaylist(liked: _playlist.id == Library.likedId),
+                ),
+              SliverList.builder(
+                itemCount: shown.length,
+                itemBuilder: (context, i) => _buildTrack(shown[i]),
               ),
-            ),
-          ],
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: MediaQuery.paddingOf(context).bottom + 24,
+                ),
+              ),
+            ],
+          ),
         ),
         // Title bar: clear over the header, filling with the cover colour as
         // the playlist name scrolls under it.

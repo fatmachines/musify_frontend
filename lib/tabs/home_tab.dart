@@ -103,11 +103,19 @@ class _HomeTabState extends State<HomeTab> {
                           ),
                         ),
                         const SizedBox(width: 12),
-                        Text(
-                          _greeting(),
-                          style: const TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w800,
+                        // Shrinks on a narrow screen with large text.
+                        Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              _greeting(),
+                              maxLines: 1,
+                              style: const TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
                           ),
                         ),
                       ],
