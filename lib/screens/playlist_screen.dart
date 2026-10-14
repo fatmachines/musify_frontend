@@ -21,7 +21,10 @@ const _findBarHeight = 38.0;
 class PlaylistScreen extends StatefulWidget {
   final Playlist playlist;
 
-  const PlaylistScreen({super.key, required this.playlist});
+  /// Between the header and the songs, e.g. an artist's albums.
+  final Widget? beforeTracks;
+
+  const PlaylistScreen({super.key, required this.playlist, this.beforeTracks});
 
   @override
   State<PlaylistScreen> createState() => _PlaylistScreenState();
@@ -265,6 +268,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             SliverToBoxAdapter(
               child: _wide ? _buildWideHeader(context) : _buildHeader(context),
             ),
+            if (widget.beforeTracks case final extra?)
+              SliverToBoxAdapter(child: extra),
             if (tracks.isEmpty)
               SliverToBoxAdapter(
                 child: _EmptyPlaylist(liked: _playlist.id == Library.likedId),
@@ -500,6 +505,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     final name = _playlist.name;
     final kind = _isArtist
         ? 'Artist'
+        : _playlist.id.startsWith('youtube:album:')
+        ? 'Album'
         : Library.isRemote(_playlist)
         ? 'YouTube playlist'
         : _playlist.isCustom

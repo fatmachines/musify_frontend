@@ -140,7 +140,7 @@ class MusifyServer extends ChangeNotifier {
   List<Playlist>? get cachedCharts => _charts;
 
   (YouTubeArtist?, List<YouTubeTrack>)? _debugSearch;
-  Playlist? _debugArtist;
+  (Playlist, List<YouTubeAlbum>)? _debugArtist;
 
   /// Sets the charts and key without the server, for screenshots and tests.
   @visibleForTesting
@@ -148,7 +148,7 @@ class MusifyServer extends ChangeNotifier {
     required String key,
     required List<Playlist> charts,
     (YouTubeArtist?, List<YouTubeTrack>)? search,
-    Playlist? artist,
+    (Playlist, List<YouTubeAlbum>)? artist,
   }) {
     _debugSearch = search;
     _debugArtist = artist;
@@ -209,17 +209,43 @@ class MusifyServer extends ChangeNotifier {
     return (_artist(data['artist']), _tracks(data['songs']));
   }
 
-  /// [artist]'s songs, all of them, as a playlist with their picture.
-  Future<Playlist> artist(YouTubeArtist artist) async {
+  /// [artist]'s songs, all of them, as a playlist with their picture, and
+  /// their albums, newest first.
+  Future<(Playlist, List<YouTubeAlbum>)> artist(YouTubeArtist artist) async {
     if (_debugArtist case final found?) return found;
     final data = await _getJson(
       '/artist?id=${Uri.encodeQueryComponent(artist.id)}',
     );
-    return Playlist(
+    final songs = Playlist(
       id: artist.playlistId,
       name: data['name'] as String? ?? artist.name,
       tracks: _tracks(data['tracks']),
       artworkUrl: data['thumbnail'] as String? ?? artist.thumbnail,
+    );
+    final albums = [
+      if (data['albums'] case final List list)
+        for (final a in list)
+          if (a case {'id': final String id})
+            YouTubeAlbum(
+              id: id,
+              title: a['title'] as String? ?? '',
+              year: a['year'] as String?,
+              thumbnail: a['thumbnail'] as String?,
+            ),
+    ];
+    return (songs, albums);
+  }
+
+  /// [album]'s songs as a playlist with its cover.
+  Future<Playlist> album(YouTubeAlbum album) async {
+    final data = await _getJson(
+      '/album?id=${Uri.encodeQueryComponent(album.id)}',
+    );
+    return Playlist(
+      id: album.playlistId,
+      name: data['title'] as String? ?? album.title,
+      tracks: _tracks(data['tracks']),
+      artworkUrl: data['thumbnail'] as String? ?? album.thumbnail,
     );
   }
 

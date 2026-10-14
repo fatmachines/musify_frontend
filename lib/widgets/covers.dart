@@ -65,19 +65,27 @@ class ArtworkImage extends StatelessWidget {
   final String? url;
   final double size;
 
-  const ArtworkImage({super.key, required this.url, required this.size});
+  /// Shown until the picture is in (or if there's none).
+  final IconData placeholder;
+
+  const ArtworkImage({
+    super.key,
+    required this.url,
+    required this.size,
+    this.placeholder = Icons.person,
+  });
 
   @override
   Widget build(BuildContext context) {
     final url = this.url;
-    if (url == null) return _Placeholder(icon: Icons.person, size: size);
+    if (url == null) return _Placeholder(icon: placeholder, size: size);
     return FutureBuilder<Uint8List?>(
       future: MetadataService.image(url),
       initialData: MetadataService.loadedImage(url),
       builder: (context, snapshot) {
         final bytes = snapshot.data;
         return bytes == null
-            ? _Placeholder(icon: Icons.person, size: size)
+            ? _Placeholder(icon: placeholder, size: size)
             : _CoverImage(bytes: bytes, size: size);
       },
     );

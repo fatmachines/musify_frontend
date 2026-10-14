@@ -81,6 +81,24 @@ class YouTubeArtist {
   String get playlistId => 'youtube:artist:$id';
 }
 
+/// An album on YouTube Music; its songs come as a playlist with the id
+/// `youtube:album:<id>` (see MusifyServer.album).
+class YouTubeAlbum {
+  final String id;
+  final String title;
+  final String? year;
+  final String? thumbnail;
+
+  const YouTubeAlbum({
+    required this.id,
+    required this.title,
+    this.year,
+    this.thumbnail,
+  });
+
+  String get playlistId => 'youtube:album:$id';
+}
+
 /// A queued YouTube song: plays once, like [QueuedTrack].
 class QueuedYouTubeTrack extends YouTubeTrack implements QueuedTrack {
   QueuedYouTubeTrack({
