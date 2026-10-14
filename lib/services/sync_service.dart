@@ -1380,10 +1380,13 @@ class SyncService extends ChangeNotifier implements RemoteControl {
     final FilePlan(:upload, :download, :deleteHere, :deleteThere) = plan;
 
     // A folder that's suddenly empty-ish is likelier unreadable than
-    // emptied on purpose: don't delete everything everywhere.
-    if (deleteThere.length > 10 && deleteThere.length > synced.length / 2) {
+    // emptied on purpose: don't delete everything everywhere. Songs only
+    // moved (a folder renamed) are still here, under another name.
+    final held = {for (final f in local.values) f.sha1};
+    final missing = deleteThere.where((rel) => !held.contains(synced[rel]));
+    if (missing.length > 10 && missing.length > synced.length / 2) {
       throw SyncFailed(
-        '${deleteThere.length} synced songs are missing from '
+        '${missing.length} synced songs are missing from '
         '${folder.name}; not deleting them on your other devices',
       );
     }
@@ -1419,8 +1422,10 @@ class SyncService extends ChangeNotifier implements RemoteControl {
     final sending = [for (final sha1 in wanted) ?byHash[sha1]];
 
     // A song wanted somewhere this device already has it (moved to another
-    // folder on another device): moved here too, or copied, not fetched.
+    // folder, or its folder renamed, on another device): moved here too,
+    // or copied, not fetched.
     final placed = <String>[];
+    final emptied = <String>[];
     for (final rel in download) {
       final sha1 = remote[rel]!['sha1'] as String;
       final source = byHash[sha1];
@@ -1432,6 +1437,7 @@ class SyncService extends ChangeNotifier implements RemoteControl {
         await to.parent.create(recursive: true);
         if (deleteHere.remove(source)) {
           await from.rename(to.path);
+          emptied.add(source);
           synced.remove(source);
           final file = local.remove(source)!;
           local[rel] = file;
@@ -1509,8 +1515,12 @@ class SyncService extends ChangeNotifier implements RemoteControl {
       try {
         await File(p.joinAll([folder.path, ...rel.split('/')])).delete();
       } catch (_) {}
+      emptied.add(rel);
       synced.remove(rel);
     }
+    // Folders left empty by that go too: a renamed one isn't left behind
+    // under its old name.
+    _removeEmptyFolders(folder.path, emptied);
     if (deleteThere.isNotEmpty) {
       await _call('POST', '/sync/files', body: {'delete': deleteThere});
       for (final rel in deleteThere) {
@@ -1730,6 +1740,37 @@ FilePlan planFiles(
     (synced[rel] == there['sha1'] ? deleteThere : download).add(rel);
   }
   return FilePlan(upload, download, deleteHere, deleteThere);
+}
+
+/// Deletes the folders inside [root] holding [rels] (paths in it) once
+/// they're empty, but for hidden files like .DS_Store, and their parents
+/// after them; never [root] itself.
+void _removeEmptyFolders(String root, List<String> rels) {
+  final folders = <String>{
+    for (final rel in rels)
+      if (rel.contains('/')) rel.substring(0, rel.lastIndexOf('/')),
+  };
+  // Deepest first, so a parent is empty by the time it's looked at.
+  final queue = folders.toList()
+    ..sort((a, b) => b.split('/').length - a.split('/').length);
+  final seen = <String>{};
+  while (queue.isNotEmpty) {
+    final rel = queue.removeAt(0);
+    if (!seen.add(rel)) continue;
+    final dir = Directory(p.joinAll([root, ...rel.split('/')]));
+    try {
+      if (!dir.existsSync()) continue;
+      final left = dir.listSync().where(
+        (e) => !p.basename(e.path).startsWith('.'),
+      );
+      if (left.isNotEmpty) continue;
+      dir.deleteSync(recursive: true);
+      AppLog.add('sync: removed empty folder $rel');
+      if (rel.contains('/')) queue.add(rel.substring(0, rel.lastIndexOf('/')));
+    } on FileSystemException catch (e) {
+      AppLog.add('sync: couldn\'t remove folder $rel: ${e.message}');
+    }
+  }
 }
 
 class _LocalFile {

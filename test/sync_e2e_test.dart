@@ -409,6 +409,56 @@ void main() {
       expect(File(p.join(music.path, 'Chill', 'b.mp3')).existsSync(), isTrue);
       expect(bSong.existsSync(), isFalse);
       expect((await mac('GET', '/sync/blobs/$bSha', token: token)).$1, 404);
+      // Pop is empty now, so it goes too.
+      expect(Directory(p.join(music.path, 'Pop')).existsSync(), isFalse);
+
+      // A folder of 12 songs renamed here: the others see the songs move,
+      // not most of the library vanish (which sync refuses to pass on).
+      for (var i = 0; i < 12; i++) {
+        await File(p.join(music.path, 'Big', 's$i.mp3'))
+            .create(recursive: true)
+            .then((f) => f.writeAsString('song $i' * 100));
+      }
+      await sync.syncNow();
+      expect(sync.lastError, isNull);
+      await library.rescan();
+      final big = library.all.firstWhere((pl) => pl.name == 'Big');
+      expect(await library.renameFolder(big, 'Huge'), isNull);
+      await sync.syncNow();
+      expect(sync.lastError, isNull);
+      final (_, afterRename) = await mac('GET', '/sync/files', token: token);
+      final listed = {
+        for (final f in afterRename['files'] as List)
+          f['path'] as String: f['deleted'] == true,
+      };
+      for (var i = 0; i < 12; i++) {
+        expect(listed['Huge/s$i.mp3'], isFalse);
+        expect(listed['Big/s$i.mp3'] ?? true, isTrue);
+      }
+
+      // And renamed on the Mac: moved here, nothing fetched, and the old
+      // folder doesn't linger.
+      await mac(
+        'POST',
+        '/sync/files',
+        token: token,
+        body: {
+          'add': [
+            for (var i = 0; i < 12; i++)
+              {
+                'path': 'Giant/s$i.mp3',
+                'sha1': sha1.convert(utf8.encode('song $i' * 100)).toString(),
+                'size': ('song $i' * 100).length,
+              },
+          ],
+          'delete': [for (var i = 0; i < 12; i++) 'Huge/s$i.mp3'],
+        },
+      );
+      await sync.syncNow();
+      expect(sync.lastError, isNull);
+      expect(File(p.join(music.path, 'Giant', 's0.mp3')).existsSync(), isTrue);
+      expect(Directory(p.join(music.path, 'Huge')).existsSync(), isFalse);
+      expect(library.all.map((pl) => pl.name), contains('Giant'));
 
       // Remote control. The Mac plays: this device shows it, its controls
       // show the Mac playing, and pausing here asks the Mac to pause.
