@@ -22,6 +22,14 @@ There are two halves:
   and sync between your devices: playlists, what's playing, and the music
   files themselves.
 
+## Download
+
+- **Mac** (`.dmg`) and **Android** (`.apk`): from
+  [Releases](https://github.com/fatmachines/musify_frontend/releases/latest).
+  On Android, allow installing from your browser or Files when it asks.
+- **iPhone**: build it yourself (below); Apple doesn't allow installing apps
+  from outside the App Store.
+
 ## Offline: your folders are your library
 
 Add a folder (from Files on iPhone, the open panel on the Mac, the file
@@ -216,7 +224,9 @@ one-time setup (certificate and notarization credentials).
 ### Android
 
 Change `applicationId` in `android/app/build.gradle.kts` if you publish your
-own build, then `flutter run`.
+own build, then `flutter run`. `scripts/make_apk.sh` builds a release APK
+into `dist/`, signed with your key from `android/key.properties` (its
+header shows how to make one).
 
 ## Connect your server
 
