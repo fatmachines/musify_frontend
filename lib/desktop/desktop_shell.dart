@@ -101,86 +101,103 @@ class _DesktopShellState extends State<DesktopShell>
 
   @override
   Widget build(BuildContext context) {
-    return CallbackShortcuts(
-      // Space plays and pauses, as in Spotify (text fields keep theirs).
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.space): () =>
-            PlayerService.instance.togglePlayback(),
+    // Space plays and pauses, as in Spotify, unless typing: then the text
+    // field gets it. Key events reach here only after the focused widget
+    // passes on them; text fields take their text another way, so ask.
+    return Focus(
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent ||
+            event.logicalKey != LogicalKeyboardKey.space ||
+            _typing()) {
+          return KeyEventResult.ignored;
+        }
+        PlayerService.instance.togglePlayback();
+        return KeyEventResult.handled;
       },
-      child: Focus(
-        autofocus: true,
-        child: DesktopScope(
-          main: _main,
-          child: Stack(
-            children: [
-              // YouTube songs play in here, out of sight behind the app.
-              const Positioned(left: 0, top: 0, child: YouTubeWebHost()),
-              DownloadBannerLayout(
-                child: Scaffold(
-                  backgroundColor: Colors.black,
-                  body: Column(
-                    children: [
-                      _TopBar(
-                        query: _query,
-                        focus: _searchFocus,
-                        onBack: () => _navigator?.maybePop(),
-                        onHome: _home,
-                        onEqualizer: _openEqualizer,
-                      ),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              const SizedBox(
-                                width: 320,
-                                child: _Panel(child: _Sidebar()),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _Panel(
-                                  child: Navigator(
-                                    key: _main,
-                                    onGenerateRoute: (_) => MaterialPageRoute(
-                                      builder: (_) => const HomeTab(),
-                                    ),
+      child: DesktopScope(
+        main: _main,
+        child: Stack(
+          children: [
+            // YouTube songs play in here, out of sight behind the app.
+            const Positioned(left: 0, top: 0, child: YouTubeWebHost()),
+            DownloadBannerLayout(
+              child: Scaffold(
+                backgroundColor: Colors.black,
+                body: Column(
+                  children: [
+                    _TopBar(
+                      query: _query,
+                      focus: _searchFocus,
+                      onBack: () => _navigator?.maybePop(),
+                      onHome: _home,
+                      onEqualizer: _openEqualizer,
+                    ),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const SizedBox(
+                              width: 320,
+                              child: _Panel(child: _Sidebar()),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _Panel(
+                                child: Navigator(
+                                  key: _main,
+                                  // Opening a page (Search, as you type)
+                                  // mustn't take the keyboard from the
+                                  // search field.
+                                  requestFocus: false,
+                                  onGenerateRoute: (_) => MaterialPageRoute(
+                                    builder: (_) => const HomeTab(),
                                   ),
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
-                      _PlayerBar(onOpen: _openPlayer),
-                    ],
-                  ),
+                    ),
+                    _PlayerBar(onOpen: _openPlayer),
+                  ],
                 ),
               ),
-              // The full player, over everything, the page dimmed behind.
-              AnimatedBuilder(
-                animation: _player,
-                builder: (context, child) => _player.value == 0
-                    ? const SizedBox.shrink()
-                    : FadeTransition(opacity: _player, child: child),
-                child: Material(
-                  color: Colors.black.withValues(alpha: 0.85),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 520),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: NowPlaying(onClose: _closePlayer),
-                      ),
+            ),
+            // The full player, over everything, the page dimmed behind.
+            AnimatedBuilder(
+              animation: _player,
+              builder: (context, child) => _player.value == 0
+                  ? const SizedBox.shrink()
+                  : FadeTransition(opacity: _player, child: child),
+              child: Material(
+                color: Colors.black.withValues(alpha: 0.85),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 520),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: NowPlaying(onClose: _closePlayer),
                     ),
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
+  }
+
+  /// Whether a text field has the keyboard (the search, a dialog's field).
+  bool _typing() {
+    final focused = FocusManager.instance.primaryFocus?.context;
+    return focused != null &&
+        (focused.widget is EditableText ||
+            focused.findAncestorWidgetOfExactType<EditableText>() != null);
   }
 }
 
