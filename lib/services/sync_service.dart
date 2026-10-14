@@ -1014,12 +1014,34 @@ class SyncService extends ChangeNotifier {
       });
     await prefs.setString(_hashesKey, jsonEncode(hashes));
 
-    final (status, data) = await _call('GET', '/sync/files');
-    if (status != 200) throw SyncFailed(data['error'] as String? ?? '$status');
-    final remote = {
-      for (final f in data['files'] as List)
-        (f as Map)['path'] as String: f.cast<String, dynamic>(),
-    };
+    // What this device has: songs every device has never need uploading.
+    Future<void> reportHoldings() async {
+      final (said, result) = await _call(
+        'POST',
+        '/sync/have',
+        body: {
+          'sha1s': [for (final f in local.values) f.sha1],
+        },
+      );
+      if (said != 200) throw SyncFailed(result['error'] as String? ?? '$said');
+    }
+
+    Future<(Map<String, Map<String, dynamic>>, Set<String>)> listing() async {
+      final (status, data) = await _call('GET', '/sync/files');
+      if (status != 200) {
+        throw SyncFailed(data['error'] as String? ?? '$status');
+      }
+      return (
+        {
+          for (final f in data['files'] as List)
+            (f as Map)['path'] as String: f.cast<String, dynamic>(),
+        },
+        {...((data['wanted'] as List?) ?? const []).cast<String>()},
+      );
+    }
+
+    await reportHoldings();
+    var (remote, wanted) = await listing();
 
     final plan = planFiles(
       {for (final e in local.entries) e.key: e.value.sha1},
@@ -1037,31 +1059,46 @@ class SyncService extends ChangeNotifier {
       );
     }
 
-    // Songs the server already has (from another device, say) are only
-    // listed, not sent again.
-    var needed = <String>{};
-    if (upload.isNotEmpty) {
-      final (s, missing) = await _call(
+    // New or changed here: listed for the others (not uploaded: only songs
+    // another device lacks are, below).
+    for (var i = 0; i < upload.length; i += 200) {
+      final batch = upload.sublist(i, min(i + 200, upload.length));
+      final (added, result) = await _call(
         'POST',
-        '/sync/blobs/missing',
+        '/sync/files',
         body: {
-          'sha1s': [for (final rel in upload) local[rel]!.sha1],
+          'add': [
+            for (final rel in batch)
+              {'path': rel, 'sha1': local[rel]!.sha1, 'size': local[rel]!.size},
+          ],
         },
       );
-      if (s != 200) throw SyncFailed(missing['error'] as String? ?? '$s');
-      needed = {...(missing['missing'] as List).cast<String>()};
+      if (added != 200) {
+        throw SyncFailed(result['error'] as String? ?? '$added');
+      }
+      for (final rel in batch) {
+        synced[rel] = local[rel]!.sha1;
+      }
     }
-    final sending = [
-      for (final rel in upload)
-        if (needed.contains(local[rel]!.sha1)) rel,
+    if (upload.isNotEmpty) {
+      await prefs.setString(_syncedKey, jsonEncode(synced));
+      (remote, wanted) = await listing();
+    }
+
+    // Upload what another device lacks; download what's on the server.
+    final byHash = {for (final e in local.entries) e.value.sha1: e.key};
+    final sending = [for (final sha1 in wanted) ?byHash[sha1]];
+    final fetching = [
+      for (final rel in download)
+        if (remote[rel]?['available'] == true) rel,
     ];
     AppLog.add(
       'sync: files: ${local.length} here, ${remote.length} listed; '
-      'uploading ${sending.length} (${upload.length - sending.length} '
-      'already there), downloading ${download.length}, deleting '
+      'listing ${upload.length} new here, uploading ${sending.length} '
+      'another device lacks, downloading ${fetching.length} '
+      '(${download.length - fetching.length} not uploaded yet), deleting '
       '${deleteHere.length} here and ${deleteThere.length} elsewhere',
     );
-    await prefs.setString(_syncedKey, jsonEncode(synced));
 
     var done = 0;
     var total = sending.length;
@@ -1071,52 +1108,23 @@ class SyncService extends ChangeNotifier {
       notifyListeners();
     }
 
-    // Listed for the other devices as they go (every 10), so an
-    // interruption doesn't hold back what's already up.
-    final waiting = <String>[];
-    Future<void> announce() async {
-      if (waiting.isEmpty) return;
-      final (added, result) = await _call(
-        'POST',
-        '/sync/files',
-        body: {
-          'add': [
-            for (final rel in waiting)
-              {'path': rel, 'sha1': local[rel]!.sha1, 'size': local[rel]!.size},
-          ],
-        },
+    for (final rel in sending) {
+      progress(p.basename(rel), 0);
+      await _upload(
+        File(p.joinAll([folder.path, ...rel.split('/')])),
+        local[rel]!.sha1,
+        (f) => progress(p.basename(rel), f),
       );
-      if (added != 200) {
-        throw SyncFailed(result['error'] as String? ?? '$added');
-      }
-      for (final rel in waiting) {
-        synced[rel] = local[rel]!.sha1;
-      }
-      waiting.clear();
-      await prefs.setString(_syncedKey, jsonEncode(synced));
+      done++;
     }
-
-    for (final rel in upload) {
-      final file = local[rel]!;
-      if (needed.remove(file.sha1)) {
-        progress(p.basename(rel), 0);
-        await _upload(
-          File(p.joinAll([folder.path, ...rel.split('/')])),
-          file.sha1,
-          (f) => progress(p.basename(rel), f),
-        );
-        done++;
-      }
-      waiting.add(rel);
-      if (waiting.length >= 10) await announce();
+    if (sending.isNotEmpty) {
+      AppLog.add('sync: uploaded ${sending.length} songs');
     }
-    await announce();
-    if (upload.isNotEmpty) AppLog.add('sync: uploaded ${upload.length} songs');
 
     done = 0;
-    total = download.length;
+    total = fetching.length;
     action = 'Downloading';
-    for (final rel in download) {
+    for (final rel in fetching) {
       final sha1 = remote[rel]!['sha1'] as String;
       progress(p.basename(rel), 0);
       final target = File(p.joinAll([folder.path, ...rel.split('/')]));
@@ -1125,8 +1133,14 @@ class SyncService extends ChangeNotifier {
       done++;
       if (done % 10 == 0) await prefs.setString(_syncedKey, jsonEncode(synced));
     }
-    if (download.isNotEmpty) {
-      AppLog.add('sync: downloaded ${download.length} songs');
+    if (fetching.isNotEmpty) {
+      AppLog.add('sync: downloaded ${fetching.length} songs');
+      // Now held here too: no one uploads them for this device again.
+      for (final rel in fetching) {
+        final sha1 = remote[rel]!['sha1'] as String;
+        local[rel] = _LocalFile(remote[rel]!['size'] as int? ?? 0, 0, sha1);
+      }
+      await reportHoldings();
     }
 
     for (final rel in deleteHere) {
@@ -1148,7 +1162,7 @@ class SyncService extends ChangeNotifier {
       );
     }
     await prefs.setString(_syncedKey, jsonEncode(synced));
-    if (download.isNotEmpty || deleteHere.isNotEmpty) {
+    if (fetching.isNotEmpty || deleteHere.isNotEmpty) {
       await Library.instance.rescan();
       // Playlists naming the new songs can find them now.
       await _syncLibrarySerially();

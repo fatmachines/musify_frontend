@@ -175,6 +175,20 @@ void main() {
       expect(items['liked']['v']['tracks'], [
         {'sync': 'Rock/a.mp3'},
       ]);
+      // The Mac already has b.mp3 (a copied folder), not a.mp3: only a.mp3
+      // goes through the server.
+      final bSong = File(p.join(music.path, 'Pop', 'b.mp3'));
+      final bSha = sha1.convert(bSong.readAsBytesSync()).toString();
+      await mac(
+        'POST',
+        '/sync/have',
+        token: token,
+        body: {
+          'sha1s': [bSha],
+        },
+      );
+      await sync.syncNow();
+      expect((await mac('GET', '/sync/blobs/$bSha', token: token)).$1, 404);
       final (_, filesThere) = await mac('GET', '/sync/files', token: token);
       expect((filesThere['files'] as List).map((f) => f['path']).toSet(), {
         'Rock/a.mp3',
@@ -249,6 +263,17 @@ void main() {
       // The Mac's song is here, in the same folder; the deleted one is gone.
       expect(File(p.join(music.path, 'Jazz', 'c.mp3')).readAsBytesSync(), song);
       expect(File(p.join(music.path, 'Rock', 'a.mp3')).existsSync(), isFalse);
+      // Both hold c.mp3 now: the server lets it go.
+      await mac(
+        'POST',
+        '/sync/have',
+        token: token,
+        body: {
+          'sha1s': [bSha, cSha],
+        },
+      );
+      await sync.syncNow();
+      expect((await mac('GET', '/sync/blobs/$cSha', token: token)).$1, 404);
       // Its playlist is here, finding the downloaded song.
       final fromMac = library.custom.firstWhere((pl) => pl.name == 'From Mac');
       expect(fromMac.tracks.map((t) => p.basename(t.path)), ['c.mp3', 'b.mp3']);
