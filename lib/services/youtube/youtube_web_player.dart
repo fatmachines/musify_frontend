@@ -91,6 +91,7 @@ class YouTubeWebPlayer {
             if (_startAt > const Duration(seconds: 1)) {
               _command('seek', _startAt.inMilliseconds / 1000);
             }
+            if (_player.volume < 1) _command('volume', _player.volume);
             _command(_player.playing ? 'play' : 'pause');
           },
           onWebResourceError: (e) {
@@ -130,6 +131,13 @@ class YouTubeWebPlayer {
           if (playing) _markProgress(_lastVideoTime);
           AppLog.add('youtube web: ${playing ? 'play' : 'pause'}');
           _command(playing ? 'play' : 'pause');
+        }),
+      )
+      // The Mac's volume slider moves the stand-in's volume; the video
+      // follows. (iPhone's web views ignore it: the buttons do volume.)
+      ..add(
+        player.volumeStream.listen((volume) {
+          if (_current != null) _command('volume', volume);
         }),
       )
       ..add(
@@ -341,6 +349,7 @@ class YouTubeWebPlayer {
       if (v) { v.pause(); setTimeout(() => play(v), 250); }
     }
     else if (cmd === 'pause') { want = 'pause'; if (v) v.pause(); }
+    else if (cmd === 'volume') { window.__musifyVolume = arg; if (v) v.volume = arg; }
     else if (cmd === 'seek') {
       if (ready(v)) v.currentTime = arg; else seekTo = arg;
     }
@@ -363,6 +372,9 @@ class YouTubeWebPlayer {
           setTimeout(() => play(v), 300);
         }
       });
+    }
+    if (window.__musifyVolume != null && Math.abs(v.volume - window.__musifyVolume) > 0.01) {
+      v.volume = window.__musifyVolume;
     }
     if (want === 'play') {
       if (v.muted) v.muted = false;

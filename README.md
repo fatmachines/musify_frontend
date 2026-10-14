@@ -1,7 +1,7 @@
 # Musify
 
-A Spotify-style music player for iPhone and Android that plays **your own
-music files**, with YouTube on top: search it, play it, keep songs in your
+A Spotify-style music player for iPhone, Android and the Mac that plays
+**your own music files**, with YouTube on top: search it, play it, keep songs in your
 playlists, see the charts, and download songs into your folders.
 
 - **Your library**: add music folders (from Files on iPhone); every folder
@@ -48,6 +48,18 @@ flutter run            # on a connected phone
 
 CarPlay needs Apple's CarPlay audio entitlement, which Apple gives on
 request; without it Musify shows in CarPlay's Now Playing only.
+
+### Mac
+
+```sh
+flutter run -d macos
+```
+
+or open `macos/Runner.xcworkspace` in Xcode, pick your team under **Runner →
+Signing & Capabilities**, and Run. On a wide window Musify switches to a
+desktop layout (library sidebar, search bar on top, player across the
+bottom; space plays and pauses). The app is sandboxed: music folders are
+added with the open panel and stay readable across launches.
 
 ### Android
 

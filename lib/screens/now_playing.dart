@@ -194,7 +194,7 @@ class _Body extends StatelessWidget {
               ),
               IconButton(
                 tooltip: 'Queue',
-                onPressed: () => _showQueue(context),
+                onPressed: () => showQueueSheet(context),
                 icon: const Icon(Icons.queue_music, size: 24),
               ),
             ],
@@ -637,7 +637,7 @@ void _showMore(BuildContext context, Track track) {
               title: const Text('Go to queue'),
               onTap: () {
                 Navigator.of(sheet).pop();
-                _showQueue(context);
+                showQueueSheet(context);
               },
             ),
             StreamBuilder<LoopMode>(
@@ -762,7 +762,8 @@ class _SleepCountdownState extends State<_SleepCountdown> {
   }
 }
 
-void _showQueue(BuildContext context) {
+/// The queue: what's playing and what's next, reorderable.
+void showQueueSheet(BuildContext context) {
   final player = PlayerService.instance.player;
   final playlist = PlayerService.instance.current;
   showModalBottomSheet<void>(

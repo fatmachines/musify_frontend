@@ -6,13 +6,13 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../models/playlist.dart';
 import '../screens/name_playlist_screen.dart';
-import '../screens/playlist_screen.dart';
 import '../services/app_log.dart';
 import '../services/folder_access.dart';
 import '../services/library.dart';
 import '../services/player_service.dart';
 import '../services/voice_play.dart';
 import '../theme.dart';
+import '../widgets/navigation.dart';
 import '../widgets/server_key_dialog.dart';
 import '../widgets/covers.dart';
 import '../widgets/offline_badge.dart';
@@ -67,9 +67,7 @@ class _LibraryTabState extends State<LibraryTab> {
     );
     if (name == null || !mounted) return;
     final playlist = _library.createPlaylist(name);
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => PlaylistScreen(playlist: playlist)),
-    );
+    openPlaylist(context, playlist);
   }
 
   void _showAddMenu() {
@@ -256,7 +254,10 @@ class _LibraryTabState extends State<LibraryTab> {
               child: Icon(Icons.music_note, size: 18, color: Colors.black),
             ),
             SizedBox(width: 12),
-            Text('Your Library'),
+            // Shrinks rather than overflowing a narrow sidebar.
+            Flexible(
+              child: Text('Your Library', overflow: TextOverflow.ellipsis),
+            ),
           ],
         ),
         actions: [
@@ -401,9 +402,7 @@ class _PlaylistTile extends StatelessWidget {
         ? 'Folder • $location'
         : 'Folder • $count';
     return InkWell(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => PlaylistScreen(playlist: playlist)),
-      ),
+      onTap: () => openPlaylist(context, playlist),
       onLongPress: () => showPlaylistActions(context, playlist),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

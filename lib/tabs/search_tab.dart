@@ -4,13 +4,13 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../models/playlist.dart';
-import '../screens/playlist_screen.dart';
 import '../services/library.dart';
 import '../services/library_search.dart';
 import '../services/metadata_service.dart';
 import '../services/player_service.dart';
 import '../services/youtube/youtube_media.dart';
 import '../theme.dart';
+import '../widgets/navigation.dart';
 import '../widgets/add_to_playlist.dart';
 import '../widgets/covers.dart';
 import '../widgets/song_menu.dart';
@@ -38,7 +38,12 @@ final searchFocusRequests = ValueNotifier<int>(0);
 /// every added folder, then songs on YouTube. Before typing it shows the
 /// library as cards.
 class SearchTab extends StatefulWidget {
-  const SearchTab({super.key});
+  /// The search field's text and focus when the field is elsewhere (the
+  /// desktop layout's top bar): the page then shows only the results.
+  final TextEditingController? query;
+  final FocusNode? focus;
+
+  const SearchTab({super.key, this.query, this.focus});
 
   @override
   State<SearchTab> createState() => _SearchTabState();
@@ -46,8 +51,11 @@ class SearchTab extends StatefulWidget {
 
 class _SearchTabState extends State<SearchTab> {
   final _library = Library.instance;
-  final _query = TextEditingController();
-  final _focus = FocusNode();
+  late final _query = widget.query ?? TextEditingController();
+  late final _focus = widget.focus ?? FocusNode();
+
+  /// The field is in the top bar, not on this page.
+  bool get _fieldElsewhere => widget.query != null;
 
   /// Keeps the same text field when the layout around it changes (the
   /// header goes away once searching). A rebuilt field would keep focus but
@@ -64,22 +72,32 @@ class _SearchTabState extends State<SearchTab> {
   void initState() {
     super.initState();
     _library.addListener(_onLibraryChanged);
-    _query.addListener(() {
-      setState(() {});
-      _searchYouTubeSoon();
-    });
-    _focus.addListener(() => setState(() {}));
+    _query.addListener(_onQueryChanged);
+    _focus.addListener(_onFocusChanged);
     _library.ensureLoaded().then((_) => _onLibraryChanged());
     searchFocusRequests.addListener(_focus.requestFocus);
+    // Already typed in the top bar before this page opened.
+    if (_query.text.isNotEmpty) _searchYouTubeSoon();
   }
+
+  void _onQueryChanged() {
+    setState(() {});
+    _searchYouTubeSoon();
+  }
+
+  void _onFocusChanged() => setState(() {});
 
   @override
   void dispose() {
     _library.removeListener(_onLibraryChanged);
+    _query.removeListener(_onQueryChanged);
+    _focus.removeListener(_onFocusChanged);
     searchFocusRequests.removeListener(_focus.requestFocus);
     _youtubeSoon?.cancel();
-    _query.dispose();
-    _focus.dispose();
+    if (!_fieldElsewhere) {
+      _query.dispose();
+      _focus.dispose();
+    }
     super.dispose();
   }
 
@@ -123,9 +141,7 @@ class _SearchTabState extends State<SearchTab> {
 
   void _open(Playlist playlist) {
     _focus.unfocus();
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => PlaylistScreen(playlist: playlist)),
-    );
+    openPlaylist(context, playlist);
   }
 
   @override
@@ -135,7 +151,7 @@ class _SearchTabState extends State<SearchTab> {
         bottom: false,
         child: Column(
           children: [
-            if (!_active)
+            if (!_active && !_fieldElsewhere)
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 12, 16, 16),
                 child: Row(
@@ -160,7 +176,7 @@ class _SearchTabState extends State<SearchTab> {
                   ],
                 ),
               ),
-            _buildField(),
+            if (_fieldElsewhere) const SizedBox(height: 8) else _buildField(),
             Expanded(child: _active ? _buildResults() : _buildBrowse()),
           ],
         ),

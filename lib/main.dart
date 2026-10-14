@@ -1,6 +1,7 @@
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 
+import 'desktop/desktop_shell.dart';
 import 'screens/now_playing.dart';
 import 'services/app_log.dart';
 import 'services/audio_handler.dart';
@@ -51,7 +52,13 @@ class MusifyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.dark,
       darkTheme: buildTheme(),
-      home: const HomeShell(),
+      // Spotify's desktop layout on wide windows (the Mac, iPad landscape),
+      // the phone's tabs otherwise.
+      home: Builder(
+        builder: (context) => DesktopShell.fits(MediaQuery.sizeOf(context))
+            ? const DesktopShell()
+            : const HomeShell(),
+      ),
     );
   }
 }

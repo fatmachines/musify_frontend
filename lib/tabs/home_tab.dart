@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../models/playlist.dart';
-import '../screens/playlist_screen.dart';
 import '../services/library.dart';
 import '../services/musify_server.dart';
 import '../services/player_service.dart';
 import '../theme.dart';
+import '../widgets/navigation.dart';
 import '../widgets/covers.dart';
 import '../widgets/playlist_actions.dart';
 import '../widgets/server_key_dialog.dart';
@@ -75,9 +75,7 @@ class _HomeTabState extends State<HomeTab> {
     return 'Good afternoon';
   }
 
-  void _open(Playlist playlist) => Navigator.of(
-    context,
-  ).push(MaterialPageRoute(builder: (_) => PlaylistScreen(playlist: playlist)));
+  void _open(Playlist playlist) => openPlaylist(context, playlist);
 
   @override
   Widget build(BuildContext context) {
@@ -125,9 +123,10 @@ class _HomeTabState extends State<HomeTab> {
                       // The playing playlist's tile shows an equaliser.
                       stream: PlayerService.instance.player.playingStream,
                       builder: (context, _) => SliverGrid(
+                        // Two to a row on a phone, more on a wide window.
                         gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
+                            const SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 300,
                               mainAxisSpacing: 8,
                               crossAxisSpacing: 8,
                               mainAxisExtent: 56,
@@ -220,8 +219,9 @@ extension on _HomeTabState {
       SliverPadding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         sliver: SliverGrid.builder(
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
+          // Two to a row on a phone, more on a wide window.
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 220,
             mainAxisSpacing: 16,
             crossAxisSpacing: 14,
             // A square card and a line of text under it.
@@ -338,7 +338,8 @@ class _ChartCard extends StatelessWidget {
             const SizedBox(height: 8),
             // The card names the chart already.
             Text(
-              '${chart.tracks.length} songs',
+              '${chart.tracks.length} '
+              '${chart.tracks.length == 1 ? 'song' : 'songs'}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(color: AppColors.subtle, fontSize: 13),

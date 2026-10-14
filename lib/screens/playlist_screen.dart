@@ -9,6 +9,7 @@ import '../services/metadata_service.dart';
 import '../services/player_service.dart';
 import '../theme.dart';
 import '../utils/cover_color.dart';
+import '../widgets/navigation.dart';
 import '../widgets/covers.dart';
 import '../widgets/playlist_actions.dart';
 import '../widgets/song_menu.dart';
@@ -142,8 +143,13 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     });
   }
 
-  double _coverSize(BuildContext context) =>
-      (MediaQuery.sizeOf(context).width * 0.6).clamp(160.0, 300.0);
+  /// In the desktop layout: Spotify's wide header, the cover beside the
+  /// name.
+  bool get _wide => DesktopScope.of(context);
+
+  double _coverSize(BuildContext context) => _wide
+      ? 220
+      : (MediaQuery.sizeOf(context).width * 0.6).clamp(160.0, 300.0);
 
   /// 0 while the playlist name is below the title bar, 1 once it has
   /// scrolled under it.
@@ -254,7 +260,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         CustomScrollView(
           controller: _scroll,
           slivers: [
-            SliverToBoxAdapter(child: _buildHeader(context)),
+            SliverToBoxAdapter(
+              child: _wide ? _buildWideHeader(context) : _buildHeader(context),
+            ),
             if (tracks.isEmpty)
               SliverToBoxAdapter(
                 child: _EmptyPlaylist(liked: _playlist.id == Library.likedId),
@@ -386,21 +394,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                 ),
               ),
               const SizedBox(width: 10),
-              Material(
-                color: Colors.white.withValues(alpha: 0.12),
-                shape: const CircleBorder(),
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  onTap: () => showPlaylistActions(context, _playlist),
-                  child: const Tooltip(
-                    message: 'Playlist options',
-                    child: SizedBox.square(
-                      dimension: 36,
-                      child: Icon(Icons.more_horiz, size: 22),
-                    ),
-                  ),
-                ),
-              ),
+              _optionsButton(),
             ],
           ),
           const SizedBox(height: 10),
@@ -467,6 +461,150 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   playing: current && _playing,
                   onTap: _onPlay,
                 ),
+              ),
+            ],
+          ),
+          _buildTagChips(),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  /// The playlist's ••• in a translucent circle.
+  Widget _optionsButton({double size = 36}) => Material(
+    color: Colors.white.withValues(alpha: 0.12),
+    shape: const CircleBorder(),
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      onTap: () => showPlaylistActions(context, _playlist),
+      child: Tooltip(
+        message: 'Playlist options',
+        child: SizedBox.square(
+          dimension: size,
+          child: const Icon(Icons.more_horiz, size: 22),
+        ),
+      ),
+    ),
+  );
+
+  /// Spotify's desktop header: the cover with the kind of playlist, its
+  /// name in large type and the summary beside it; play, shuffle, options
+  /// and find below.
+  Widget _buildWideHeader(BuildContext context) {
+    final current = _isCurrent;
+    final name = _playlist.name;
+    final kind = Library.isRemote(_playlist)
+        ? 'YouTube playlist'
+        : _playlist.isCustom
+        ? 'Playlist'
+        : 'Folder';
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [_accent, AppColors.background],
+          stops: const [0, 0.9],
+        ),
+      ),
+      padding: EdgeInsets.fromLTRB(24, _barBottom + 8, 24, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              DecoratedBox(
+                decoration: const BoxDecoration(
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0x80000000),
+                      blurRadius: 40,
+                      offset: Offset(0, 12),
+                    ),
+                  ],
+                ),
+                child: PlaylistCover(
+                  playlist: _playlist,
+                  size: _coverSize(context),
+                ),
+              ),
+              const SizedBox(width: 24),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      kind,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: name.length <= 18 ? 72 : 44,
+                        fontWeight: FontWeight.w900,
+                        height: 1.05,
+                        letterSpacing: -1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        const CircleAvatar(
+                          radius: 12,
+                          backgroundColor: AppColors.green,
+                          child: Icon(
+                            Icons.music_note,
+                            size: 15,
+                            color: Colors.black,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            'Musify • ${_summary()}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Opacity(
+                opacity: _pinPlay ? 0 : 1,
+                child: _PlayButton(
+                  key: _playKey,
+                  playing: current && _playing,
+                  onTap: _onPlay,
+                ),
+              ),
+              const SizedBox(width: 20),
+              _ShuffleButton(active: current && _shuffle, onTap: _onShuffle),
+              const SizedBox(width: 12),
+              _optionsButton(size: 40),
+              const Spacer(),
+              IconButton(
+                tooltip: 'Find on this page',
+                onPressed: _openSearch,
+                icon: const Icon(Icons.search, color: AppColors.subtle),
               ),
             ],
           ),

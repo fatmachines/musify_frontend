@@ -1,0 +1,48 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:just_audio_platform_interface/just_audio_platform_interface.dart';
+import 'package:musify/desktop/desktop_shell.dart';
+import 'package:musify/main.dart';
+import 'package:musify/tabs/search_tab.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'support/fake_audio.dart';
+
+void main() {
+  setUpAll(() => JustAudioPlatform.instance = FakeJustAudio());
+
+  test('only wide windows that are not phones get the desktop layout', () {
+    expect(DesktopShell.fits(const Size(1440, 900)), isTrue); // Mac
+    expect(DesktopShell.fits(const Size(1194, 834)), isTrue); // iPad, wide
+    expect(DesktopShell.fits(const Size(834, 1194)), isFalse); // iPad, tall
+    expect(DesktopShell.fits(const Size(932, 430)), isFalse); // iPhone, wide
+    expect(DesktopShell.fits(const Size(393, 852)), isFalse); // iPhone
+  });
+
+  testWidgets('typing in the top bar opens Search in the main panel', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(const MusifyApp());
+    await tester.pump();
+    expect(find.byType(DesktopShell), findsOneWidget);
+    expect(find.byType(SearchTab), findsNothing);
+
+    await tester.enterText(find.byType(TextField).first, 'love');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(SearchTab), findsOneWidget);
+
+    // Home goes back to the start and clears the search.
+    await tester.tap(find.byTooltip('Home'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(SearchTab), findsNothing);
+    expect(find.text('love'), findsNothing);
+    // Let the YouTube search's wait run out.
+    await tester.pump(const Duration(seconds: 1));
+  });
+}
