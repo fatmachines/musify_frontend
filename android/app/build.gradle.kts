@@ -17,7 +17,9 @@ plugins {
 
 android {
     namespace = "com.fatmachines.musify"
-    compileSdk = flutter.compileSdkVersion
+    // permission_handler needs 37; compiling against it changes nothing for
+    // older phones (minSdk and targetSdk decide that).
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
