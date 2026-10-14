@@ -89,13 +89,17 @@ class _Body extends StatelessWidget {
             height: 56,
             child: Row(
               children: [
-                IconButton(
-                  tooltip: 'Close',
-                  padding: EdgeInsets.zero,
-                  alignment: Alignment.centerLeft,
-                  iconSize: 32,
-                  onPressed: onClose,
-                  icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                // The icons sit centred in their buttons (so the hover and
+                // press circles are round them), the buttons nudged out so
+                // the icons still line up with the cover's edges.
+                Transform.translate(
+                  offset: const Offset(-8, 0),
+                  child: IconButton(
+                    tooltip: 'Close',
+                    iconSize: 32,
+                    onPressed: onClose,
+                    icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                  ),
                 ),
                 Expanded(
                   child: Text(
@@ -109,12 +113,13 @@ class _Body extends StatelessWidget {
                     ),
                   ),
                 ),
-                IconButton(
-                  tooltip: 'More',
-                  padding: EdgeInsets.zero,
-                  alignment: Alignment.centerRight,
-                  onPressed: () => _showMore(context, track),
-                  icon: const Icon(Icons.more_horiz),
+                Transform.translate(
+                  offset: const Offset(12, 0),
+                  child: IconButton(
+                    tooltip: 'More',
+                    onPressed: () => _showMore(context, track),
+                    icon: const Icon(Icons.more_horiz),
+                  ),
                 ),
               ],
             ),
