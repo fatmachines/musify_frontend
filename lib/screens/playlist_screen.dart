@@ -298,11 +298,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   ),
                 ),
               ),
-              IconButton(
-                tooltip: 'Playlist options',
-                icon: const Icon(Icons.more_horiz),
-                onPressed: () => showPlaylistActions(context, _playlist),
-              ),
+              // Balances the back button; options sit by the name below.
+              const SizedBox(width: 48),
             ],
           ),
         ),
@@ -371,16 +368,39 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          Text(
-            _playlist.name,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.text,
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.3,
-            ),
+          // The name, and the playlist's options in a circle beside it.
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _playlist.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.text,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Material(
+                color: Colors.white.withValues(alpha: 0.12),
+                shape: const CircleBorder(),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: () => showPlaylistActions(context, _playlist),
+                  child: const Tooltip(
+                    message: 'Playlist options',
+                    child: SizedBox.square(
+                      dimension: 36,
+                      child: Icon(Icons.more_horiz, size: 22),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 10),
           // Who and how much on the left, shuffle and play beside it.
