@@ -21,7 +21,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 identity="${SIGN_IDENTITY:-$(security find-identity -v -p codesigning |
-  grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"')}"
+  grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"' || true)}"
 if [ -z "$identity" ]; then
   echo "No Developer ID Application certificate in the keychain." >&2
   echo "Make one in Xcode → Settings → Accounts → Manage Certificates." >&2
