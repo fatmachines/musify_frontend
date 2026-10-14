@@ -390,6 +390,25 @@ void main() {
             (await mac('GET', '/sync/blobs/$eSha', token: token)).$1 == 200;
       }
       expect(uploaded, isTrue, reason: 'noticed and uploaded by itself');
+
+      // The Mac moves b.mp3 into another folder: this device moves its
+      // copy too, nothing downloaded (the server never had it).
+      await Future<void>.delayed(const Duration(seconds: 6));
+      await mac(
+        'POST',
+        '/sync/files',
+        token: token,
+        body: {
+          'add': [
+            {'path': 'Chill/b.mp3', 'sha1': bSha, 'size': bSong.lengthSync()},
+          ],
+          'delete': ['Pop/b.mp3'],
+        },
+      );
+      await sync.syncNow();
+      expect(File(p.join(music.path, 'Chill', 'b.mp3')).existsSync(), isTrue);
+      expect(bSong.existsSync(), isFalse);
+      expect((await mac('GET', '/sync/blobs/$bSha', token: token)).$1, 404);
     },
     skip: runnable ? false : 'no backend here',
     timeout: const Timeout(Duration(minutes: 2)),

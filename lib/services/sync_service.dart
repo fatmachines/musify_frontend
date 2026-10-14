@@ -1182,9 +1182,42 @@ class SyncService extends ChangeNotifier {
     // Upload what another device lacks; download what's on the server.
     final byHash = {for (final e in local.entries) e.value.sha1: e.key};
     final sending = [for (final sha1 in wanted) ?byHash[sha1]];
+
+    // A song wanted somewhere this device already has it (moved to another
+    // folder on another device): moved here too, or copied, not fetched.
+    final placed = <String>[];
+    for (final rel in download) {
+      final sha1 = remote[rel]!['sha1'] as String;
+      final source = byHash[sha1];
+      if (source == null || source == rel) continue;
+      final from = File(p.joinAll([folder.path, ...source.split('/')]));
+      final to = File(p.joinAll([folder.path, ...rel.split('/')]));
+      if (!from.existsSync()) continue;
+      try {
+        await to.parent.create(recursive: true);
+        if (deleteHere.remove(source)) {
+          await from.rename(to.path);
+          synced.remove(source);
+          final file = local.remove(source)!;
+          local[rel] = file;
+          byHash[sha1] = rel;
+        } else {
+          await from.copy(to.path);
+          local[rel] = local[source]!;
+        }
+        synced[rel] = sha1;
+        placed.add(rel);
+      } on FileSystemException catch (e) {
+        AppLog.add('sync: couldn\'t place $rel from $source: ${e.message}');
+      }
+    }
+    if (placed.isNotEmpty) {
+      AppLog.add('sync: placed ${placed.length} songs from ones already here');
+      await prefs.setString(_syncedKey, jsonEncode(synced));
+    }
     final fetching = [
       for (final rel in download)
-        if (remote[rel]?['available'] == true) rel,
+        if (!placed.contains(rel) && remote[rel]?['available'] == true) rel,
     ];
     AppLog.add(
       'sync: files: ${local.length} here, ${remote.length} listed; '
@@ -1256,7 +1289,7 @@ class SyncService extends ChangeNotifier {
       );
     }
     await prefs.setString(_syncedKey, jsonEncode(synced));
-    if (fetching.isNotEmpty || deleteHere.isNotEmpty) {
+    if (fetching.isNotEmpty || placed.isNotEmpty || deleteHere.isNotEmpty) {
       await Library.instance.rescan();
       // Playlists naming the new songs can find them now.
       await _syncLibrarySerially();

@@ -200,6 +200,40 @@ void main() {
     expect(reloaded.liked.tracks, isEmpty);
   });
 
+  test('moving a song keeps it in its playlists, likes and tags', () async {
+    SharedPreferences.setMockInitialValues({
+      'library_folders': [first.path],
+    });
+    final library = Library.fresh();
+    await library.ensureLoaded();
+    final song = library.allSongs.firstWhere((t) => t.path.endsWith('a.mp3'));
+    final mix = library.createPlaylist('Mix');
+    library.addTrack(mix, song);
+    library.toggleLike(song);
+    library.toggleTag(song, library.tags.first);
+
+    final pop = p.join(first.path, 'Pop');
+    final moved = await library.moveSong(song, pop);
+    expect(moved, p.join(pop, 'a.mp3'));
+    expect(File(song.path).existsSync(), isFalse);
+    expect(File(moved!).existsSync(), isTrue);
+    expect(library.custom.single.tracks.single.path, moved);
+    expect(library.liked.tracks.single.path, moved);
+    expect(library.tagPlaylist(library.tags.first).tracks.single.path, moved);
+    // It's now in the Pop folder playlist, not Rock's.
+    final names = {for (final pl in library.all) pl.name: pl};
+    expect(
+      names['Pop']!.tracks.map((t) => p.basename(t.path)),
+      contains('a.mp3'),
+    );
+    expect(names.containsKey('Rock'), isFalse, reason: 'Rock is empty now');
+
+    // Remembered after a restart.
+    final reloaded = Library.fresh();
+    await reloaded.ensureLoaded();
+    expect(reloaded.custom.single.tracks.single.path, moved);
+  });
+
   test('deleting a song removes its file and it leaves playlists', () async {
     SharedPreferences.setMockInitialValues({
       'library_folders': [first.path],

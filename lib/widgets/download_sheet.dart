@@ -44,8 +44,10 @@ Future<String?> pickDownloadFolder(
   BuildContext context, {
   bool mainOnly = false,
   String title = 'Download to',
+  // Downloads' last folder first (not for moving songs).
+  bool remember = true,
 }) async {
-  final last = await Downloads.lastFolder();
+  final last = remember ? await Downloads.lastFolder() : null;
   if (!context.mounted) return null;
   final folders = [
     for (final f in downloadFolders())

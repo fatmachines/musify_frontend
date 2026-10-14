@@ -285,6 +285,64 @@ class Library extends ChangeNotifier {
     return deleted;
   }
 
+  /// Moves a song's file into [folder] (a name taken there gets " (2)"),
+  /// keeping it in its playlists, Liked Songs and tags. Returns where it is
+  /// now, or null if it couldn't be moved.
+  Future<String?> moveSong(Track track, String folder) async {
+    if (track is YouTubeTrack) return null;
+    final from = File(track.path);
+    if (p.equals(p.dirname(track.path), folder)) return track.path;
+    final base = p.basenameWithoutExtension(track.path);
+    final ext = p.extension(track.path);
+    var target = p.join(folder, '$base$ext');
+    for (var n = 2; File(target).existsSync(); n++) {
+      target = p.join(folder, '$base ($n)$ext');
+    }
+    // What names this song, found while it's still where they say.
+    bool names(SavedTrack saved) =>
+        saved.path == track.path || _resolve(saved) == track.path;
+    final naming = <SavedTrack>{
+      for (final s in _saved) ...s.tracks.where(names),
+      ..._likedSaved.where(names),
+      for (final t in _tagsSaved) ...t.tracks.where(names),
+    };
+    try {
+      await Directory(folder).create(recursive: true);
+      try {
+        await from.rename(target);
+      } on FileSystemException {
+        // Another folder on another disk (or iOS location): copy, then
+        // delete.
+        await from.copy(target);
+        await from.delete();
+      }
+    } on FileSystemException catch (e) {
+      AppLog.add('move: ${track.path} failed: ${e.message}');
+      return null;
+    }
+    AppLog.add('move: ${track.path} -> $target');
+    // Everything that named the old place names the new one.
+    final moved = _save(Track(target));
+    SavedTrack follow(SavedTrack saved) =>
+        naming.contains(saved) ? moved : saved;
+    _saved = [
+      for (final s in _saved)
+        SavedPlaylist(s.id, s.name, [for (final t in s.tracks) follow(t)]),
+    ];
+    _likedSaved = [for (final t in _likedSaved) follow(t)];
+    _tagsSaved = [
+      for (final t in _tagsSaved)
+        SavedTag(t.id, t.name, t.color, [for (final s in t.tracks) follow(s)]),
+    ];
+    LibraryStore.savePlaylists(_saved);
+    LibraryStore.saveLiked(_likedSaved);
+    LibraryStore.saveTags(_tagsSaved);
+    await rescan();
+    // The other devices move theirs too.
+    SyncService.instance.filesChanged();
+    return target;
+  }
+
   /// Deletes a song's file from the device, then rescans; it leaves every
   /// playlist with it. Stops the player if it's the one playing. False if
   /// the file couldn't be deleted.

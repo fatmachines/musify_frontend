@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
 import '../models/playlist.dart';
 import '../services/library.dart';
@@ -118,6 +119,12 @@ Future<void> showSongMenu(
                     showToast(context, 'Removed from ${from.name}');
                   }),
                 ),
+              if (!youtube)
+                ListTile(
+                  leading: const Icon(Icons.drive_file_move_outline),
+                  title: const Text('Move to folder'),
+                  onTap: () => then(() => _move(context, track)),
+                ),
               // On the device: delete the file. A YouTube song has none, so
               // it can only leave a playlist (above).
               if (!youtube)
@@ -179,4 +186,23 @@ Future<void> _confirmDelete(BuildContext context, Track track) async {
   if (delete != true) return;
   final deleted = await Library.instance.deleteSong(track);
   showToastOn(overlay, deleted ? 'Deleted $name' : "Couldn't delete $name");
+}
+
+/// Asks where to, then moves the song's file there.
+Future<void> _move(BuildContext context, Track track) async {
+  final overlay = Overlay.of(context, rootOverlay: true);
+  final name = MetadataService.cachedInfo(track)?.title ?? track.title;
+  final folder = await pickDownloadFolder(
+    context,
+    title: 'Move "$name" to',
+    remember: false,
+  );
+  if (folder == null) return;
+  final moved = await Library.instance.moveSong(track, folder);
+  showToastOn(
+    overlay,
+    moved == null
+        ? "Couldn't move $name"
+        : 'Moved $name to ${p.basename(folder)}',
+  );
 }
