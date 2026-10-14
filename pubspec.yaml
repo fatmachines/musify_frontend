@@ -144,3 +144,8 @@ flutter_launcher_icons:
   adaptive_icon_background: assets/icon/background.png
   # foreground.png is already sized to the safe zone.
   adaptive_icon_foreground_inset: 0
+  # The Mac's own shape: rounded square with a margin and shadow (made from
+  # icon.png).
+  macos:
+    generate: true
+    image_path: assets/icon/icon_macos.png

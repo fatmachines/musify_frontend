@@ -16,6 +16,7 @@ analyzer:
     - ios/**
     # Vendored third-party code (just_audio), kept as upstream wrote it.
     - packages/**
+    - macos/**
 
 linter:
   # The lint rules applied to this project can be customized in the

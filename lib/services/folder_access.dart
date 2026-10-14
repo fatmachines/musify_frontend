@@ -20,15 +20,19 @@ class LibraryFolder {
 
 /// Picks library folders and keeps them readable.
 ///
-/// On iOS a folder from Files is only readable once the app starts
-/// security-scoped access to it, which file_picker doesn't do; the native
-/// FolderAccessPlugin (ios/Runner/AppDelegate.swift) does that and bookmarks
-/// each folder so access survives relaunches. Android keeps plain paths.
+/// On iOS (a folder from Files) and the Mac (sandboxed) a folder is only
+/// readable once the app starts security-scoped access to it, which
+/// file_picker doesn't do; the native FolderAccessPlugin
+/// (ios/Runner/AppDelegate.swift, macos/Runner/MainFlutterWindow.swift) does
+/// that and bookmarks each folder so access survives relaunches. Android
+/// keeps plain paths.
 class FolderAccess {
   static const _channel = MethodChannel('musify/folder_access');
 
+  static bool get _native => Platform.isIOS || Platform.isMacOS;
+
   static Future<LibraryFolder?> pick() async {
-    if (Platform.isIOS) {
+    if (_native) {
       final reply = await _callNative('pick');
       final folder = reply?['folder'];
       return folder is Map ? _folder(folder) : null;
@@ -47,7 +51,7 @@ class FolderAccess {
 
   /// Every folder added before, opened for reading.
   static Future<List<LibraryFolder>> restoreAll() async {
-    if (Platform.isIOS) {
+    if (_native) {
       final reply = await _callNative('restoreAll');
       final folders = reply?['folders'];
       return [
@@ -62,7 +66,7 @@ class FolderAccess {
   }
 
   static Future<void> remove(LibraryFolder folder) async {
-    if (Platform.isIOS) {
+    if (_native) {
       await _callNative('remove', {'id': folder.id});
       return;
     }
@@ -78,7 +82,7 @@ class FolderAccess {
     try {
       final reply = await _channel.invokeMethod<Map>(method, arguments);
       final log = (reply?['log'] as List?)?.cast<String>() ?? const [];
-      AppLog.addAll(log.map((line) => 'ios: $line'));
+      AppLog.addAll(log.map((line) => 'native: $line'));
       AppLog.add('$method: native replied');
       return reply;
     } catch (e) {
