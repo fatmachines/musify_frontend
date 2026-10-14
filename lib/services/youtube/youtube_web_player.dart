@@ -293,6 +293,20 @@ class YouTubeWebPlayer {
         }
       case 'paused':
         AppLog.add('youtube web: video paused itself, resuming');
+      case 'remote':
+        // A media key or Now Playing control that went to the page.
+        final service = PlayerService.instance;
+        AppLog.add('youtube web: ${data['a']} from the page\'s controls');
+        switch (data['a']) {
+          case 'play':
+            _player.play();
+          case 'pause':
+            _player.pause();
+          case 'next':
+            service.next();
+          case 'previous':
+            service.previous();
+        }
       case 'playfail':
         final now = DateTime.now();
         if (now.difference(_lastPlayFailLog) > const Duration(seconds: 5)) {
@@ -312,7 +326,15 @@ class YouTubeWebPlayer {
     }
   }
 
-  void _inject() => controller.runJavaScript(_script).catchError((_) {});
+  /// The script, starting out playing or paused as Musify's player is, so
+  /// a video that plays by itself on loading (a song brought back from last
+  /// time, paused) is paused again.
+  void _inject() => controller
+      .runJavaScript(
+        'window.__musifyWant = ${jsonEncode(_player.playing ? 'play' : 'pause')};'
+        '$_script',
+      )
+      .catchError((_) {});
 
   static const _script = r'''
 (function () {
@@ -329,7 +351,7 @@ class YouTubeWebPlayer {
     document.addEventListener(name, e => e.stopImmediatePropagation(), true);
   }
 
-  let want = null;
+  let want = window.__musifyWant || 'pause';
   let seekTo = null;
   const ready = v => v && v.readyState > 0 && !isAd();
   const send = o => { try { Musify.postMessage(JSON.stringify(o)); } catch (e) {} };
@@ -340,6 +362,26 @@ class YouTubeWebPlayer {
   };
 
   const play = v => v.play().catch(e => send({ e: 'playfail', m: String(e) }));
+
+  // The Mac (and iPhone) list this page as a player of its own, and send
+  // it the keyboard's and Now Playing's play, pause, next and previous.
+  // Musify's player decides: pass them on, and don't let YouTube take
+  // them back.
+  if (navigator.mediaSession) {
+    const session = navigator.mediaSession;
+    const setHandler = session.setActionHandler.bind(session);
+    const ours = {};
+    for (const [action, name] of [
+      ['play', 'play'], ['pause', 'pause'], ['stop', 'pause'],
+      ['nexttrack', 'next'], ['previoustrack', 'previous'],
+    ]) {
+      ours[action] = () => send({ e: 'remote', a: name });
+      try { setHandler(action, ours[action]); } catch (e) {}
+    }
+    session.setActionHandler = (action, handler) => {
+      if (!(action in ours)) { try { setHandler(action, handler); } catch (e) {} }
+    };
+  }
 
   window.__musifyCmd = (cmd, arg) => {
     const v = video();
@@ -376,6 +418,9 @@ class YouTubeWebPlayer {
     if (window.__musifyVolume != null && Math.abs(v.volume - window.__musifyVolume) > 0.01) {
       v.volume = window.__musifyVolume;
     }
+    // Musify's player says paused: the video stays paused, even if
+    // YouTube starts it by itself.
+    if (want === 'pause' && !v.paused && !isAd()) v.pause();
     if (want === 'play') {
       if (v.muted) v.muted = false;
       if (v.paused && !v.ended) play(v);
