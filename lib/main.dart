@@ -126,6 +126,18 @@ class _MusifyAppState extends State<MusifyApp> with WidgetsBindingObserver {
   }
 }
 
+const _appChannel = MethodChannel('musify/app');
+
+/// Back on Home's first page: the app goes to the background, as Android
+/// apps do (the music carries on).
+Future<void> leaveApp() async {
+  try {
+    await _appChannel.invokeMethod('toBackground');
+  } catch (_) {
+    await SystemNavigator.pop();
+  }
+}
+
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
@@ -233,8 +245,9 @@ class _HomeShellState extends State<HomeShell>
         if (navigator != null && await navigator.maybePop()) return;
         if (_index != 0) {
           setState(() => _index = 0);
-        } else if (context.mounted) {
-          Navigator.of(context).maybePop();
+        } else {
+          // Not Navigator.maybePop: that comes straight back here.
+          await leaveApp();
         }
       },
       child: Stack(
