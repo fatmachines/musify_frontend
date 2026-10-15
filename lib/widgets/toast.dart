@@ -69,11 +69,15 @@ class _ToastState extends State<_Toast> with SingleTickerProviderStateMixin {
           opacity: _fade,
           child: Material(
             color: AppColors.text,
+            // Lifted off what's under it, so the two never read as one.
+            elevation: 6,
             borderRadius: BorderRadius.circular(8),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Text(
                 widget.message,
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: AppColors.onText,
                   fontSize: 14,

@@ -21,6 +21,21 @@ void main() {
     expect(DesktopShell.fits(Size(393, 852)), isFalse); // iPhone
   });
 
+  testWidgets('nothing overflows just above the desktop width', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    for (final width in <double>[841, 860, 900, 1100]) {
+      tester.view.physicalSize = Size(width, 600);
+      await tester.pumpWidget(const MusifyApp());
+      await tester.pump();
+      expect(find.byType(DesktopShell), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: '$width wide');
+    }
+  });
+
   testWidgets('typing in the top bar opens Search in the main panel', (
     tester,
   ) async {

@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -107,7 +109,7 @@ class Downloads extends ChangeNotifier {
       file = await _save(track, folder);
       await LocalCopies.instance.remember(track, file.path);
     } catch (e) {
-      error = '$e';
+      error = whyFailed(e);
       AppLog.add('download: ${track.name} failed: $e');
     }
     _progress.remove(track.videoId);
@@ -256,3 +258,15 @@ class Downloads extends ChangeNotifier {
     return file;
   }
 }
+
+/// Why a download failed, in words for the user (the details go to the
+/// log).
+String whyFailed(Object error) => switch (error) {
+  FileSystemException() => "this device didn't let Musify save it there",
+  SocketException() ||
+  HttpException() ||
+  http.ClientException() ||
+  TimeoutException() => "your Musify server couldn't be reached",
+  ServerError(:final message) => message,
+  _ => 'something went wrong',
+};

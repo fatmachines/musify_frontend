@@ -499,7 +499,8 @@ class _PlayerBar extends StatelessWidget {
                             : () => showQueueSheet(context),
                         icon: const Icon(Icons.queue_music, size: 20),
                       ),
-                      const _Volume(),
+                      // Narrows its slider just above the desktop width.
+                      const Flexible(child: _Volume()),
                       IconButton(
                         tooltip: 'Full player',
                         onPressed: track == null ? null : onOpen,
@@ -774,20 +775,22 @@ class _Volume extends StatelessWidget {
                 size: 20,
               ),
             ),
-            SizedBox(
-              width: 100,
-              child: SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  trackHeight: 4,
-                  activeTrackColor: AppColors.text,
-                  inactiveTrackColor: AppColors.track,
-                  thumbColor: AppColors.text,
-                  overlayShape: SliderComponentShape.noOverlay,
-                  thumbShape: const RoundSliderThumbShape(
-                    enabledThumbRadius: 6,
+            Flexible(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 100),
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 4,
+                    activeTrackColor: AppColors.text,
+                    inactiveTrackColor: AppColors.track,
+                    thumbColor: AppColors.text,
+                    overlayShape: SliderComponentShape.noOverlay,
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 6,
+                    ),
                   ),
+                  child: Slider(value: volume, onChanged: player.setVolume),
                 ),
-                child: Slider(value: volume, onChanged: player.setVolume),
               ),
             ),
           ],
