@@ -133,8 +133,10 @@ and key in **Settings → Musify server**, and you also get:
   **Pin an artist or an album** to Home.
 - **Charts** on Home: YouTube Music's Top 100 (Global, US, UK, Canada,
   Australia, India).
-- YouTube songs play in YouTube's own player, hidden, so they work with the
-  queue, the lock screen, playlists and Liked Songs like the rest.
+- YouTube songs stream from your server and play like any other song (no
+  ads): the queue, the lock screen, playlists and Liked Songs, in the
+  background and after a call. The server fetches the next ones ahead, so
+  they start right away.
 - **Already on your device? It plays from the file.** A YouTube song you
   downloaded, or one you already had (same title and artist, or the same
   length), plays from your folder and gets the green downloaded mark. An
@@ -250,9 +252,11 @@ flutter test
   with Musify's iOS equalizer (`MusifyEqualizer.m`); otherwise unchanged.
 - `ios/Runner/AppDelegate.swift` holds the native parts: folder access
   (security-scoped bookmarks) and Siri.
-- YouTube playback: `lib/services/youtube/youtube_web_player.dart` keeps
-  YouTube's mobile player in a hidden web view in step with the app's player,
-  which plays silence of the same length for each YouTube song.
+- YouTube playback: with a server, YouTube songs stream from its
+  `/audio/<id>.m4a`. Without one (or if that fails),
+  `lib/services/youtube/youtube_web_player.dart` keeps YouTube's mobile
+  player in a hidden web view in step with the app's player, which plays
+  silence of the same length for each YouTube song.
 
 ## Made by Claude
 
