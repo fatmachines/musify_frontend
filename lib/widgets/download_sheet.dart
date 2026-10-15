@@ -46,12 +46,16 @@ Future<String?> pickDownloadFolder(
   String title = 'Download to',
   // Downloads' last folder first (not for moving songs).
   bool remember = true,
+  // Left out: the folder a song being moved is already in.
+  String? except,
 }) async {
   final last = remember ? await Downloads.lastFolder() : null;
   if (!context.mounted) return null;
   final folders = [
     for (final f in downloadFolders())
-      if (!mainOnly || f.within == null) f,
+      if ((!mainOnly || f.within == null) &&
+          (except == null || !p.equals(f.path, except)))
+        f,
   ]..sort((a, b) => (a.path == last ? 0 : 1) - (b.path == last ? 0 : 1));
   return showModalBottomSheet<String>(
     context: context,

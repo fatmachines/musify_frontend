@@ -287,9 +287,13 @@ class _HomeShellState extends State<HomeShell>
             builder: (context, child) {
               if (_player.value == 0) return const SizedBox.shrink();
               final height = MediaQuery.sizeOf(context).height;
-              return Transform.translate(
-                offset: Offset(0, (1 - _player.value) * height),
-                child: child,
+              // Open, it's all a screen reader finds: not the page under it.
+              return BlockSemantics(
+                blocking: _player.value == 1,
+                child: Transform.translate(
+                  offset: Offset(0, (1 - _player.value) * height),
+                  child: child,
+                ),
               );
             },
             child: GestureDetector(

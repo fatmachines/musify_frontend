@@ -39,6 +39,8 @@ class _ServerDialog extends StatefulWidget {
 }
 
 class _ServerDialogState extends State<_ServerDialog> {
+  /// The key is hidden like a password until the eye is tapped.
+  bool _showKey = false;
   bool _checking = false;
   String? _error;
 
@@ -97,11 +99,21 @@ class _ServerDialogState extends State<_ServerDialog> {
             controller: widget.secret,
             autocorrect: false,
             enableSuggestions: false,
+            obscureText: !_showKey,
             cursorColor: AppColors.green,
             decoration: InputDecoration(
               hintText: 'Key',
               errorText: _error,
               errorMaxLines: 3,
+              suffixIcon: IconButton(
+                tooltip: _showKey ? 'Hide key' : 'Show key',
+                icon: Icon(
+                  _showKey
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                ),
+                onPressed: () => setState(() => _showKey = !_showKey),
+              ),
             ),
             onSubmitted: (_) => _save(),
           ),

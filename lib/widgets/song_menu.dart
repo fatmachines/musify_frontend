@@ -214,6 +214,7 @@ Future<void> _move(BuildContext context, Track track) async {
     context,
     title: 'Move "$name" to',
     remember: false,
+    except: p.dirname(track.path),
   );
   if (folder == null) return;
   if (!context.mounted || !await ensureFileAccess(context)) return;

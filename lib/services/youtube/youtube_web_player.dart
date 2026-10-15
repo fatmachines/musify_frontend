@@ -514,14 +514,17 @@ class YouTubeWebHost extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!YouTubeWebPlayer.available) return const SizedBox.shrink();
+    // Out of sight, and out of a screen reader's way.
     return IgnorePointer(
-      child: Opacity(
-        opacity: 0.01,
-        child: SizedBox(
-          width: 2,
-          height: 2,
-          child: WebViewWidget(
-            controller: YouTubeWebPlayer.instance.controller,
+      child: ExcludeSemantics(
+        child: Opacity(
+          opacity: 0.01,
+          child: SizedBox(
+            width: 2,
+            height: 2,
+            child: WebViewWidget(
+              controller: YouTubeWebPlayer.instance.controller,
+            ),
           ),
         ),
       ),

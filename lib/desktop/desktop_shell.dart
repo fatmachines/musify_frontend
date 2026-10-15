@@ -188,7 +188,10 @@ class _DesktopShellState extends State<DesktopShell>
               animation: _player,
               builder: (context, child) => _player.value == 0
                   ? SizedBox.shrink()
-                  : FadeTransition(opacity: _player, child: child),
+                  : BlockSemantics(
+                      blocking: _player.value == 1,
+                      child: FadeTransition(opacity: _player, child: child),
+                    ),
               child: Material(
                 color: Colors.black.withValues(alpha: 0.85),
                 child: Center(
