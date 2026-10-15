@@ -305,6 +305,26 @@ class MusifyServer extends ChangeNotifier {
     ),
   );
 
+  /// A public Spotify playlist, each song found on YouTube Music, and the
+  /// songs that couldn't be ("Title – Artist"). Takes the server a while:
+  /// a few seconds per 50 songs.
+  Future<(Playlist, List<String>)> spotifyPlaylist(String id) async {
+    final data = await _getJson(
+      '/spotify?id=${Uri.encodeQueryComponent(id)}',
+      timeout: const Duration(minutes: 10),
+    );
+    return (
+      _playlist(data),
+      [for (final m in (data['missing'] as List?) ?? const []) '$m'],
+    );
+  }
+
+  /// The playlist id in a Spotify link (`open.spotify.com/playlist/<id>`, or
+  /// `spotify:playlist:<id>`), or null.
+  static String? spotifyPlaylistIdOf(String text) => RegExp(
+    r'(?:open\.spotify\.com/(?:[a-z-]+/)?playlist/|spotify:playlist:)([A-Za-z0-9]{22})',
+  ).firstMatch(text)?.group(1);
+
   /// The playlist id in a YouTube or YouTube Music link ("...?list=PL..."),
   /// or a bare id; null if there's none.
   static String? playlistIdOf(String text) {

@@ -80,7 +80,7 @@ class _LibraryTabState extends State<LibraryTab> {
               _MenuTile(
                 icon: Icons.playlist_add,
                 title: 'Import playlist',
-                subtitle: 'From a YouTube or YouTube Music link',
+                subtitle: 'From a YouTube, YouTube Music or Spotify link',
                 onTap: () {
                   Navigator.of(sheet).pop();
                   importPlaylist(context);

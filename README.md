@@ -133,9 +133,12 @@ and key in **Settings → Musify server**, and you also get:
   **Pin an artist or an album** to Home.
 - **Charts** on Home: YouTube Music's Top 100 (Global, US, UK, Canada,
   Australia, India).
-- **Import a playlist** from YouTube or YouTube Music by its link (Your
-  Library → **+** → Import playlist): it becomes one of your playlists, its
-  songs on the device play from there, and it can be downloaded whole.
+- **Import a playlist** from YouTube, YouTube Music or Spotify by its link
+  (Your Library → **+** → Import playlist): it becomes one of your
+  playlists, its songs on the device play from there, and it can be
+  downloaded whole. A Spotify playlist is read in full (no Spotify account
+  needed) and each song is found on YouTube Music; the few that aren't
+  there are listed.
 - YouTube songs stream from your server and play like any other song (no
   ads): the queue, the lock screen, playlists and Liked Songs, in the
   background and after a call. The server fetches the next ones ahead, so
