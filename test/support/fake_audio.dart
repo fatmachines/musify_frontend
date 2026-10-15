@@ -36,6 +36,25 @@ class FakePlayer extends AudioPlayerPlatform {
   @override
   Stream<PlaybackEventMessage> get playbackEventMessageStream => _events.stream;
 
+  /// Reports that the current song couldn't be played, as a phone's
+  /// player does when a stream fails.
+  void fail(String message) {
+    _events.add(
+      PlaybackEventMessage(
+        processingState: ProcessingStateMessage.idle,
+        updateTime: DateTime.now(),
+        updatePosition: _position,
+        bufferedPosition: _position,
+        duration: songLength,
+        icyMetadata: null,
+        currentIndex: _index,
+        androidAudioSessionId: null,
+        errorCode: 1,
+        errorMessage: message,
+      ),
+    );
+  }
+
   void _emit() => _events.add(
     PlaybackEventMessage(
       processingState: ProcessingStateMessage.ready,

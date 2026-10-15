@@ -12,7 +12,8 @@ import '../app_log.dart';
 import '../player_service.dart';
 
 /// Plays YouTube songs in YouTube's own (mobile web) player, kept in a tiny
-/// hidden web view, the way Demus does. Musify's player queues a silent
+/// hidden web view, the way Demus does, when there's no Musify server to
+/// stream them from (or it fails). Musify's player queues a silent
 /// stand-in of the same length for each YouTube song (see
 /// PlayerService._source), so the queue, lock screen, CarPlay, Siri and
 /// swipes all work unchanged; this keeps the web player in step with it:
@@ -113,9 +114,13 @@ class YouTubeWebPlayer {
 
   AudioPlayer get _player => PlayerService.instance.player;
 
+  /// The YouTube song to play here; not one streamed from the server,
+  /// which the system's player plays itself.
   YouTubeTrack? get _current {
-    final tag = _player.sequenceState.currentSource?.tag;
-    return tag is YouTubeTrack ? tag : null;
+    final source = _player.sequenceState.currentSource;
+    return PlayerService.isWebSource(source)
+        ? source!.tag as YouTubeTrack
+        : null;
   }
 
   /// Starts following the player. Call once, after the app is up.

@@ -10,6 +10,7 @@ import 'app_log.dart';
 import 'equalizer_service.dart';
 import 'library.dart';
 import 'local_copies.dart';
+import 'musify_server.dart';
 
 /// An active sleep timer: either a time to stop at, or the end of the
 /// current song.
@@ -79,16 +80,62 @@ class PlayerService {
           ? null
           : AudioPipeline(androidAudioEffects: [androidEq]),
     );
-    player.currentIndexStream.listen((_) => _dropPlayedQueue());
+    player.currentIndexStream.listen((_) {
+      _dropPlayedQueue();
+      _warmNext(player);
+    });
+    player.errorStream.listen((e) => _streamFailed(player, e));
     _handleInterruptions(player);
     return player;
   }
 
+  /// Whether [source] is a YouTube song played in YouTube's player (a
+  /// silent stand-in), not streamed from the server.
+  static bool isWebSource(IndexedAudioSource? source) =>
+      source is ClippingAudioSource && source.tag is YouTubeTrack;
+
+  /// The next YouTube songs to stream get fetched by the server ahead of
+  /// time, so one starts as the last ends.
+  static void _warmNext(AudioPlayer player) {
+    final index = player.currentIndex;
+    if (index == null) return;
+    final sequence = player.sequence;
+    var warmed = 0;
+    for (var i = index + 1; i < sequence.length && warmed < 2; i++) {
+      final source = sequence[i];
+      final tag = source.tag;
+      if (tag is YouTubeTrack && !isWebSource(source)) {
+        MusifyServer.instance.warm(tag);
+        warmed++;
+      }
+    }
+  }
+
+  /// A YouTube song the server couldn't stream (down, or YouTube said no)
+  /// plays in YouTube's own player instead, from where it was.
+  void _streamFailed(AudioPlayer player, PlayerException error) =>
+      _serial(() async {
+        final index = player.currentIndex;
+        if (index == null || index >= player.sequence.length) return;
+        final source = player.sequence[index];
+        final track = source.tag;
+        if (track is! YouTubeTrack || isWebSource(source)) return;
+        AppLog.add(
+          'player: streaming ${track.name} failed (${error.message}); '
+          "YouTube's player instead",
+        );
+        final position = player.position;
+        await player.removeAudioSourceAt(index);
+        await player.insertAudioSource(index, _webSource(track));
+        await player.seek(position, index: index);
+        player.play();
+      });
+
   /// Like just_audio's own handling (pause for a call or another app, play
   /// again after; pause when headphones come out), except while a YouTube
-  /// song plays: the web view's video starting counts as an interruption
-  /// on iOS, which would pause the stand-in, and with it the video. The
-  /// video looks after real interruptions itself.
+  /// song plays in the web view: its video starting counts as an
+  /// interruption on iOS, which would pause the stand-in, and with it the
+  /// video. The video looks after real interruptions itself.
   void _handleInterruptions(AudioPlayer player) {
     var interrupted = false;
     AudioSession.instance.then((session) {
@@ -98,7 +145,8 @@ class PlayerService {
       });
       session.interruptionEventStream.listen((event) {
         if (event.type == AudioInterruptionType.duck) return;
-        final youtube = _trackOf(player.sequenceState) is YouTubeTrack;
+        // Streamed YouTube songs are like any other.
+        final youtube = isWebSource(player.sequenceState.currentSource);
         AppLog.add(
           'player: interruption ${event.begin ? 'began' : 'ended'} '
           '(${event.type.name})${youtube ? ', ignored for YouTube' : ''}',
@@ -152,8 +200,20 @@ class PlayerService {
   /// A YouTube song is a silent stand-in of its length (plus a moment, so
   /// it's the video's own end that moves on); YouTubeWebPlayer plays the
   /// real thing.
+  ///
+  /// With a Musify server, a YouTube song streams from it instead, played
+  /// by the system's own player like any song: so it carries on after a
+  /// call, from Control Center, and into the next song in the background,
+  /// none of which a web view in the background can be relied on for.
   static AudioSource _source(Track track) {
     if (track is! YouTubeTrack) return AudioSource.file(track.path, tag: track);
+    final stream = MusifyServer.instance.streamUri(track);
+    if (stream != null) return AudioSource.uri(stream, tag: track);
+    return _webSource(track);
+  }
+
+  /// A YouTube song played by YouTube's player (see [_source]).
+  static AudioSource _webSource(YouTubeTrack track) {
     final length =
         (track.length ?? const Duration(minutes: 10)) +
         const Duration(seconds: 2);

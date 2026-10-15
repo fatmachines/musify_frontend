@@ -59,6 +59,29 @@ class MusifyServer extends ChangeNotifier {
       urlNow != null &&
       (_key ?? (_builtInKey.isEmpty ? null : _builtInKey)) != null;
 
+  /// Where [track] streams from the server, or null without one. The key
+  /// goes in the address: the system's player can't send headers.
+  Uri? streamUri(YouTubeTrack track) {
+    final base = urlNow;
+    final key = _key ?? (_builtInKey.isEmpty ? null : _builtInKey);
+    if (base == null || key == null) return null;
+    return Uri.parse('$base/audio/${track.videoId}.m4a')
+        .replace(queryParameters: {'key': key});
+  }
+
+  final _warmed = <String>{};
+
+  /// Has the server fetch [track] from YouTube now (a few seconds), so it
+  /// starts at once when its turn comes. Once per song per run.
+  void warm(YouTubeTrack track) {
+    final uri = streamUri(track);
+    if (uri == null || !_warmed.add(track.videoId)) return;
+    http
+        .get(uri, headers: {'Range': 'bytes=0-0'})
+        .timeout(const Duration(minutes: 2))
+        .then<void>((_) {}, onError: (_) => _warmed.remove(track.videoId));
+  }
+
   /// Reads the saved address and key (once).
   Future<void> load() => _load();
 

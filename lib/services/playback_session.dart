@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/playlist.dart';
 import 'app_log.dart';
 import 'library.dart';
+import 'musify_server.dart';
 import 'player_service.dart';
 
 /// Keeps what was playing across app launches: the playlist, the play order
@@ -37,6 +38,8 @@ class PlaybackSession {
     try {
       // Songs live in library folders, which on iOS must be opened first.
       await Library.instance.ensureLoaded();
+      // YouTube songs stream from the server if there is one.
+      await MusifyServer.instance.load();
       await _restore(service);
     } catch (e) {
       AppLog.add('session: restore failed: $e');
