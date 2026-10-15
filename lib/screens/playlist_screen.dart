@@ -47,14 +47,19 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   /// Only songs with this tag are listed, when set.
   String? _tagFilter;
+
+  /// The songs listed ([_tagFiltered]), until the library or the filter
+  /// changes.
+  List<int>? _shown;
   bool _infoLoaded = false;
 
   /// Scroll position, driving the header's fade, shrink and title bar.
-  double _offset = 0;
+  /// Only what it moves listens: the songs aren't rebuilt as it scrolls.
+  final _offset = ValueNotifier<double>(0);
 
   /// Whether the play button has scrolled up to the title bar and is shown
   /// pinned on the bar's bottom edge instead.
-  bool _pinPlay = false;
+  final _pinPlay = ValueNotifier<bool>(false);
 
   bool _searching = false;
 
@@ -96,6 +101,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       );
   }
 
+  @override
+  void didUpdateWidget(PlaylistScreen old) {
+    super.didUpdateWidget(old);
+    if (old.playlist != widget.playlist) _shown = null;
+  }
+
   void _loadDetails() {
     MetadataService.loadInfo(_playlist.tracks).then((_) {
       if (mounted) setState(() => _infoLoaded = true);
@@ -121,7 +132,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       Navigator.of(context).maybePop();
       return;
     }
-    setState(() {});
+    setState(() => _shown = null);
     _loadDetails();
   }
 
@@ -134,6 +145,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       s.cancel();
     }
     _scroll.dispose();
+    _offset.dispose();
+    _pinPlay.dispose();
     _query.dispose();
     _searchFocus.dispose();
     super.dispose();
@@ -148,10 +161,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       final center = box.localToGlobal(box.size.center(Offset.zero)).dy;
       pin = center <= _barBottom;
     }
-    setState(() {
-      _offset = _scroll.offset;
-      _pinPlay = pin;
-    });
+    _offset.value = _scroll.offset;
+    _pinPlay.value = pin;
   }
 
   /// In the desktop layout: Spotify's wide header, the cover beside the
@@ -166,7 +177,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   /// scrolled under it.
   double get _collapse {
     final start = _coverSize(context) * 0.8;
-    return ((_offset - start) / 70).clamp(0.0, 1.0);
+    return ((_offset.value - start) / 70).clamp(0.0, 1.0);
   }
 
   bool get _isCurrent => _player.isCurrent(_playlist);
@@ -270,9 +281,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   Widget _buildPage(BuildContext context) {
     final tracks = _playlist.tracks;
-    final shown = _tagFiltered();
+    final shown = _shown ??= _tagFiltered();
     final barColor = AppColors.backdrop(_accent, 0.4);
-    final collapse = _collapse;
     return Stack(
       children: [
         ListScrollbar(
@@ -309,43 +319,56 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         ),
         // Title bar: clear over the header, filling with the cover colour as
         // the playlist name scrolls under it.
-        Container(
-          height: _barBottom,
-          padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
-          color: barColor.withValues(alpha: collapse),
-          child: Row(
-            children: [
-              IconButton(
-                tooltip: 'Back',
-                icon: const Icon(Icons.arrow_back_ios_new, size: 22),
-                onPressed: () => Navigator.of(context).maybePop(),
-              ),
-              Expanded(
-                child: Opacity(
-                  opacity: collapse,
-                  child: Text(
-                    _playlist.name,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
+        ValueListenableBuilder(
+          valueListenable: _offset,
+          builder: (context, _, _) {
+            final collapse = _collapse;
+            return Container(
+              height: _barBottom,
+              padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
+              color: barColor.withValues(alpha: collapse),
+              child: Row(
+                children: [
+                  IconButton(
+                    tooltip: 'Back',
+                    icon: const Icon(Icons.arrow_back_ios_new, size: 22),
+                    onPressed: () => Navigator.of(context).maybePop(),
+                  ),
+                  Expanded(
+                    child: Opacity(
+                      opacity: collapse,
+                      child: Text(
+                        _playlist.name,
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                  // Balances the back button; options sit by the name below.
+                  const SizedBox(width: 48),
+                ],
               ),
-              // Balances the back button; options sit by the name below.
-              const SizedBox(width: 48),
-            ],
-          ),
+            );
+          },
         ),
-        if (_pinPlay)
-          Positioned(
-            top: _barBottom - 28,
-            right: 16,
-            child: _PlayButton(playing: _isCurrent && _playing, onTap: _onPlay),
-          ),
+        ValueListenableBuilder(
+          valueListenable: _pinPlay,
+          builder: (context, pinned, _) => pinned
+              ? Positioned(
+                  top: _barBottom - 28,
+                  right: 16,
+                  child: _PlayButton(
+                    playing: _isCurrent && _playing,
+                    onTap: _onPlay,
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
       ],
     );
   }
@@ -358,9 +381,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     // title bar, shrinking and fading, while the name and buttons slide up
     // over it.
     const coverTop = _findBarHeight + 4 + 24;
-    final o = _offset.clamp(0.0, double.infinity);
-    final coverProgress = (o / (coverSize * 0.85 + coverTop)).clamp(0.0, 1.0);
-    final findOpacity = (1 - o / 40).clamp(0.0, 1.0);
+    double scrolled() => _offset.value.clamp(0.0, double.infinity);
 
     return Container(
       decoration: BoxDecoration(
@@ -375,34 +396,49 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Opacity(
-            opacity: findOpacity,
+          ValueListenableBuilder(
+            valueListenable: _offset,
+            builder: (context, _, child) => Opacity(
+              opacity: (1 - scrolled() / 40).clamp(0.0, 1.0),
+              child: child,
+            ),
             child: _FindBar(onTap: _openSearch),
           ),
           const SizedBox(height: 24),
           Center(
-            child: Transform.translate(
-              offset: Offset(0, (o - coverTop).clamp(0.0, double.infinity)),
-              child: Transform.scale(
-                alignment: Alignment.topCenter,
-                scale: 1 - 0.3 * coverProgress,
-                child: Opacity(
-                  opacity: (1 - coverProgress * 1.1).clamp(0.0, 1.0),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      // Round for an artist's picture.
-                      shape: _isArtist ? BoxShape.circle : BoxShape.rectangle,
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x80000000),
-                          blurRadius: 40,
-                          offset: Offset(0, 12),
-                        ),
-                      ],
+            child: ValueListenableBuilder(
+              valueListenable: _offset,
+              builder: (context, _, child) {
+                final o = scrolled();
+                final progress = (o / (coverSize * 0.85 + coverTop)).clamp(
+                  0.0,
+                  1.0,
+                );
+                return Transform.translate(
+                  offset: Offset(0, (o - coverTop).clamp(0.0, double.infinity)),
+                  child: Transform.scale(
+                    alignment: Alignment.topCenter,
+                    scale: 1 - 0.3 * progress,
+                    child: Opacity(
+                      opacity: (1 - progress * 1.1).clamp(0.0, 1.0),
+                      child: child,
                     ),
-                    child: PlaylistCover(playlist: _playlist, size: coverSize),
                   ),
+                );
+              },
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  // Round for an artist's picture.
+                  shape: _isArtist ? BoxShape.circle : BoxShape.rectangle,
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x80000000),
+                      blurRadius: 40,
+                      offset: Offset(0, 12),
+                    ),
+                  ],
                 ),
+                child: PlaylistCover(playlist: _playlist, size: coverSize),
               ),
             ),
           ),
@@ -486,8 +522,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               ),
               _ShuffleButton(active: _shuffle, onTap: _onShuffle),
               const SizedBox(width: 16),
-              Opacity(
-                opacity: _pinPlay ? 0 : 1,
+              ValueListenableBuilder(
+                valueListenable: _pinPlay,
+                builder: (context, pinned, child) =>
+                    Opacity(opacity: pinned ? 0 : 1, child: child),
                 child: _PlayButton(
                   key: _playKey,
                   playing: current && _playing,
@@ -666,8 +704,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           const SizedBox(height: 24),
           Row(
             children: [
-              Opacity(
-                opacity: _pinPlay ? 0 : 1,
+              ValueListenableBuilder(
+                valueListenable: _pinPlay,
+                builder: (context, pinned, child) =>
+                    Opacity(opacity: pinned ? 0 : 1, child: child),
                 child: _PlayButton(
                   key: _playKey,
                   playing: current && _playing,
@@ -728,7 +768,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         child: ChoiceChip(
           selected: selected,
           showCheckmark: false,
-          onSelected: (_) => setState(() => _tagFilter = id),
+          onSelected: (_) => setState(() {
+            _tagFilter = id;
+            _shown = null;
+          }),
           avatar: dot == null
               ? null
               : Container(
