@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:just_audio_platform_interface/just_audio_platform_interface.dart';
@@ -606,7 +607,83 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 250));
       }
       expect(service.player.playing, isTrue);
+      // Its report says the Mac's request was done (Play here waits on it).
+      Map<String, dynamic>? report;
+      for (var i = 0; i < 40; i++) {
+        final (_, now) = await mac('GET', '/sync/state/playback', token: token);
+        report = (now['data'] as Map).cast<String, dynamic>();
+        if (report['obeyed'] == 'cmd-from-mac') break;
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+      expect(report?['obeyed'], 'cmd-from-mac');
       await service.player.pause();
+
+      // On screen, edits go both ways within seconds, without Sync now or
+      // the 20-second round.
+      TestWidgetsFlutterBinding.instance.handleAppLifecycleStateChanged(
+        AppLifecycleState.resumed,
+      );
+      final (_, lib) = await mac('GET', '/sync/state/library', token: token);
+      final edited = (lib['data']['items'] as Map).cast<String, dynamic>();
+      edited['p:from-mac'] = {
+        't': DateTime.now().millisecondsSinceEpoch,
+        'v': {'name': 'From the Mac', 'tracks': []},
+        'by': 'Mac',
+      };
+      await mac(
+        'PUT',
+        '/sync/state/library',
+        token: token,
+        body: {
+          'rev': lib['rev'],
+          'data': {'v': 1, 'items': edited},
+        },
+      );
+      for (var i = 0; i < 32 && library.byId('custom:from-mac') == null; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+      expect(library.byId('custom:from-mac')?.name, 'From the Mac');
+
+      final quick = library.createPlaylist('Made here');
+      String? there;
+      for (var i = 0; i < 32 && there == null; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        final (_, now) = await mac('GET', '/sync/state/library', token: token);
+        there =
+            now['data']['items']['p:${quick.id.substring(7)}']?['v']?['name']
+                as String?;
+      }
+      expect(there, 'Made here');
+
+      // The Mac plays, then leaves the group: it stops showing as playing.
+      final (_, last) = await mac('GET', '/sync/state/playback', token: token);
+      await mac(
+        'PUT',
+        '/sync/state/playback',
+        token: token,
+        body: {
+          'rev': last['rev'],
+          'data': {
+            'track': {'sync': 'Rock/d.mp3'},
+            'pos': 0,
+            'playing': true,
+            'playlist': null,
+            't': DateTime.now().millisecondsSinceEpoch + 60000,
+            'at': DateTime.now().millisecondsSinceEpoch,
+            'device': 'mac-device-0001',
+            'name': 'Mac',
+          },
+        },
+      );
+      for (var i = 0; i < 40 && sync.playingElsewhere.value == null; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+      expect(sync.playingElsewhere.value, 'Mac');
+      await mac('DELETE', '/sync/devices/mac-device-0001', token: token);
+      for (var i = 0; i < 32 && sync.playingElsewhere.value != null; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+      expect(sync.playingElsewhere.value, isNull);
     },
     skip: runnable ? false : 'no backend here',
     timeout: const Timeout(Duration(minutes: 2)),

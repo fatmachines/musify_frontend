@@ -214,6 +214,10 @@ class SyncService extends ChangeNotifier implements RemoteControl {
     Timer.periodic(const Duration(seconds: 20), (_) => _tick());
     // A device waiting to be let in (and the Sync screen) look every 3 s.
     Timer.periodic(const Duration(seconds: 3), (_) => _quick());
+    // Edits here go out after a moment's quiet, and the others' come in
+    // within seconds: not on the next 20-second round.
+    Library.instance.addListener(_libraryEdited);
+    Timer.periodic(const Duration(seconds: 3), (_) => _checkRevs());
     _watchFolder();
     AppLifecycleListener(
       // Back in the app: everything, music files too, straight away.
@@ -431,6 +435,8 @@ class SyncService extends ChangeNotifier implements RemoteControl {
     _token = _code = null;
     devices = const [];
     requests = const [];
+    _libraryRev = -1;
+    _groupIds = null;
     await _clearMerged();
     await _save();
     AppLog.add('sync: off ($why)');
@@ -559,6 +565,58 @@ class SyncService extends ChangeNotifier implements RemoteControl {
     final run = _libraryChain.then((_) => _syncLibrary());
     _libraryChain = run.catchError((_) {});
     return run;
+  }
+
+  /// The shared library's revision this device last synced with, and
+  /// its own library then (to tell its edits from what sync applied).
+  int _libraryRev = -1;
+  String? _syncedLocal;
+  Timer? _editSoon;
+
+  void _libraryEdited() {
+    if (status != SyncStatus.on) return;
+    _editSoon?.cancel();
+    _editSoon = Timer(const Duration(milliseconds: 1500), () {
+      if (status != SyncStatus.on) return;
+      if (jsonEncode(_localItems()) == _syncedLocal) return;
+      unawaited(_syncLibrarySerially().catchError((_) {}));
+    });
+  }
+
+  /// The group's devices, as of the last look; null before it.
+  Set<String>? _groupIds;
+  bool _revsRunning = false;
+
+  /// An older server without /sync/revs: the 20-second round does it all.
+  bool _noRevs = false;
+
+  /// While the app is on screen: whether another device changed the
+  /// library (fetched only then), and who's still in the group.
+  Future<void> _checkRevs() async {
+    if (_revsRunning || _noRevs || status != SyncStatus.on) return;
+    if (!_server.setUpNow ||
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+    _revsRunning = true;
+    try {
+      final (code, data) = await _call('GET', '/sync/revs');
+      if (code == 404) _noRevs = true;
+      if (code != 200) return;
+      _groupIds = {
+        for (final id in data['devices'] as List? ?? const []) id as String,
+      };
+      // One that left stops showing as playing.
+      if (_remoteDoc != null) _noteElsewhere(_remoteDoc);
+      final rev = (data['revs'] as Map?)?['library'] as int? ?? 0;
+      if (_libraryRev >= 0 && rev != _libraryRev && _running == null) {
+        await _syncLibrarySerially();
+      }
+    } catch (_) {
+      // The 20-second round reports problems.
+    } finally {
+      _revsRunning = false;
+    }
   }
 
   int _watchers = 0;
@@ -887,8 +945,12 @@ class SyncService extends ChangeNotifier implements RemoteControl {
         if (put != 200) {
           throw SyncFailed(latest['error'] as String? ?? '$put');
         }
+        _libraryRev = latest['rev'] as int? ?? -1;
+      } else {
+        _libraryRev = data['rev'] as int? ?? -1;
       }
       _applyLibrary(merged, local);
+      _syncedLocal = jsonEncode(_localItems());
       await _saveMerged(merged);
       _addConflicts([for (final c in clashes) SyncConflict.name(c)]);
       return;
@@ -1021,9 +1083,39 @@ class SyncService extends ChangeNotifier implements RemoteControl {
   /// and that one pauses.
   Future<void> playHere() async {
     final player = PlayerService.instance.player;
+    await _awaitAnswer();
     final there = _elsewherePosition();
     if (there != null) await player.seek(there);
     unawaited(player.play());
+  }
+
+  /// What this device last asked the playing one to do, and when.
+  String? _asked;
+  DateTime? _askedAt;
+
+  /// A skip asked of the other device a moment ago may not be reported
+  /// yet: waits (a few seconds at most) for its next report and follows
+  /// it, so Play here carries on with the song it moved to.
+  Future<void> _awaitAnswer() async {
+    final asked = _askedAt;
+    if (asked == null) return;
+    final deadline = asked.add(const Duration(seconds: 6));
+    while (DateTime.now().isBefore(deadline)) {
+      try {
+        final (code, data) = await _call('GET', '/sync/state/playback');
+        final doc = (data['data'] as Map?)?.cast<String, dynamic>();
+        // Reported after doing it.
+        if (code == 200 && doc?['obeyed'] == _asked) {
+          _playbackRev = data['rev'] as int? ?? _playbackRev;
+          _noteElsewhere(doc);
+          await _followPlayback(doc);
+          return;
+        }
+      } catch (_) {
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+    }
   }
 
   bool _checking = false;
@@ -1070,6 +1162,7 @@ class SyncService extends ChangeNotifier implements RemoteControl {
     final current =
         doc != null &&
         doc['device'] != _deviceId &&
+        (_groupIds?.contains(doc['device']) ?? true) &&
         (doc['playing'] == true
             ? gone < const Duration(seconds: 45).inMilliseconds
             : gone < const Duration(minutes: 10).inMilliseconds);
@@ -1139,6 +1232,8 @@ class SyncService extends ChangeNotifier implements RemoteControl {
       );
       if (code == 200) {
         _commandRev = data['rev'] as int;
+        _asked = command['id'] as String;
+        _askedAt = DateTime.now();
         AppLog.add('sync: asked ${_remoteDoc?['name']} to $action');
         return;
       }
@@ -1235,6 +1330,8 @@ class SyncService extends ChangeNotifier implements RemoteControl {
             : _lastLocalPlayback,
         'device': _deviceId,
         'name': deviceName,
+        // The last thing another device asked of this one, now done.
+        'obeyed': _lastCommand,
         // When this was sent: where it got to by now can be worked out.
         'at': DateTime.now().millisecondsSinceEpoch,
       };
