@@ -69,18 +69,40 @@ class MusifyServer extends ChangeNotifier {
         .replace(queryParameters: {'key': key});
   }
 
-  final _warmed = <String>{};
+  /// Songs the server has fetched (this run), and ones it's fetching.
+  final _ready = <String>{};
+  final _fetching = <String, Future<bool>>{};
 
-  /// Has the server fetch [track] from YouTube now (a few seconds), so it
-  /// starts at once when its turn comes. Once per song per run.
-  void warm(YouTubeTrack track) {
+  /// Whether the server has [track], so it streams straight away.
+  bool isReady(YouTubeTrack track) => _ready.contains(track.videoId);
+
+  /// Has the server fetch [track] from YouTube: a few seconds, or at once
+  /// if it has it already. True once it's there to stream; false if the
+  /// server couldn't get it (or there's no server).
+  Future<bool> warm(YouTubeTrack track) {
+    final id = track.videoId;
+    if (_ready.contains(id)) return Future.value(true);
     final uri = streamUri(track);
-    if (uri == null || !_warmed.add(track.videoId)) return;
-    http
-        .get(uri, headers: {'Range': 'bytes=0-0'})
-        .timeout(const Duration(minutes: 2))
-        .then<void>((_) {}, onError: (_) => _warmed.remove(track.videoId));
+    if (uri == null) return Future.value(false);
+    return _fetching.putIfAbsent(id, () async {
+      try {
+        final response = await http
+            .get(uri, headers: {'Range': 'bytes=0-0'})
+            .timeout(const Duration(minutes: 2));
+        final ok = response.statusCode == 206 || response.statusCode == 200;
+        if (ok) _ready.add(id);
+        return ok;
+      } catch (_) {
+        return false;
+      } finally {
+        _fetching.remove(id);
+      }
+    });
   }
+
+  /// Marks [videoId] as fetched, for tests.
+  @visibleForTesting
+  void debugReady(String videoId) => _ready.add(videoId);
 
   /// Reads the saved address and key (once).
   Future<void> load() => _load();

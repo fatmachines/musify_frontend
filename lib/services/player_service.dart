@@ -11,6 +11,7 @@ import 'equalizer_service.dart';
 import 'library.dart';
 import 'local_copies.dart';
 import 'musify_server.dart';
+import 'youtube/youtube_web_player.dart';
 
 /// An active sleep timer: either a time to stop at, or the end of the
 /// current song.
@@ -105,7 +106,7 @@ class PlayerService {
     for (var i = index + 1; i < sequence.length && warmed < 2; i++) {
       final tag = sequence[i].tag;
       if (tag is YouTubeTrack && !_noStream.contains(tag.videoId)) {
-        MusifyServer.instance.warm(tag);
+        _fetchThenStream(player, tag);
         warmed++;
       }
     }
@@ -210,20 +211,39 @@ class PlayerService {
   /// Only the song playing and the next stream, though (see [_streamNear]):
   /// the iPhone's player opens every streamed song in its queue at once,
   /// so a 100-song chart would have the server fetch 100. The rest wait as
-  /// stand-ins until their turn comes near.
+  /// stand-ins until their turn comes near. And a song streams once the
+  /// server has it: until then (a few seconds, the first time) YouTube's
+  /// player plays it, so it starts at once, and it moves over to the
+  /// stream where it got to.
   static AudioSource _source(Track track) {
     if (track is! YouTubeTrack) return AudioSource.file(track.path, tag: track);
     return _webSource(track);
   }
 
-  /// [track] streamed from the server, or null (no server, or streaming it
-  /// failed before).
+  /// [track] streamed from the server, or null: no server, the server
+  /// hasn't got it yet, or streaming it failed before.
   AudioSource? _streamOf(Track track) {
-    if (track is! YouTubeTrack || _noStream.contains(track.videoId)) {
+    final server = MusifyServer.instance;
+    if (track is! YouTubeTrack ||
+        _noStream.contains(track.videoId) ||
+        !server.isReady(track)) {
       return null;
     }
-    final stream = MusifyServer.instance.streamUri(track);
+    final stream = server.streamUri(track);
     return stream == null ? null : AudioSource.uri(stream, tag: track);
+  }
+
+  /// Has the server fetch [track]; once it has, the song moves over to the
+  /// stream if it's still the one playing or the next.
+  void _fetchThenStream(AudioPlayer player, YouTubeTrack track) {
+    if (_noStream.contains(track.videoId)) return;
+    MusifyServer.instance.warm(track).then((ok) {
+      if (ok) {
+        _streamNear(player);
+      } else if (MusifyServer.instance.setUpNow) {
+        _noStream.add(track.videoId);
+      }
+    });
   }
 
   /// YouTube songs the server couldn't stream this run.
@@ -247,9 +267,16 @@ class PlayerService {
       if (i >= sequence.length) return;
       final source = sequence[i];
       if (!isWebSource(source)) continue;
-      final stream = _streamOf(source.tag as Track);
-      if (stream == null) continue;
-      final position = player.position;
+      final track = source.tag as YouTubeTrack;
+      final stream = _streamOf(track);
+      if (stream == null) {
+        _fetchThenStream(player, track);
+        continue;
+      }
+      // From where the video got to (the stand-in runs ahead while the
+      // video loads).
+      final position =
+          YouTubeWebPlayer.instance.playedOf(track) ?? Duration.zero;
       final playing = player.playing;
       await player.removeAudioSourceAt(i);
       await player.insertAudioSource(i, stream);
@@ -317,6 +344,13 @@ class PlayerService {
     final tracks = playlist.tracks.map(copies.resolve).toList();
     if (tracks.isEmpty) return;
     final index = startIndex ?? (shuffle ? Random().nextInt(tracks.length) : 0);
+    // A song the server has streams from the start; one it hasn't starts
+    // in YouTube's player without waiting.
+    if (tracks[index] case final YouTubeTrack track) {
+      await MusifyServer.instance
+          .warm(track)
+          .timeout(const Duration(milliseconds: 600), onTimeout: () => false);
+    }
     final queued = upcomingQueue;
     final (before, after) = _around(tracks, index, shuffle);
     await player.setShuffleModeEnabled(false);

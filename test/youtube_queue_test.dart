@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_platform_interface/just_audio_platform_interface.dart';
@@ -61,6 +62,10 @@ void main() {
   test('with a server, the song playing and the next stream from it, the '
       "rest wait; if streaming fails, YouTube's player takes over", () async {
     MusifyServer.instance.debugUse(key: 'secret', charts: const []);
+    // Songs the server has already.
+    for (final id in 'abcdef'.split('')) {
+      MusifyServer.instance.debugReady(id);
+    }
     final service = PlayerService.fresh();
     final songs = [for (final id in 'abcdef'.split('')) video(id)];
     await service.playYouTube(songs, 0);
@@ -91,5 +96,55 @@ void main() {
     expect(PlayerService.isWebSource(now[1]), isTrue, reason: 'no retry');
     expect(service.player.currentIndex, 1);
     expect(service.player.position.inSeconds, 42);
+  });
+
+  test("a song the server hasn't got yet starts in YouTube's player", () async {
+    MusifyServer.instance.debugUse(key: 'secret', charts: const []);
+    final service = PlayerService.fresh();
+    // The server (made up) can't be reached: it stays in YouTube's player.
+    await service.playYouTube([video('new1'), video('new2')], 0);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    await service.idle;
+    expect(PlayerService.isWebSource(service.player.sequence[0]), isTrue);
+    expect(PlayerService.isWebSource(service.player.sequence[1]), isTrue);
+  });
+
+  test('once the server has it, the song moves over to the stream', () async {
+    HttpOverrides.global = null;
+    SharedPreferences.setMockInitialValues({});
+    // A server that takes a moment to fetch the song from YouTube.
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(server.close);
+    server.listen((request) async {
+      await Future<void>.delayed(const Duration(milliseconds: 900));
+      request.response
+        ..statusCode = 206
+        ..headers.set('Content-Range', 'bytes 0-0/1')
+        ..add([0]);
+      await request.response.close();
+    });
+    await MusifyServer.instance.setUp('http://127.0.0.1:${server.port}', 'k');
+    final service = PlayerService.fresh();
+    await service.playYouTube([video('late1'), video('late2')], 0);
+    // Not there within 600 ms: YouTube's player starts it.
+    expect(PlayerService.isWebSource(service.player.sequence[0]), isTrue);
+    for (var i = 0; i < 40; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await service.idle;
+      if (!PlayerService.isWebSource(service.player.sequence[0]) &&
+          !PlayerService.isWebSource(service.player.sequence[1])) {
+        break;
+      }
+    }
+    expect(PlayerService.isWebSource(service.player.sequence[0]), isFalse);
+    expect(PlayerService.isWebSource(service.player.sequence[1]), isFalse);
+    expect(service.player.currentIndex, 0);
+    expect(
+      [
+        for (final s in service.player.sequence)
+          (s.tag as YouTubeTrack).videoId,
+      ],
+      ['late1', 'late2'],
+    );
   });
 }

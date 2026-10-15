@@ -62,6 +62,16 @@ class YouTubeWebPlayer {
   int _logTicks = 0;
   DateTime _lastPlayFailLog = DateTime.fromMillisecondsSinceEpoch(0);
 
+  /// Where [track]'s video has got to, if it's the one here and has
+  /// started playing; null if it hasn't (still loading, or held up in the
+  /// background), when the stand-in's own clock means nothing.
+  Duration? playedOf(YouTubeTrack track) =>
+      _loaded == track.videoId &&
+          _lastTick != null &&
+          _lastVideoTime > Duration.zero
+      ? _lastVideoTime
+      : null;
+
   /// How far the current video has loaded ahead, for the seek bar.
   final buffered = ValueNotifier<Duration>(Duration.zero);
 
