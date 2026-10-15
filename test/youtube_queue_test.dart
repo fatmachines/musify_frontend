@@ -58,27 +58,38 @@ void main() {
     expect(tags[1], isA<QueuedTrack>());
   });
 
-  test('with a server, YouTube songs stream from it; if that fails, '
-      "YouTube's player takes over where it was", () async {
+  test('with a server, the song playing and the next stream from it, the '
+      "rest wait; if streaming fails, YouTube's player takes over", () async {
     MusifyServer.instance.debugUse(key: 'secret', charts: const []);
     final service = PlayerService.fresh();
-    await service.playYouTube([video('a'), video('b')], 0);
-    final streamed = service.player.sequence[0] as UriAudioSource;
+    final songs = [for (final id in 'abcdef'.split('')) video(id)];
+    await service.playYouTube(songs, 0);
+    await service.idle;
+    List<bool> streamed() => [
+      for (final s in service.player.sequence) !PlayerService.isWebSource(s),
+    ];
+    expect(streamed(), [true, true, false, false, false, false]);
     expect(
-      streamed.uri.toString(),
+      (service.player.sequence[0] as UriAudioSource).uri.toString(),
       'https://musify.example.com/audio/a.m4a?key=secret',
     );
-    expect(PlayerService.isWebSource(streamed), isFalse);
+
+    // On to the next song: the one after it streams now too.
+    await service.player.seekToNext();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    await service.idle;
+    expect(streamed(), [true, true, true, false, false, false]);
 
     await service.player.seek(const Duration(seconds: 42));
     fake.last!.fail('stream failed');
     await Future<void>.delayed(const Duration(milliseconds: 50));
     await service.idle;
     final now = service.player.sequence;
-    expect([for (final s in now) (s.tag as YouTubeTrack).videoId], ['a', 'b']);
-    expect(PlayerService.isWebSource(now[0]), isTrue);
-    expect(now[1], isA<UriAudioSource>(), reason: 'the rest still stream');
-    expect(service.player.currentIndex, 0);
+    expect([
+      for (final s in now) (s.tag as YouTubeTrack).videoId,
+    ], 'abcdef'.split(''));
+    expect(PlayerService.isWebSource(now[1]), isTrue, reason: 'no retry');
+    expect(service.player.currentIndex, 1);
     expect(service.player.position.inSeconds, 42);
   });
 }

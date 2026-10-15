@@ -82,6 +82,7 @@ class PlayerService {
     );
     player.currentIndexStream.listen((_) {
       _dropPlayedQueue();
+      _streamNear(player);
       _warmNext(player);
     });
     player.errorStream.listen((e) => _streamFailed(player, e));
@@ -94,17 +95,16 @@ class PlayerService {
   static bool isWebSource(IndexedAudioSource? source) =>
       source is ClippingAudioSource && source.tag is YouTubeTrack;
 
-  /// The next YouTube songs to stream get fetched by the server ahead of
-  /// time, so one starts as the last ends.
-  static void _warmNext(AudioPlayer player) {
+  /// The next two YouTube songs get fetched by the server ahead of time,
+  /// so one starts as the last ends.
+  void _warmNext(AudioPlayer player) {
     final index = player.currentIndex;
     if (index == null) return;
     final sequence = player.sequence;
     var warmed = 0;
     for (var i = index + 1; i < sequence.length && warmed < 2; i++) {
-      final source = sequence[i];
-      final tag = source.tag;
-      if (tag is YouTubeTrack && !isWebSource(source)) {
+      final tag = sequence[i].tag;
+      if (tag is YouTubeTrack && !_noStream.contains(tag.videoId)) {
         MusifyServer.instance.warm(tag);
         warmed++;
       }
@@ -120,6 +120,7 @@ class PlayerService {
         final source = player.sequence[index];
         final track = source.tag;
         if (track is! YouTubeTrack || isWebSource(source)) return;
+        _noStream.add(track.videoId);
         AppLog.add(
           'player: streaming ${track.name} failed (${error.message}); '
           "YouTube's player instead",
@@ -205,12 +206,59 @@ class PlayerService {
   /// by the system's own player like any song: so it carries on after a
   /// call, from Control Center, and into the next song in the background,
   /// none of which a web view in the background can be relied on for.
+  ///
+  /// Only the song playing and the next stream, though (see [_streamNear]):
+  /// the iPhone's player opens every streamed song in its queue at once,
+  /// so a 100-song chart would have the server fetch 100. The rest wait as
+  /// stand-ins until their turn comes near.
   static AudioSource _source(Track track) {
     if (track is! YouTubeTrack) return AudioSource.file(track.path, tag: track);
-    final stream = MusifyServer.instance.streamUri(track);
-    if (stream != null) return AudioSource.uri(stream, tag: track);
     return _webSource(track);
   }
+
+  /// [track] streamed from the server, or null (no server, or streaming it
+  /// failed before).
+  AudioSource? _streamOf(Track track) {
+    if (track is! YouTubeTrack || _noStream.contains(track.videoId)) {
+      return null;
+    }
+    final stream = MusifyServer.instance.streamUri(track);
+    return stream == null ? null : AudioSource.uri(stream, tag: track);
+  }
+
+  /// YouTube songs the server couldn't stream this run.
+  final _noStream = <String>{};
+
+  /// [tracks] as sources, the one at [at] and the one after it streamed.
+  List<AudioSource> _sourcesAround(List<Track> tracks, int at) => [
+    for (var i = 0; i < tracks.length; i++)
+      (i == at || i == at + 1 ? _streamOf(tracks[i]) : null) ??
+          _source(tracks[i]),
+  ];
+
+  /// Turns the stand-ins for the song playing and the next into streams,
+  /// once the queue has moved or changed.
+  void _streamNear(AudioPlayer player) => _serial(() async {
+    for (final offset in [0, 1]) {
+      final index = player.currentIndex;
+      if (index == null) return;
+      final i = index + offset;
+      final sequence = player.sequence;
+      if (i >= sequence.length) return;
+      final source = sequence[i];
+      if (!isWebSource(source)) continue;
+      final stream = _streamOf(source.tag as Track);
+      if (stream == null) continue;
+      final position = player.position;
+      final playing = player.playing;
+      await player.removeAudioSourceAt(i);
+      await player.insertAudioSource(i, stream);
+      if (offset == 0) {
+        await player.seek(position, index: i);
+        if (playing) player.play();
+      }
+    }
+  });
 
   /// A YouTube song played by YouTube's player (see [_source]).
   static AudioSource _webSource(YouTubeTrack track) {
@@ -273,12 +321,15 @@ class PlayerService {
     final (before, after) = _around(tracks, index, shuffle);
     await player.setShuffleModeEnabled(false);
     _lastSource = null;
-    await player.setAudioSources([
-      ...before.map(_source),
-      _source(tracks[index]),
-      ...queued.map(_source),
-      ...after.map(_source),
-    ], initialIndex: before.length);
+    await player.setAudioSources(
+      _sourcesAround([
+        ...before,
+        tracks[index],
+        ...queued,
+        ...after,
+      ], before.length),
+      initialIndex: before.length,
+    );
     _loaded = Playlist(
       id: playlist.id,
       name: playlist.name,
@@ -353,6 +404,7 @@ class PlayerService {
     if (before.isNotEmpty) {
       await player.insertAudioSources(0, before.map(_source).toList());
     }
+    _streamNear(player);
   });
 
   /// Plays [track] right after the current song, ahead of anything queued
@@ -369,6 +421,7 @@ class PlayerService {
     if (current == null || player.sequence.isEmpty) {
       // Nothing loaded: the song waits, paused, in the mini player.
       await player.setAudioSources([source]);
+      _streamNear(player);
       return;
     }
     var at = current + 1;
@@ -379,6 +432,7 @@ class PlayerService {
       }
     }
     await player.insertAudioSource(at, source);
+    _streamNear(player);
   });
 
   Future<void> clearQueue() => _serial(() async {
@@ -388,6 +442,7 @@ class PlayerService {
     for (var i = sequence.length - 1; i > current; i--) {
       if (sequence[i].tag is QueuedTrack) await player.removeAudioSourceAt(i);
     }
+    _streamNear(player);
   });
 
   /// Removes queued songs playback has moved past (or skipped), so they
@@ -432,7 +487,10 @@ class PlayerService {
     _loopChosen = true;
     _lastSource = null;
     await player.setAudioSources(
-      sequence.map(LocalCopies.instance.resolve).map(_source).toList(),
+      _sourcesAround(
+        sequence.map(LocalCopies.instance.resolve).toList(),
+        index,
+      ),
       initialIndex: index,
       initialPosition: position,
     );
