@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -120,11 +122,28 @@ class _MusifyAppState extends State<MusifyApp> with WidgetsBindingObserver {
       // Spotify's desktop layout on wide windows (the Mac, iPad landscape),
       // the phone's tabs otherwise.
       home: Builder(
-        builder: (context) => DesktopShell.fits(MediaQuery.sizeOf(context))
-            ? const DesktopShell()
-            : const HomeShell(),
+        builder: (context) {
+          final size = MediaQuery.sizeOf(context);
+          _uprightOnPhones(size);
+          return DesktopShell.fits(size)
+              ? const DesktopShell()
+              : const HomeShell();
+        },
       ),
     );
+  }
+}
+
+bool _orientationSet = false;
+
+/// Phones stay upright, as Spotify's app does: the player and the pages are
+/// made for it. Tablets turn (wide, they get the desktop layout). Decided
+/// once the screen's size is known.
+void _uprightOnPhones(Size size) {
+  if (_orientationSet || size.isEmpty) return;
+  _orientationSet = true;
+  if ((Platform.isAndroid || Platform.isIOS) && size.shortestSide < 600) {
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   }
 }
 
