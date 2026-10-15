@@ -116,6 +116,8 @@ void main() {
     expect(order(service), 'a b c d [e]');
 
     // With repeat-all the playlist loops; the queued songs don't come back.
+    await service.cycleRepeat();
+    expect(service.player.loopMode.name, 'all');
     await service.next();
     await settle(service);
     expect(order(service), '[a] b c d e');

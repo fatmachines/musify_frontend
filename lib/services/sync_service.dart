@@ -7,7 +7,6 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
-import 'package:just_audio/just_audio.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -1350,9 +1349,7 @@ class SyncService extends ChangeNotifier implements RemoteControl {
         index: playlist == null ? 0 : index,
         position: Duration(milliseconds: position),
         shuffle: service.shuffleOn.value,
-        loop: service.player.loopMode == LoopMode.off
-            ? LoopMode.all
-            : service.player.loopMode,
+        loop: service.player.loopMode,
       );
       _lastLocalPlayback = when;
       _appliedAt = DateTime.now();

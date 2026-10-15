@@ -57,9 +57,6 @@ class PlayerService {
 
   IndexedAudioSource? _lastSource;
 
-  /// Repeat starts as "all" until the user (or a restored session) picks.
-  bool _loopChosen = false;
-
   final sleepTimer = ValueNotifier<SleepTimer?>(null);
   Timer? _sleepClock;
   StreamSubscription? _sleepTrackWatch;
@@ -392,10 +389,6 @@ class PlayerService {
       artworkUrl: playlist.artworkUrl,
     );
     shuffleOn.value = shuffle;
-    if (!_loopChosen) {
-      _loopChosen = true;
-      await player.setLoopMode(LoopMode.all);
-    }
     AppLog.add('player: ${playlist.name} from #$index shuffle=$shuffle');
     // play() completes only when playback stops, so don't wait on it.
     player.play();
@@ -538,7 +531,6 @@ class PlayerService {
   }) => _serial(() async {
     await player.setShuffleModeEnabled(false);
     await player.setLoopMode(loop);
-    _loopChosen = true;
     _lastSource = null;
     await player.setAudioSources(
       _sourcesAround(
@@ -682,9 +674,8 @@ class PlayerService {
     }
   }
 
-  /// Repeat cycles all → one → off.
+  /// Repeat cycles off → all → one → off (off to start with, as Spotify).
   Future<void> cycleRepeat() {
-    _loopChosen = true;
     final next = switch (player.loopMode) {
       LoopMode.all => LoopMode.one,
       LoopMode.one => LoopMode.off,

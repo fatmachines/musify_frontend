@@ -100,7 +100,7 @@ Music/
   <img src="docs/screenshots/light_home.png" width="270" alt="Light mode">
 </p>
 
-- Shuffle, repeat (all, one, off), a **sleep timer** (minutes or the end of
+- Shuffle, repeat (off, all, one), a **sleep timer** (minutes or the end of
   the song), lyrics from the file's tags, share.
 - **Equalizer**: 10 bands you drag into shape, and presets (Rock, Bass
   Booster, Vocal and more), on iPhone, Mac and Android.

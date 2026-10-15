@@ -155,7 +155,7 @@ class PlaybackSession {
           ? Duration(milliseconds: data['position'] as int? ?? 0)
           : Duration.zero,
       shuffle: data['shuffle'] as bool? ?? false,
-      loop: LoopMode.values.byName(data['loop'] as String? ?? 'all'),
+      loop: LoopMode.values.byName(data['loop'] as String? ?? 'off'),
     );
   }
 

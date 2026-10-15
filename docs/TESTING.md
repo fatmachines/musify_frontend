@@ -139,7 +139,7 @@ offline.
 | 5.5 | Drag the mini player up; drag the full player down. | Opens / closes smoothly. |
 | 5.6 | Shuffle on and off while playing. | The current song keeps playing; the order of the rest changes. |
 | 5.6b | Turn shuffle **on**, fully close the app, reopen, start any playlist (play button or tap a song). | Shuffle is still on and the playlist plays shuffled. Turning it off is remembered the same way. |
-| 5.7 | Repeat: tap through all → one → off. | Repeat one replays the song; repeat all goes from the last song back to the first; off stops at the end. |
+| 5.7 | Repeat (off on a fresh install): tap through all → one → off. | Repeat one replays the song; repeat all goes from the last song back to the first; off stops at the end. |
 | 5.8 | **Sleep timer:** 5 minutes, then "End of track". | The music stops when it should. The countdown shows. |
 | 5.9 | Open lyrics on the song that has them. | They show. |
 | 5.10 | **Lock screen / Control Center:** play, pause, skip, seek. | All work. The right title and cover show. |
