@@ -460,6 +460,88 @@ void main() {
       expect(Directory(p.join(music.path, 'Huge')).existsSync(), isFalse);
       expect(library.all.map((pl) => pl.name), contains('Giant'));
 
+      // Apart, both rename Road Trip: this device is asked which name to
+      // keep, and its answer goes to the Mac.
+      final (_, before) = await mac('GET', '/sync/state/library', token: token);
+      final libraryItems = (before['data']['items'] as Map)
+          .cast<String, dynamic>();
+      final roadKey = 'p:${road.id.substring('custom:'.length)}';
+      libraryItems[roadKey] = {
+        't': DateTime.now().millisecondsSinceEpoch,
+        'v': {
+          ...(libraryItems[roadKey]['v'] as Map).cast<String, dynamic>(),
+          'name': 'Road Trip 2026',
+        },
+        'by': 'Mac',
+      };
+      await mac(
+        'PUT',
+        '/sync/state/library',
+        token: token,
+        body: {
+          'rev': before['rev'],
+          'data': {'v': 1, 'items': libraryItems},
+        },
+      );
+      library.renamePlaylist(library.byId(road.id)!, 'Summer Drive');
+      await sync.syncNow();
+      final nameClash = sync.conflicts.value.single;
+      expect(nameClash.name!.mine, 'Summer Drive');
+      expect(nameClash.name!.theirs, 'Road Trip 2026');
+      expect(nameClash.otherDevice, 'Mac');
+      expect(library.byId(road.id)!.name, 'Road Trip 2026', reason: 'for now');
+      await sync.resolve(nameClash, keepMine: true);
+      await sync.syncNow();
+      expect(sync.conflicts.value, isEmpty);
+      expect(library.byId(road.id)!.name, 'Summer Drive');
+      final (_, after) = await mac('GET', '/sync/state/library', token: token);
+      expect(after['data']['items'][roadKey]['v']['name'], 'Summer Drive');
+
+      // Apart, both rename a song: neither name spreads until this device
+      // picks; picking the Mac's renames the file here.
+      final s0 = sha1.convert(utf8.encode('song 0' * 100)).toString();
+      await mac(
+        'POST',
+        '/sync/files',
+        token: token,
+        body: {
+          'add': [
+            {'path': 'Giant/First.mp3', 'sha1': s0, 'size': 600},
+          ],
+          'delete': ['Giant/s0.mp3'],
+        },
+      );
+      await File(p.join(music.path, 'Giant', 's0.mp3'))
+          .rename(p.join(music.path, 'Giant', 'Opening.mp3'));
+      await sync.syncNow();
+      final fileClash = sync.conflicts.value.single;
+      expect(fileClash.files!.mine, ['Giant/Opening.mp3']);
+      expect(fileClash.files!.theirs, ['Giant/First.mp3']);
+      expect(
+        File(p.join(music.path, 'Giant', 'First.mp3')).existsSync(),
+        isFalse,
+      );
+      final (_, held) = await mac('GET', '/sync/files', token: token);
+      expect([
+        for (final f in held['files'] as List) f['path'],
+      ], isNot(contains('Giant/Opening.mp3')));
+      await sync.resolve(fileClash, keepMine: false);
+      await sync.syncNow();
+      expect(sync.conflicts.value, isEmpty);
+      expect(
+        File(p.join(music.path, 'Giant', 'First.mp3')).existsSync(),
+        isTrue,
+      );
+      expect(
+        File(p.join(music.path, 'Giant', 'Opening.mp3')).existsSync(),
+        isFalse,
+      );
+      final (_, settled) = await mac('GET', '/sync/files', token: token);
+      expect([
+        for (final f in settled['files'] as List)
+          if (f['deleted'] != true) f['path'],
+      ], isNot(contains('Giant/Opening.mp3')));
+
       // Remote control. The Mac plays: this device shows it, its controls
       // show the Mac playing, and pausing here asks the Mac to pause.
       final (_, lately) = await mac(

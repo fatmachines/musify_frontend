@@ -25,6 +25,7 @@ import 'widgets/download_sheet.dart';
 import 'widgets/mini_player.dart';
 import 'widgets/navigation.dart';
 import 'widgets/playing_elsewhere.dart';
+import 'widgets/sync_conflict.dart';
 import 'widgets/toast.dart';
 
 Future<void> main() async {
@@ -137,12 +138,14 @@ class _HomeShellState extends State<HomeShell>
   int _index = 0;
 
   late final VoidCallback _stopHandoff;
+  late final VoidCallback _stopConflicts;
 
   @override
   void initState() {
     super.initState();
     // "Picked up where you left off on …" when sync brings that over.
     _stopHandoff = listenForHandoff(this);
+    _stopConflicts = listenForConflicts(this);
     HardwareKeyboard.instance.addHandler(_onKey);
   }
 
@@ -188,6 +191,7 @@ class _HomeShellState extends State<HomeShell>
   @override
   void dispose() {
     _stopHandoff();
+    _stopConflicts();
     HardwareKeyboard.instance.removeHandler(_onKey);
     _player.dispose();
     super.dispose();

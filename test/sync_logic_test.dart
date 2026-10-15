@@ -48,25 +48,6 @@ void main() {
       expect(mine['p:a'], {'t': 10, 'del': true});
       expect(mine['p:x'], {'t': 3, 'del': true});
     });
-
-    test('the latest change wins, item by item', () {
-      final merged = mergeItems(
-        {
-          'p:a': {'t': 10, 'v': 'mine'},
-          'p:b': {'t': 1, 'v': 'mine'},
-          'p:c': {'t': 5, 'del': true},
-        },
-        {
-          'p:a': {'t': 5, 'v': 'theirs'},
-          'p:b': {'t': 7, 'v': 'theirs'},
-          'p:d': {'t': 2, 'v': 'theirs'},
-        },
-      );
-      expect(merged['p:a'], {'t': 10, 'v': 'mine'});
-      expect(merged['p:b'], {'t': 7, 'v': 'theirs'});
-      expect(merged['p:c'], {'t': 5, 'del': true});
-      expect(merged['p:d'], {'t': 2, 'v': 'theirs'});
-    });
   });
 
   group('music files', () {

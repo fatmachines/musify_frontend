@@ -19,6 +19,7 @@ import '../widgets/covers.dart';
 import '../widgets/download_sheet.dart';
 import '../widgets/navigation.dart';
 import '../widgets/playing_elsewhere.dart';
+import '../widgets/sync_conflict.dart';
 import '../widgets/toast.dart';
 
 /// Spotify's desktop layout, for the Mac and other wide windows: a top bar
@@ -61,15 +62,18 @@ class _DesktopShellState extends State<DesktopShell>
     _searchFocus.addListener(_onFocusChanged);
     searchFocusRequests.addListener(_searchFocus.requestFocus);
     _stopHandoff = listenForHandoff(this);
+    _stopConflicts = listenForConflicts(this);
     HardwareKeyboard.instance.addHandler(_onKey);
   }
 
   late final VoidCallback _stopHandoff;
+  late final VoidCallback _stopConflicts;
 
   @override
   void dispose() {
     searchFocusRequests.removeListener(_searchFocus.requestFocus);
     _stopHandoff();
+    _stopConflicts();
     HardwareKeyboard.instance.removeHandler(_onKey);
     _query.dispose();
     _searchFocus.dispose();

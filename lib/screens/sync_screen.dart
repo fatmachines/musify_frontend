@@ -7,6 +7,7 @@ import '../services/musify_server.dart';
 import '../services/sync_service.dart';
 import '../theme.dart';
 import '../widgets/server_key_dialog.dart';
+import '../widgets/sync_conflict.dart';
 import '../widgets/toast.dart';
 
 /// Sync between the user's devices: turn it on (this device's own code)
@@ -443,6 +444,15 @@ class _On extends StatelessWidget {
             icon: _icon(request.platform),
             onAnswer: (approve) => sync.answer(request, approve: approve),
           ),
+        // Things changed two ways while devices were apart.
+        ValueListenableBuilder<List<SyncConflict>>(
+          valueListenable: sync.conflicts,
+          builder: (context, conflicts, _) => Column(
+            children: [
+              for (final conflict in conflicts) _ConflictCard(conflict),
+            ],
+          ),
+        ),
         // The code, big, to type on another device.
         Container(
           margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -765,6 +775,60 @@ class _Note extends StatelessWidget {
             child: Text(
               text,
               style: TextStyle(color: AppColors.subtle, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A conflict waiting for the user: what it is, and a button to choose.
+class _ConflictCard extends StatelessWidget {
+  final SyncConflict conflict;
+
+  const _ConflictCard(this.conflict);
+
+  @override
+  Widget build(BuildContext context) {
+    final about = describeConflict(conflict);
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.fromLTRB(16, 14, 8, 8),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFF9F43)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.call_split, color: Color(0xFFFF9F43), size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  about.title,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Text(
+              '“${about.mine}” here, “${about.theirs}” on '
+              '${conflict.otherDevice}',
+              style: TextStyle(color: AppColors.subtle, fontSize: 13),
+            ),
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: () => showConflictDialog(context, conflict),
+              child: const Text('Choose'),
             ),
           ),
         ],

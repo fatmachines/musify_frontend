@@ -20,6 +20,7 @@ import 'library_store.dart';
 import 'musify_server.dart';
 import 'playback_session.dart';
 import 'player_service.dart';
+import 'sync_merge.dart';
 
 enum SyncStatus { off, waiting, on }
 
@@ -39,6 +40,51 @@ class SyncRequest {
   final String platform;
 
   const SyncRequest(this.id, this.name, this.platform);
+}
+
+/// Something this device and another changed differently while they were
+/// apart, for the user to settle: a playlist renamed two ways, or songs (a
+/// folder) renamed two ways.
+class SyncConflict {
+  final NameClash? name;
+  final RenameClash? files;
+
+  const SyncConflict.name(NameClash this.name) : files = null;
+  const SyncConflict.files(RenameClash this.files) : name = null;
+
+  String get id => name != null ? 'name:${name!.key}' : files!.id;
+
+  /// The other device, as it's called, if known.
+  String get otherDevice => name?.by ?? 'your other device';
+
+  Map<String, Object?> toJson() => name != null
+      ? {
+          'name': {
+            'key': name!.key,
+            'field': name!.field,
+            'mine': name!.mine,
+            'theirs': name!.theirs,
+            'by': name!.by,
+          },
+        }
+      : {'files': files!.toJson()};
+
+  static SyncConflict fromJson(Map<String, dynamic> json) {
+    if (json['name'] case final Map<String, dynamic> n) {
+      return SyncConflict.name(
+        NameClash(
+          n['key'] as String,
+          n['field'] as String,
+          n['mine'] as String,
+          n['theirs'] as String,
+          n['by'] as String?,
+        ),
+      );
+    }
+    return SyncConflict.files(
+      RenameClash.fromJson((json['files'] as Map).cast<String, dynamic>()),
+    );
+  }
 }
 
 /// Music files moving between this device and the others.
@@ -129,6 +175,8 @@ class SyncService extends ChangeNotifier implements RemoteControl {
     SyncStatus.on =>
       requests.isNotEmpty
           ? '${requests.length} waiting for your approval'
+          : conflicts.value.isNotEmpty
+          ? '${conflicts.value.length} to settle'
           : '${devices.length} ${devices.length == 1 ? 'device' : 'devices'}'
                 '${lastError != null ? ' • last sync failed' : ''}',
   };
@@ -186,7 +234,84 @@ class SyncService extends ChangeNotifier implements RemoteControl {
     _request = data['request'] as String?;
     _requestCode = data['requestCode'] as String?;
     _musicFolderId = data['music'] as String?;
+    conflicts.value = [
+      for (final c
+          in jsonDecode(prefs.getString(_conflictsKey) ?? '[]') as List)
+        SyncConflict.fromJson((c as Map).cast<String, dynamic>()),
+    ];
+    _decided = [
+      for (final d in jsonDecode(prefs.getString(_decidedKey) ?? '[]') as List)
+        (
+          RenameClash.fromJson(((d as Map)['clash'] as Map).cast()),
+          d['mine'] == true,
+        ),
+    ];
     if (raw == null) await _save();
+  }
+
+  // Conflicts -------------------------------------------------------------------
+
+  static const _conflictsKey = 'sync_conflicts_v1';
+  static const _decidedKey = 'sync_conflicts_decided_v1';
+
+  /// What the user has yet to settle, oldest first.
+  final conflicts = ValueNotifier<List<SyncConflict>>(const []);
+
+  /// Songs renamed two ways that the user settled, to be carried out on
+  /// the next file sync: which, and whether this device's names stay.
+  List<(RenameClash, bool)> _decided = [];
+
+  Future<void> _saveConflicts() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _conflictsKey,
+      jsonEncode([for (final c in conflicts.value) c.toJson()]),
+    );
+    await prefs.setString(
+      _decidedKey,
+      jsonEncode([
+        for (final (clash, mine) in _decided)
+          {'clash': clash.toJson(), 'mine': mine},
+      ]),
+    );
+  }
+
+  /// Adds [found], each in place of an older one about the same thing.
+  void _addConflicts(List<SyncConflict> found) {
+    if (found.isEmpty) return;
+    final ids = {for (final c in found) c.id};
+    conflicts.value = [
+      for (final c in conflicts.value)
+        if (!ids.contains(c.id)) c,
+      ...found,
+    ];
+    AppLog.add('sync: ${found.length} conflicts for the user');
+    _saveConflicts();
+    notifyListeners();
+  }
+
+  /// Settles [conflict] with this device's version ([keepMine]) or the
+  /// other's, everywhere.
+  Future<void> resolve(SyncConflict conflict, {required bool keepMine}) async {
+    conflicts.value = [
+      for (final c in conflicts.value)
+        if (c.id != conflict.id) c,
+    ];
+    if (conflict.name case final clash?) {
+      // Theirs is what everyone has already.
+      final playlist = clash.key.startsWith('p:')
+          ? Library.instance.byId('custom:${clash.key.substring(2)}')
+          : null;
+      if (keepMine && playlist != null) {
+        Library.instance.renamePlaylist(playlist, clash.mine);
+      }
+    } else if (conflict.files case final clash?) {
+      _decided = [..._decided, (clash, keepMine)];
+    }
+    AppLog.add('sync: settled ${conflict.id}, ${keepMine ? 'mine' : 'theirs'}');
+    await _saveConflicts();
+    notifyListeners();
+    if (status == SyncStatus.on) unawaited(syncNow().catchError((_) {}));
   }
 
   Future<void> _save() async {
@@ -736,7 +861,7 @@ class SyncService extends ChangeNotifier implements RemoteControl {
     final local = _localItems();
     final before = await _loadMerged();
 
-    final mine = stampChanges(local, before, now);
+    final mine = stampChanges(local, before, now, by: deviceName);
 
     for (var attempt = 0; attempt < 4; attempt++) {
       final (status, data) = await _call('GET', '/sync/state/library');
@@ -746,7 +871,7 @@ class SyncService extends ChangeNotifier implements RemoteControl {
       final remote =
           ((data['data'] as Map?)?['items'] as Map?)?.cast<String, dynamic>() ??
           {};
-      final merged = mergeItems(mine, remote);
+      final (:merged, :clashes) = mergeLibrary(mine, remote, before);
       if (jsonEncode(merged) != jsonEncode(remote)) {
         final (put, latest) = await _call(
           'PUT',
@@ -763,6 +888,7 @@ class SyncService extends ChangeNotifier implements RemoteControl {
       }
       _applyLibrary(merged, local);
       await _saveMerged(merged);
+      _addConflicts([for (final c in clashes) SyncConflict.name(c)]);
       return;
     }
     throw const SyncFailed('The library kept changing; trying again soon');
@@ -1337,6 +1463,38 @@ class SyncService extends ChangeNotifier implements RemoteControl {
     final synced = (jsonDecode(prefs.getString(_syncedKey) ?? '{}') as Map)
         .cast<String, dynamic>();
 
+    // Songs renamed two ways that the user settled: this device's names go
+    // to the others (theirs are dropped), or this device takes theirs.
+    if (_decided.isNotEmpty) {
+      for (final (clash, mine) in _decided) {
+        if (mine) {
+          await _call('POST', '/sync/files', body: {'delete': clash.theirs});
+          continue;
+        }
+        for (var i = 0; i < clash.mine.length; i++) {
+          final from = File(
+            p.joinAll([folder.path, ...clash.mine[i].split('/')]),
+          );
+          final to = File(
+            p.joinAll([folder.path, ...clash.theirs[i].split('/')]),
+          );
+          if (!from.existsSync() || to.existsSync()) continue;
+          try {
+            await to.parent.create(recursive: true);
+            await from.rename(to.path);
+            synced[clash.theirs[i]] = clash.sha1s[i];
+          } on FileSystemException catch (e) {
+            AppLog.add('sync: renaming ${clash.mine[i]} failed: ${e.message}');
+          }
+        }
+        _removeEmptyFolders(folder.path, clash.mine);
+      }
+      _decided = [];
+      await prefs.setString(_syncedKey, jsonEncode(synced));
+      await _saveConflicts();
+      await Library.instance.rescan();
+    }
+
     // This device's songs, fingerprinted (unchanged ones remembered).
     final local = await _hashFolderWithProgress(folder.path, hashes);
     hashes
@@ -1382,6 +1540,27 @@ class SyncService extends ChangeNotifier implements RemoteControl {
       synced,
     );
     final FilePlan(:upload, :download, :deleteHere, :deleteThere) = plan;
+
+    // The same songs renamed differently here and on another device: the
+    // user picks the names. Until then neither name is passed on, so
+    // nothing ends up twice.
+    _addConflicts([
+      for (final clash in findRenames(
+        upload: upload,
+        download: download,
+        local: {for (final e in local.entries) e.key: e.value.sha1},
+        remote: remote,
+        synced: synced,
+      ))
+        if (!conflicts.value.any((c) => c.id == clash.id))
+          SyncConflict.files(clash),
+    ]);
+    final undecided = {
+      for (final c in conflicts.value)
+        if (c.files case final clash?) ...[...clash.mine, ...clash.theirs],
+    };
+    upload.removeWhere(undecided.contains);
+    download.removeWhere(undecided.contains);
 
     // A folder that's suddenly empty-ish is likelier unreadable than
     // emptied on purpose: don't delete everything everywhere. Songs only
@@ -1658,14 +1837,15 @@ class SyncService extends ChangeNotifier implements RemoteControl {
 }
 
 /// Gives what changed in [local] since [before] (the last merged state)
-/// the time [now]; what's gone becomes a deletion. Items are {t, v} or
-/// {t, del: true}.
+/// the time [now], and the device's name [by]; what's gone becomes a
+/// deletion. Items are {t, v} or {t, del: true}.
 @visibleForTesting
 Map<String, dynamic> stampChanges(
   Map<String, Object?> local,
   Map<String, dynamic> before,
-  int now,
-) {
+  int now, {
+  String? by,
+}) {
   final mine = <String, dynamic>{};
   local.forEach((key, value) {
     final last = before[key] as Map?;
@@ -1673,30 +1853,15 @@ Map<String, dynamic> stampChanges(
         last != null &&
         last['del'] != true &&
         jsonEncode(last['v']) == jsonEncode(value);
-    mine[key] = same ? last : {'t': now, 'v': value};
+    mine[key] = same ? last : {'t': now, 'v': value, 'by': ?by};
   });
   before.forEach((key, last) {
     if (local.containsKey(key)) return;
-    mine[key] = (last as Map)['del'] == true ? last : {'t': now, 'del': true};
+    mine[key] = (last as Map)['del'] == true
+        ? last
+        : {'t': now, 'del': true, 'by': ?by};
   });
   return mine;
-}
-
-/// Each item as last changed, here or on another device (a tie goes to
-/// theirs, already shared).
-@visibleForTesting
-Map<String, dynamic> mergeItems(
-  Map<String, dynamic> mine,
-  Map<String, dynamic> theirs,
-) {
-  final merged = <String, dynamic>{...theirs};
-  mine.forEach((key, item) {
-    final other = theirs[key] as Map?;
-    if (other == null || ((item as Map)['t'] as num) > (other['t'] as num)) {
-      merged[key] = item;
-    }
-  });
-  return merged;
 }
 
 /// What to do with the synced folder's files.

@@ -166,9 +166,10 @@ folder playlist. Songs you already have are skipped.
 - **One device starts a sync group** and shows a code; another device
   enters it and **asks to join**, and you approve it on a device that's
   already in. No accounts.
-- **Your library everywhere**: playlists, tags, Liked Songs and Home pins,
-  merged item by item, so editing on two devices doesn't lose either
-  change.
+- **Your library everywhere**: playlists, tags, Liked Songs and Home pins.
+  Devices that were apart (offline) are merged field by field: songs added
+  or removed on each side are all kept, and if the same playlist was
+  renamed two ways, Musify asks which name to keep.
 - **What's playing**: pause on the Mac, open the iPhone, and it's on the
   same song at the same second. While one device plays, the others show
   **"Playing on MacBook Pro"** and their play, pause, skip and seek
@@ -179,6 +180,8 @@ folder playlist. Songs you already have are skipped.
   devices tell it which songs they have, only a song another device lacks
   is uploaded, and it's deleted as soon as every device has it. Songs a
   device already has (a copied folder) never move at all.
+- A song or folder renamed differently on two devices while they were
+  apart isn't kept twice: Musify asks which name to keep, everywhere.
 - It watches the folder, so songs you drop in (in Finder or Files) are
   picked up by themselves. If most of a folder suddenly goes missing (a
   drive not mounted), it refuses to delete them everywhere.
