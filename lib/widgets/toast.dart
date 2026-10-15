@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/player_service.dart';
 import '../services/sync_service.dart';
 import '../theme.dart';
 
@@ -87,18 +88,27 @@ class _ToastState extends State<_Toast> with SingleTickerProviderStateMixin {
   }
 }
 
-/// Shows "Picked up where you left off on (device)" when sync brought over
-/// what another device was playing. For the app's shells; returns how to
-/// stop.
-VoidCallback listenForHandoff(State state) {
-  final handoff = SyncService.instance.handoff;
-  void show() {
-    final name = handoff.value;
-    if (name == null || !state.mounted) return;
-    handoff.value = null;
-    showToastOn(Overlay.of(state.context, rootOverlay: true), name);
+/// Shows what the app has to say outside any screen: "Picked up where you
+/// left off on (device)" when sync brought over what another device was
+/// playing, and the player's notices (offline). For the app's shells;
+/// returns how to stop.
+VoidCallback listenForMessages(State state) {
+  final sources = [SyncService.instance.handoff, PlayerService.instance.notice];
+  final listeners = [
+    for (final source in sources)
+      () {
+        final message = source.value;
+        if (message == null || !state.mounted) return;
+        source.value = null;
+        showToastOn(Overlay.of(state.context, rootOverlay: true), message);
+      },
+  ];
+  for (var i = 0; i < sources.length; i++) {
+    sources[i].addListener(listeners[i]);
   }
-
-  handoff.addListener(show);
-  return () => handoff.removeListener(show);
+  return () {
+    for (var i = 0; i < sources.length; i++) {
+      sources[i].removeListener(listeners[i]);
+    }
+  };
 }

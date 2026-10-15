@@ -318,9 +318,14 @@ class _SearchTabState extends State<SearchTab> {
         !searching &&
         (youtube?.isEmpty ?? true)) {
       return _Hint(
-        title: "Couldn't find \"${_query.text.trim()}\"",
+        // Nothing on the device, and YouTube couldn't be asked: that's
+        // the reason, not the words.
+        title: _youtubeFailed
+            ? "Couldn't reach YouTube"
+            : "Couldn't find \"${_query.text.trim()}\"",
         message: _youtubeFailed
-            ? "Try different words. YouTube couldn't be reached."
+            ? "Nothing on this device matches \"${_query.text.trim()}\". "
+                  'Check your internet connection to search YouTube.'
             : 'Try different words, or check the spelling.',
       );
     }

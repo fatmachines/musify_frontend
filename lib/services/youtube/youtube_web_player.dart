@@ -58,6 +58,10 @@ class YouTubeWebPlayer {
   /// Whether this stall was already met with a pause-and-play.
   bool _kicked = false;
 
+  /// The video couldn't load for want of a network: the song was paused
+  /// (not left running in silence), and loads again when played.
+  bool _offline = false;
+
   /// Ticks still to log after coming back on screen.
   int _logTicks = 0;
   DateTime _lastPlayFailLog = DateTime.fromMillisecondsSinceEpoch(0);
@@ -107,6 +111,10 @@ class YouTubeWebPlayer {
           },
           onWebResourceError: (e) {
             AppLog.add('youtube web: ${e.errorCode} ${e.description}');
+            if (e.isForMainFrame != false && _isOffline(e)) {
+              _goneOffline();
+              return;
+            }
             // iOS ended the page's process, e.g. while in the background.
             if (e.errorType ==
                 WebResourceErrorType.webContentProcessTerminated) {
@@ -123,6 +131,33 @@ class YouTubeWebPlayer {
   }
 
   AudioPlayer get _player => PlayerService.instance.player;
+
+  /// The page failed for want of a network (Android's net:: errors, iOS's
+  /// NSURLError codes), not for something on YouTube's side.
+  static bool _isOffline(WebResourceError e) =>
+      const {
+        WebResourceErrorType.hostLookup,
+        WebResourceErrorType.connect,
+        WebResourceErrorType.timeout,
+      }.contains(e.errorType) ||
+      const {-1009, -1003, -1004, -1005, -1001}.contains(e.errorCode) ||
+      RegExp(
+        r'ERR_(INTERNET_DISCONNECTED|NAME_NOT_RESOLVED|NETWORK_CHANGED|'
+        r'ADDRESS_UNREACHABLE|CONNECTION_(REFUSED|TIMED_OUT|RESET))',
+      ).hasMatch(e.description);
+
+  /// Pauses the song instead of letting its silent stand-in run on, and
+  /// says why, once. Playing it again tries again.
+  void _goneOffline() {
+    if (_current == null) return;
+    final wasPlaying = _player.playing;
+    _offline = true;
+    if (!wasPlaying) return;
+    AppLog.add('youtube web: offline, pausing');
+    _player.pause();
+    PlayerService.instance.notice.value =
+        "You're offline: YouTube songs need the internet";
+  }
 
   /// The YouTube song to play here; not one streamed from the server,
   /// which the system's player plays itself.
@@ -141,7 +176,14 @@ class YouTubeWebPlayer {
       ..add(player.sequenceStateStream.listen((_) => _onSongChanged()))
       ..add(
         player.playingStream.listen((playing) {
-          if (_current == null) return;
+          final track = _current;
+          if (track == null) return;
+          // Played again after going offline: try loading it again.
+          if (playing && _offline) {
+            AppLog.add('youtube web: played again, retrying');
+            _load(track, from: _lastVideoTime);
+            return;
+          }
           // Give the video a moment to start before calling it stalled.
           if (playing) _markProgress(_lastVideoTime);
           AppLog.add('youtube web: ${playing ? 'play' : 'pause'}');
@@ -190,7 +232,7 @@ class YouTubeWebPlayer {
   /// Pauses and plays the video, then reloads it, if the song is playing
   /// but the video hasn't moved for a while.
   void _check({Duration limit = _stallLimit}) {
-    if (_current == null || !_player.playing) return;
+    if (_current == null || !_player.playing || _offline) return;
     final now = DateTime.now();
     final still = now.difference(_lastProgress);
     if (still >= _kickAfter && !_kicked) {
@@ -234,6 +276,7 @@ class YouTubeWebPlayer {
   }
 
   void _load(YouTubeTrack track, {required Duration from}) {
+    _offline = false;
     _loaded = track.videoId;
     _startAt = from;
     _lastVideoTime = from;

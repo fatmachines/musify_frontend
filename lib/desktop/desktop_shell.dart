@@ -61,18 +61,18 @@ class _DesktopShellState extends State<DesktopShell>
     _query.addListener(_onQueryChanged);
     _searchFocus.addListener(_onFocusChanged);
     searchFocusRequests.addListener(_searchFocus.requestFocus);
-    _stopHandoff = listenForHandoff(this);
+    _stopMessages = listenForMessages(this);
     _stopConflicts = listenForConflicts(this);
     HardwareKeyboard.instance.addHandler(_onKey);
   }
 
-  late final VoidCallback _stopHandoff;
+  late final VoidCallback _stopMessages;
   late final VoidCallback _stopConflicts;
 
   @override
   void dispose() {
     searchFocusRequests.removeListener(_searchFocus.requestFocus);
-    _stopHandoff();
+    _stopMessages();
     _stopConflicts();
     HardwareKeyboard.instance.removeHandler(_onKey);
     _query.dispose();

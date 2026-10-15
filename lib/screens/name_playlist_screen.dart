@@ -16,13 +16,12 @@ Future<String?> askPlaylistName(
       opaque: false,
       transitionDuration: const Duration(milliseconds: 220),
       reverseTransitionDuration: const Duration(milliseconds: 180),
-      pageBuilder: (_, _, _) =>
-          _NamePlaylistScreen(
-            title: title,
-            initial: initial,
-            action: action,
-            validate: validate,
-          ),
+      pageBuilder: (_, _, _) => _NamePlaylistScreen(
+        title: title,
+        initial: initial,
+        action: action,
+        validate: validate,
+      ),
       transitionsBuilder: (_, animation, _, child) =>
           FadeTransition(opacity: animation, child: child),
     ),

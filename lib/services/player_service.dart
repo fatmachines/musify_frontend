@@ -560,6 +560,10 @@ class PlayerService {
     _loaded = null;
   });
 
+  /// A message for the user about playback ("You're offline…"), shown
+  /// once by the app's shell, which clears it.
+  final notice = ValueNotifier<String?>(null);
+
   /// Set by sync while another device has the music: the controls here
   /// (play/pause, next, previous, seek) steer that one, and show its state.
   RemoteControl? remote;

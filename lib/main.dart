@@ -139,14 +139,14 @@ class _HomeShellState extends State<HomeShell>
     with SingleTickerProviderStateMixin {
   int _index = 0;
 
-  late final VoidCallback _stopHandoff;
+  late final VoidCallback _stopMessages;
   late final VoidCallback _stopConflicts;
 
   @override
   void initState() {
     super.initState();
-    // "Picked up where you left off on …" when sync brings that over.
-    _stopHandoff = listenForHandoff(this);
+    // "Picked up where you left off on …", "You're offline…".
+    _stopMessages = listenForMessages(this);
     _stopConflicts = listenForConflicts(this);
     HardwareKeyboard.instance.addHandler(_onKey);
   }
@@ -192,7 +192,7 @@ class _HomeShellState extends State<HomeShell>
 
   @override
   void dispose() {
-    _stopHandoff();
+    _stopMessages();
     _stopConflicts();
     HardwareKeyboard.instance.removeHandler(_onKey);
     _player.dispose();
