@@ -1122,6 +1122,8 @@ class SyncService extends ChangeNotifier implements RemoteControl {
 
   Future<void> _checkPlayback() async {
     if (_checking || status != SyncStatus.on || !_server.setUpNow) return;
+    // Alone in the group (as of the last round): no one to follow or obey.
+    if (devices.length == 1 && playingElsewhere.value == null) return;
     _checking = true;
     try {
       final (code, data) = await _call('GET', '/sync/state/playback');

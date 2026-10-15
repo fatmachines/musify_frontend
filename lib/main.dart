@@ -45,6 +45,10 @@ Future<void> main() async {
         androidNotificationChannelId: 'com.fatmachines.musify.playback',
         androidNotificationChannelName: 'Playback',
         androidNotificationOngoing: true,
+        // Covers decoded at lock-screen size, not the file's (often
+        // 3000 px): less work on every song change.
+        artDownscaleWidth: 512,
+        artDownscaleHeight: 512,
       ),
     );
   } catch (e) {
