@@ -1346,7 +1346,7 @@ class SyncService extends ChangeNotifier implements RemoteControl {
         sequence: index < 0 || playlist == null ? [track] : tracks,
         index: playlist == null ? 0 : index,
         position: Duration(milliseconds: position),
-        shuffle: false,
+        shuffle: service.shuffleOn.value,
         loop: service.player.loopMode == LoopMode.off
             ? LoopMode.all
             : service.player.loopMode,

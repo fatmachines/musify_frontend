@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/playlist.dart';
 import 'app_log.dart';
@@ -69,6 +70,21 @@ class PlayerService {
       await session.configure(const AudioSessionConfiguration.music());
     } catch (e) {
       AppLog.add('player: audio session setup failed: $e');
+    }
+    await instance._rememberShuffle();
+  }
+
+  static const _shuffleKey = 'shuffle_on';
+
+  /// Shuffle stays as the user left it, from one launch to the next: on,
+  /// every playlist plays shuffled until it's turned off.
+  Future<void> _rememberShuffle() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      shuffleOn.value = prefs.getBool(_shuffleKey) ?? false;
+      shuffleOn.addListener(() => prefs.setBool(_shuffleKey, shuffleOn.value));
+    } catch (e) {
+      AppLog.add('player: shuffle setting unavailable: $e');
     }
   }
 
@@ -404,7 +420,7 @@ class PlayerService {
   /// rest of them.
   Future<void> playYouTube(List<YouTubeTrack> results, int index) => play(
     Playlist(id: 'youtube:search', name: 'YouTube', tracks: results),
-    shuffle: false,
+    shuffle: shuffleOn.value,
     startIndex: index,
   );
 

@@ -249,7 +249,7 @@ class MusifyAudioHandler extends BaseAudioHandler with SeekHandler {
     final playlists = await _browsable();
     final playlist = _playlistById(playlists, mediaId);
     if (playlist != null) {
-      return _service.play(playlist, shuffle: false);
+      return _service.play(playlist, shuffle: _service.shuffleOn.value);
     }
     final found = _findTrack(playlists, mediaId);
     if (found != null) {

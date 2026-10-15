@@ -185,29 +185,27 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     }
   }
 
+  /// Plays the playlist, shuffled if shuffle is on (it's remembered).
   void _onPlay() => _run(
     () => _isCurrent
         ? _player.togglePlayback()
-        : _player.play(_playlist, shuffle: false),
+        : _player.play(_playlist, shuffle: _shuffle),
   );
 
-  /// Starts shuffled playback; on the playlist already playing it flips
-  /// shuffle on or off without interrupting the song.
+  /// Shuffle on or off, for every playlist and from one launch to the
+  /// next. On the playlist playing it reorders the rest without
+  /// interrupting the song; turning it on elsewhere starts this playlist
+  /// shuffled.
   void _onShuffle() => _run(() async {
-    if (_isCurrent && _playing) {
+    if ((_isCurrent && _playing) || _shuffle) {
       await _player.setShuffle(!_shuffle);
     } else {
       await _player.play(_playlist, shuffle: true);
     }
   });
 
-  void _onTrack(int index) => _run(
-    () => _player.play(
-      _playlist,
-      shuffle: _isCurrent && _shuffle,
-      startIndex: index,
-    ),
-  );
+  void _onTrack(int index) =>
+      _run(() => _player.play(_playlist, shuffle: _shuffle, startIndex: index));
 
   /// Cmd+F / Ctrl+F: "Find on this page", if this page is the one showing.
   bool _findShortcut() {
@@ -486,7 +484,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   ],
                 ),
               ),
-              _ShuffleButton(active: current && _shuffle, onTap: _onShuffle),
+              _ShuffleButton(active: _shuffle, onTap: _onShuffle),
               const SizedBox(width: 16),
               Opacity(
                 opacity: _pinPlay ? 0 : 1,
@@ -677,7 +675,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                 ),
               ),
               const SizedBox(width: 20),
-              _ShuffleButton(active: current && _shuffle, onTap: _onShuffle),
+              _ShuffleButton(active: _shuffle, onTap: _onShuffle),
               const SizedBox(width: 12),
               ?_pinButton(size: 40),
               _optionsButton(size: 40),

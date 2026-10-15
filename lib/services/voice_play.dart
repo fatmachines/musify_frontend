@@ -134,15 +134,18 @@ class VoicePlay {
           ? library.liked
           : library.all.where((p) => p.tracks.isNotEmpty).firstOrNull;
       if (fallback == null) return false;
-      return start(fallback, shuffled: shuffle ?? true);
+      return start(fallback, shuffled: shuffle ?? player.shuffleOn.value);
     }
 
     if (_likedNames.contains(q.toLowerCase())) {
-      return start(library.liked, shuffled: shuffle ?? false);
+      return start(library.liked, shuffled: shuffle ?? player.shuffleOn.value);
     }
 
     if (kind == VoiceKind.artist || (q.isEmpty && by.isNotEmpty)) {
-      if (await _playArtist(q.isEmpty ? by : q, shuffle: shuffle ?? true)) {
+      if (await _playArtist(
+        q.isEmpty ? by : q,
+        shuffle: shuffle ?? player.shuffleOn.value,
+      )) {
         return true;
       }
     }
@@ -154,7 +157,7 @@ class VoicePlay {
     if (kind == VoiceKind.playlist || exactPlaylist != null) {
       final playlist = exactPlaylist ?? playlists.firstOrNull;
       if (playlist != null) {
-        return start(playlist, shuffled: shuffle ?? false);
+        return start(playlist, shuffled: shuffle ?? player.shuffleOn.value);
       }
     }
 
@@ -163,9 +166,14 @@ class VoicePlay {
     if (songs.isNotEmpty) return player.playSong(songs.first, shuffle: shuffle);
 
     // Maybe it was an artist or a playlist after all.
-    if (await _playArtist(q, shuffle: shuffle ?? true)) return true;
+    if (await _playArtist(q, shuffle: shuffle ?? player.shuffleOn.value)) {
+      return true;
+    }
     if (playlists.isNotEmpty) {
-      return start(playlists.first, shuffled: shuffle ?? false);
+      return start(
+        playlists.first,
+        shuffled: shuffle ?? player.shuffleOn.value,
+      );
     }
     AppLog.add('voice: nothing matched');
     return false;
