@@ -55,8 +55,8 @@ Music/
 </p>
 
 - **Files stay files.** Musify reads MP3, M4A/AAC, FLAC, WAV, OGG and more,
-  with titles, artists, covers and lyrics from their tags. Nothing is
-  copied or converted. Add as many folders as you like; **Rescan** (or
+  with titles, artists, covers and lyrics from their tags (or a folder's
+  `cover.jpg` for songs without a cover). Nothing is copied or converted. Add as many folders as you like; **Rescan** (or
   pull down) picks up songs you add later.
 - **Folders can be managed from the app**: rename a folder (it's renamed
   on disk; its songs stay in your playlists, likes and tags, and what's
@@ -102,8 +102,9 @@ Music/
 
 - Shuffle, repeat (off, all, one), a **sleep timer** (minutes or the end of
   the song), lyrics from the file's tags, share.
-- **Equalizer**: 10 bands you drag into shape, and presets (Rock, Bass
-  Booster, Vocal and more), on iPhone, Mac and Android.
+- **Equalizer**: bands you drag into shape (10 on iPhone and the Mac; on
+  Android, the bands the phone's own equalizer has, often 5), and presets
+  (Rock, Bass Booster, Vocal and more).
 - **Lock screen and Control Center**, AirPods and headphone buttons,
   **Siri** ("play Thriller on Musify"), **Android Auto**, and CarPlay's Now
   Playing.

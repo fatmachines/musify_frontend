@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:path/path.dart' as p;
 
 import '../models/playlist.dart';
 
@@ -160,25 +161,63 @@ class MetadataService {
         artist: _clean(m.artist),
         album: _clean(m.album),
         duration: m.duration,
-        lyrics: _clean(m.lyrics),
+        lyrics: _clean(m.lyrics) ?? _customLyrics(path),
       );
     } catch (_) {
       return TrackInfo.empty;
     }
   }
 
+  /// Lyrics some taggers (and ffmpeg) put in a custom ID3 frame
+  /// (TXXX:LYRICS, UNSYNCEDLYRICS) rather than the lyrics one.
+  static String? _customLyrics(String path) {
+    if (!path.toLowerCase().endsWith('.mp3')) return null;
+    try {
+      final tags = readAllMetadata(File(path), getImage: false);
+      if (tags is! Mp3Metadata) return null;
+      for (final MapEntry(:key, :value) in tags.customMetadata.entries) {
+        final name = key.toLowerCase().replaceAll(RegExp('[^a-z]'), '');
+        if (const {'lyrics', 'unsyncedlyrics', 'uslt'}.contains(name)) {
+          return _clean(value);
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
   static Uint8List? _readCover(String path) {
     try {
       final pictures = readMetadata(File(path), getImage: true).pictures;
-      if (pictures.isEmpty) return null;
+      if (pictures.isEmpty) return _folderCover(path);
       final front = pictures.firstWhere(
         (p) => p.pictureType == PictureType.coverFront,
         orElse: () => pictures.first,
       );
       return front.bytes;
     } catch (_) {
-      return null;
+      return _folderCover(path);
     }
+  }
+
+  /// The cover picture beside a song without one of its own: cover.jpg,
+  /// folder.jpg and the like, as music folders often have.
+  static Uint8List? _folderCover(String path) {
+    const names = ['cover', 'folder', 'front', 'album', 'albumart'];
+    try {
+      final pictures = <String, File>{
+        for (final entry in File(path).parent.listSync())
+          if (entry is File &&
+              RegExp(
+                r'\.(jpe?g|png)$',
+                caseSensitive: false,
+              ).hasMatch(entry.path))
+            p.basenameWithoutExtension(entry.path).toLowerCase(): entry,
+      };
+      for (final name in names) {
+        if (pictures[name] case final file?) return file.readAsBytesSync();
+      }
+    } catch (_) {}
+    return null;
   }
 
   static String? _clean(String? value) {
