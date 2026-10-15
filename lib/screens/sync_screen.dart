@@ -6,6 +6,7 @@ import '../services/library.dart';
 import '../services/musify_server.dart';
 import '../services/sync_service.dart';
 import '../theme.dart';
+import '../widgets/folders_sheet.dart';
 import '../widgets/server_key_dialog.dart';
 import '../widgets/sync_conflict.dart';
 import '../widgets/toast.dart';
@@ -423,6 +424,11 @@ class _On extends StatelessWidget {
       ),
     );
     if (picked == null) return;
+    // Other devices' renames and deletions are done here too.
+    if (picked is LibraryFolder &&
+        (!context.mounted || !await ensureFileAccess(context))) {
+      return;
+    }
     await sync.setMusicFolder(picked is LibraryFolder ? picked : null);
   }
 

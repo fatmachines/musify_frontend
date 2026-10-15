@@ -29,7 +29,10 @@ class LibraryFolder {
 class FolderAccess {
   static const _channel = MethodChannel('musify/folder_access');
 
-  static bool get _native => Platform.isIOS || Platform.isMacOS;
+  /// Not under `flutter test`, even on a Mac: tests use plain folders.
+  static bool get _native =>
+      (Platform.isIOS || Platform.isMacOS) &&
+      !Platform.environment.containsKey('FLUTTER_TEST');
 
   static Future<LibraryFolder?> pick() async {
     if (_native) {

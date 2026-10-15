@@ -621,6 +621,8 @@ class PlayerService {
 
   Future<void> togglePlayback() async {
     if (_remote) return remote!.send(remote!.playing ? 'pause' : 'play');
+    // Nothing loaded (Space on the Mac before anything played).
+    if (player.sequence.isEmpty) return;
     return player.playing ? player.pause() : player.play();
   }
 

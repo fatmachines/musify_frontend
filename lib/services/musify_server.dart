@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/playlist.dart';
 import 'app_log.dart';
+import 'part_files.dart';
 
 /// Musify's server (the musify_backend repo): downloads YouTube songs and
 /// reads YouTube playlists with yt-dlp, which the phone can't do itself.
@@ -396,7 +397,7 @@ class MusifyServer extends ChangeNotifier {
     void Function(double progress)? onProgress,
   }) async {
     final client = http.Client();
-    final part = File('${file.path}.part');
+    final part = await partFileFor(file);
     try {
       final request = http.Request(
         'GET',
@@ -426,7 +427,7 @@ class MusifyServer extends ChangeNotifier {
       if (total > 0 && done != total) {
         throw const ServerError('the download was cut off');
       }
-      await part.rename(file.path);
+      await finishPart(part, file);
       AppLog.add('server: ${track.videoId} -> ${file.path} ($done bytes)');
     } catch (e) {
       if (part.existsSync()) part.deleteSync();

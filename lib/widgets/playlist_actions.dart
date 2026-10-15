@@ -6,6 +6,7 @@ import '../services/library.dart';
 import '../theme.dart';
 import 'covers.dart';
 import 'download_sheet.dart';
+import 'folders_sheet.dart';
 import 'toast.dart';
 
 const _danger = Color(0xFFF15E6C);
@@ -113,8 +114,14 @@ Future<void> showPlaylistActions(BuildContext context, Playlist playlist) {
                     title: 'Rename folder',
                     initial: playlist.name,
                     action: 'Save',
+                    validate: (name) => name == playlist.name
+                        ? null
+                        : Library.instance.folderNameError(playlist, name),
                   );
                   if (name == null || name.trim() == playlist.name) return;
+                  if (!context.mounted || !await ensureFileAccess(context)) {
+                    return;
+                  }
                   final error = await Library.instance.renameFolder(
                     playlist,
                     name,
@@ -221,6 +228,7 @@ Future<void> _deleteFolder(BuildContext context, Playlist playlist) async {
       Library.instance.hidePlaylist(playlist);
       showToastOn(overlay, 'Hid ${playlist.name}');
     case _FolderChoice.delete:
+      if (!context.mounted || !await ensureFileAccess(context)) return;
       final deleted = await Library.instance.deleteFromDevice(playlist);
       showToastOn(
         overlay,

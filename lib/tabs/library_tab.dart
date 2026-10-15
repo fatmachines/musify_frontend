@@ -161,6 +161,8 @@ class _LibraryTabState extends State<LibraryTab> {
           ),
           child: ListView(
             controller: _scroll,
+            // Pulls down to refresh even when everything fits on screen.
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: EdgeInsets.only(
               top: 8,
               bottom: MediaQuery.paddingOf(context).bottom + 8,

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../services/android_app.dart';
 import '../services/folder_access.dart';
 import '../services/library.dart';
 import '../theme.dart';
@@ -25,6 +26,47 @@ Future<bool> _ensurePermission(BuildContext context) async {
           : null,
     ),
   );
+  return false;
+}
+
+/// Renaming, moving or deleting songs on Android needs "All files access"
+/// (Android 11+; storage on older ones): Android only lets an app change
+/// files it put there itself. Says why, then asks. True once allowed.
+Future<bool> ensureFileAccess(BuildContext context) async {
+  if (!Platform.isAndroid) return true;
+  final allFiles = AndroidApp.sdk == 0 || AndroidApp.sdk >= 30;
+  final permission = allFiles
+      ? Permission.manageExternalStorage
+      : Permission.storage;
+  if (await permission.isGranted) return true;
+  if (!context.mounted) return false;
+  final go = await showDialog<bool>(
+    context: context,
+    useRootNavigator: true,
+    builder: (dialog) => AlertDialog(
+      backgroundColor: AppColors.elevated,
+      title: const Text('Let Musify change your music files?'),
+      content: Text(
+        'Android only lets an app rename, move or delete files it made '
+        'itself. To do it to the rest of your music, '
+        '${allFiles ? 'turn on "All files access" for Musify on the next screen' : 'allow Musify to change files'}.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialog).pop(false),
+          child: const Text('Not now'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(dialog).pop(true),
+          child: const Text('Continue'),
+        ),
+      ],
+    ),
+  );
+  if (go != true) return false;
+  final status = await permission.request();
+  if (status.isGranted) return true;
+  if (status.isPermanentlyDenied) await openAppSettings();
   return false;
 }
 

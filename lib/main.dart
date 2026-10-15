@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import 'desktop/desktop_shell.dart';
 import 'screens/now_playing.dart';
+import 'services/android_app.dart';
 import 'services/local_copies.dart';
 import 'services/app_log.dart';
 import 'services/musify_server.dart';
@@ -31,6 +32,7 @@ import 'widgets/toast.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Appearance.load();
+  await AndroidApp.load();
   // The server's address and key, so screens show them straight away.
   await MusifyServer.instance.load();
   await PlayerService.init();
@@ -123,18 +125,6 @@ class _MusifyAppState extends State<MusifyApp> with WidgetsBindingObserver {
             : const HomeShell(),
       ),
     );
-  }
-}
-
-const _appChannel = MethodChannel('musify/app');
-
-/// Back on Home's first page: the app goes to the background, as Android
-/// apps do (the music carries on).
-Future<void> leaveApp() async {
-  try {
-    await _appChannel.invokeMethod('toBackground');
-  } catch (_) {
-    await SystemNavigator.pop();
   }
 }
 
@@ -247,7 +237,7 @@ class _HomeShellState extends State<HomeShell>
           setState(() => _index = 0);
         } else {
           // Not Navigator.maybePop: that comes straight back here.
-          await leaveApp();
+          await AndroidApp.toBackground();
         }
       },
       child: Stack(

@@ -279,14 +279,6 @@ class Library extends ChangeNotifier {
   /// files are kept, and so is a folder the user added to the library.
   /// Returns how many songs were deleted.
   Future<int> deleteFromDevice(Playlist playlist) async {
-    final player = PlayerService.instance;
-    final playing = player.currentTrack;
-    if (player.current?.id == playlist.id ||
-        (playing != null &&
-            playlist.tracks.any((t) => t.path == playing.path))) {
-      await player.stop();
-    }
-
     var deleted = 0;
     for (final track in playlist.tracks) {
       try {
@@ -295,6 +287,15 @@ class Library extends ChangeNotifier {
       } on FileSystemException catch (e) {
         AppLog.add('delete: ${track.path} failed: ${e.message}');
       }
+    }
+    // Only once something is gone: a delete that fails keeps the music.
+    final player = PlayerService.instance;
+    final playing = player.currentTrack;
+    if (deleted > 0 &&
+        (player.current?.id == playlist.id ||
+            (playing != null &&
+                playlist.tracks.any((t) => t.path == playing.path)))) {
+      await player.stop();
     }
 
     final dir = Directory(playlist.id);
@@ -385,11 +386,9 @@ class Library extends ChangeNotifier {
     return at;
   }
 
-  /// Renames a folder playlist's folder on the device; its subfolders go
-  /// along. Its songs stay in playlists, Liked Songs and tags, it keeps its
-  /// pin (or stays hidden), what's playing carries on, and the other
-  /// devices rename theirs. Returns null once done, else why it couldn't.
-  Future<String?> renameFolder(Playlist playlist, String name) async {
+  /// Why [playlist]'s folder can't be renamed to [name], or null if it
+  /// can (see [renameFolder]).
+  String? folderNameError(Playlist playlist, String name) {
     final location = playlist.location;
     final key = _hideKeys[playlist.id];
     if (location == null || key == null) return "It isn't a folder";
@@ -404,12 +403,26 @@ class Library extends ChangeNotifier {
     }
     final from = playlist.id;
     final to = p.join(p.dirname(from), name);
-    if (from == to) return null;
     // Only the case changing is the same folder on a Mac or iPhone.
     if (from.toLowerCase() != to.toLowerCase() &&
         FileSystemEntity.typeSync(to) != FileSystemEntityType.notFound) {
       return 'There already is a "$name" there';
     }
+    return null;
+  }
+
+  /// Renames a folder playlist's folder on the device; its subfolders go
+  /// along. Its songs stay in playlists, Liked Songs and tags, it keeps its
+  /// pin (or stays hidden), what's playing carries on, and the other
+  /// devices rename theirs. Returns null once done, else why it couldn't.
+  Future<String?> renameFolder(Playlist playlist, String name) async {
+    if (folderNameError(playlist, name) case final error?) return error;
+    final location = playlist.location!;
+    final key = _hideKeys[playlist.id]!;
+    name = name.trim();
+    final from = playlist.id;
+    final to = p.join(p.dirname(from), name);
+    if (from == to) return null;
     String follow(String path) => p.isWithin(from, path)
         ? p.join(to, p.relative(path, from: from))
         : path;
@@ -509,17 +522,25 @@ class Library extends ChangeNotifier {
   }
 
   /// Deletes a song's file from the device, then rescans; it leaves every
-  /// playlist with it. Stops the player if it's the one playing. False if
-  /// the file couldn't be deleted.
+  /// playlist with it. If it's the one playing, the next one plays (the
+  /// player stops at the end). False if the file couldn't be deleted, and
+  /// then nothing else changes.
   Future<bool> deleteSong(Track track) async {
     if (track is YouTubeTrack) return false;
-    final player = PlayerService.instance;
-    if (player.currentTrack?.path == track.path) await player.stop();
     try {
       await File(track.path).delete();
     } on FileSystemException catch (e) {
       AppLog.add('delete: ${track.path} failed: ${e.message}');
       return false;
+    }
+    final player = PlayerService.instance;
+    if (player.currentTrack?.path == track.path) {
+      final next = player.neighbour(1);
+      if (next != null && next.path != track.path) {
+        await player.skip(1);
+      } else {
+        await player.stop();
+      }
     }
     AppLog.add('delete: ${track.path}');
     await rescan();

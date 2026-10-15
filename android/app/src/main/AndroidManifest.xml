@@ -5,6 +5,15 @@
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+    <!-- Renaming, moving and deleting songs Musify didn't put there itself
+         (copied over USB, from Files): "All files access" on Android 11+,
+         storage up to 10. Asked for only when the user does one of those. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
+    <uses-permission
+        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
     <!-- Background playback through audio_service. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -13,6 +22,7 @@
     <application
         android:label="Musify"
         android:name="${applicationName}"
+        android:requestLegacyExternalStorage="true"
         android:icon="@mipmap/ic_launcher">
         <!-- Lists Musify as a media app in Android Auto. -->
         <meta-data

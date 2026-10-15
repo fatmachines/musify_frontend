@@ -12,6 +12,7 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/playlist.dart';
+import 'android_app.dart';
 import 'app_log.dart';
 import 'folder_access.dart';
 import 'library.dart';
@@ -21,6 +22,7 @@ import 'musify_server.dart';
 import 'playback_session.dart';
 import 'player_service.dart';
 import 'sync_merge.dart';
+import 'part_files.dart';
 
 enum SyncStatus { off, waiting, on }
 
@@ -182,6 +184,7 @@ class SyncService extends ChangeNotifier implements RemoteControl {
   };
 
   static String get deviceName {
+    if (AndroidApp.deviceName case final name?) return name;
     final host = Platform.localHostname.replaceAll(RegExp(r'\.local$'), '');
     final kind = Platform.isIOS
         ? 'iPhone'
@@ -1801,7 +1804,7 @@ class SyncService extends ChangeNotifier implements RemoteControl {
     void Function(double) onProgress,
   ) async {
     final client = http.Client();
-    final part = File('${target.path}.part');
+    final part = await partFileFor(target);
     try {
       final request = http.Request(
         'GET',
@@ -1826,7 +1829,7 @@ class SyncService extends ChangeNotifier implements RemoteControl {
       } finally {
         await sink.close();
       }
-      await part.rename(target.path);
+      await finishPart(part, target);
     } catch (e) {
       if (part.existsSync()) part.deleteSync();
       rethrow;

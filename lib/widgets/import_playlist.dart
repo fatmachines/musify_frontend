@@ -71,6 +71,23 @@ class _ImportDialogState extends State<_ImportDialog> {
   bool _spotify = false;
   String? _error;
 
+  @override
+  void initState() {
+    super.initState();
+    widget.link.addListener(_edited);
+  }
+
+  @override
+  void dispose() {
+    widget.link.removeListener(_edited);
+    super.dispose();
+  }
+
+  /// Fixing the link clears what was wrong with it.
+  void _edited() {
+    if (_error != null && !_reading) setState(() => _error = null);
+  }
+
   Future<void> _import() async {
     final text = widget.link.text;
     final spotify = MusifyServer.spotifyPlaylistIdOf(text);

@@ -9,6 +9,7 @@ Future<String?> askPlaylistName(
   String title = 'Give your playlist a name',
   String initial = '',
   String action = 'Create',
+  String? Function(String name)? validate,
 }) {
   return Navigator.of(context, rootNavigator: true).push<String>(
     PageRouteBuilder(
@@ -16,7 +17,12 @@ Future<String?> askPlaylistName(
       transitionDuration: const Duration(milliseconds: 220),
       reverseTransitionDuration: const Duration(milliseconds: 180),
       pageBuilder: (_, _, _) =>
-          _NamePlaylistScreen(title: title, initial: initial, action: action),
+          _NamePlaylistScreen(
+            title: title,
+            initial: initial,
+            action: action,
+            validate: validate,
+          ),
       transitionsBuilder: (_, animation, _, child) =>
           FadeTransition(opacity: animation, child: child),
     ),
@@ -28,10 +34,14 @@ class _NamePlaylistScreen extends StatefulWidget {
   final String initial;
   final String action;
 
+  /// Why a name won't do, shown under it (the screen stays open).
+  final String? Function(String name)? validate;
+
   const _NamePlaylistScreen({
     required this.title,
     required this.initial,
     required this.action,
+    this.validate,
   });
 
   @override
@@ -51,9 +61,25 @@ class _NamePlaylistScreenState extends State<_NamePlaylistScreen> {
     super.dispose();
   }
 
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    // Fixing the name clears what was wrong with it.
+    _name.addListener(() {
+      if (_error != null) setState(() => _error = null);
+    });
+  }
+
   void _submit() {
     final name = _name.text.trim();
     if (name.isEmpty) return;
+    final error = widget.validate?.call(name);
+    if (error != null) {
+      setState(() => _error = error);
+      return;
+    }
     Navigator.of(context).pop(name);
   }
 
@@ -97,6 +123,8 @@ class _NamePlaylistScreenState extends State<_NamePlaylistScreen> {
                   ),
                   decoration: InputDecoration(
                     hintText: 'My playlist',
+                    errorText: _error,
+                    errorMaxLines: 3,
                     hintStyle: TextStyle(
                       color: AppColors.text.withValues(alpha: 0.38),
                     ),
