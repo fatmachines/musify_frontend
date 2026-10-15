@@ -73,7 +73,8 @@ Rate each bug:
 | 2.2 | Android: install the `.apk`, open it. | Installs; the splash screen, then the app. |
 | 2.3 | First launch on each device. | Green splash, then an empty library inviting you to add a folder. No crash. |
 | 2.4 | Close the app fully and reopen it. | It reopens fast, the same as before. |
-| 2.5 | Turn the phone sideways (iPhone, Android). | The layout adapts; nothing is cut off. |
+| 2.5 | Turn the phone sideways (iPhone, Android). Then an iPad or Android tablet. | A phone stays upright, as Spotify's does. A tablet turns, and gets the desktop layout when wide. |
+| 2.6 | Android: on Home, press **Back** (or swipe back). Then reopen Musify. | The app goes to the background (the music keeps playing); it comes back as it was. |
 
 ---
 
@@ -94,10 +95,10 @@ offline.
 | 3.8 | Folder ••• → **Delete** → **Hide from Musify**. Then Settings → Manage folders → unhide it. | It disappears, then comes back. |
 | 3.9 | Folder ••• → **Rename folder** → a new name. | Renamed in the app **and on disk**. The songs stay in Liked Songs and your playlists. |
 | 3.10 | Rename a folder while one of its songs is playing. | The music keeps playing without stopping. |
-| 3.11 | Rename a folder to a name that already exists next to it, or a name with `/` in it. | Refused, with a clear message; nothing changes. |
+| 3.11 | Rename a folder to a name that already exists next to it, or a name with `/` in it. | The message shows under the name and the screen stays open to fix it; nothing changes. |
 | 3.12 | Try to rename a top-level folder you added in 3.1. | Refused, with a message telling you to rename it in Files / Finder. |
-| 3.13 | Song ••• → **Move to folder** → another folder. | The file moves on disk and stays in your playlists and likes. |
-| 3.14 | Song ••• → **Delete from device**. | Asks first; then the file is gone from disk and from every playlist. |
+| 3.13 | Song ••• → **Move to folder** → another folder. | The song's own folder isn't offered. The file moves on disk and stays in your playlists and likes. Android: the first time, Musify asks for **All files access** (needed to change music it didn't put there); after allowing it, the move works. |
+| 3.14 | Song ••• → **Delete from device**, on the song playing. | Asks first; then the file is gone from disk and from every playlist, and the next song plays. If it can't be deleted, the music carries on. |
 | 3.15 | Folder ••• → **Delete** → choose to delete the songs. | Asks first; the songs are deleted, other files in that folder are kept. |
 | 3.16 | Close and reopen the app. | The folders are still there; nothing to add again. |
 | 3.17 | iPhone: reinstall the app (or update it) and reopen. | Folders reconnect, or the app clearly asks you to add them again. No crash. |
@@ -141,7 +142,7 @@ offline.
 | 5.6b | Turn shuffle **on**, fully close the app, reopen, start any playlist (play button or tap a song). | Shuffle is still on and the playlist plays shuffled. Turning it off is remembered the same way. |
 | 5.7 | Repeat (off on a fresh install): tap through all → one → off. | Repeat one replays the song; repeat all goes from the last song back to the first; off stops at the end. |
 | 5.8 | **Sleep timer:** 5 minutes, then "End of track". | The music stops when it should. The countdown shows. |
-| 5.9 | Open lyrics on the song that has them. | They show. |
+| 5.9 | Open the player on a song with lyrics, then skip to one without. | The lyrics card peeks at the bottom and scrolls up; the cover and buttons don't move between the two songs. Pulling down from the top still closes the player. |
 | 5.10 | **Lock screen / Control Center:** play, pause, skip, seek. | All work. The right title and cover show. |
 | 5.11 | Pull headphones out / take AirPods out. | The music pauses. |
 | 5.12 | **Get a phone call** while playing (or start a voice memo or another music app). After the call, press play. | Pauses for the call; plays again after. |
@@ -270,8 +271,8 @@ Use **two devices** (A = iPhone, B = Mac); a third device is a bonus.
 
 | # | Steps | Expected |
 |---|---|---|
-| 12.5 | A: create a playlist, like songs, add a tag, pin something. | Within a few seconds, all of it appears on B. |
-| 12.6 | B: edit those. | Changes reach A. |
+| 12.5 | A: create a playlist, like songs, add a tag, pin something. | Within a few seconds (B on screen), all of it appears on B. |
+| 12.6 | B: edit those. | Changes reach A within a few seconds too. |
 | 12.7 | Delete a playlist on A. | It goes from B too. |
 
 ### 12c. What's playing (handoff and remote control)
@@ -281,7 +282,7 @@ Use **two devices** (A = iPhone, B = Mac); a third device is a bonus.
 | 12.8 | Play on A, pause on A. Open B. | B shows the **same song at the same second**. Pressing play on B continues there. |
 | 12.9 | Play on A. Look at B. | B shows a green **"Playing on (A's name)"** bar and A's play/pause state. |
 | 12.10 | On B, press pause / next / seek. | **A** pauses / skips / seeks (within about 3 seconds). B stays silent. |
-| 12.11 | On B, tap **Play here**. | A pauses; B continues from the same spot. |
+| 12.11 | On B, tap **Play here**, also right after pressing next on B. | A pauses; B continues from the same spot, on the song A had moved to. |
 | 12.12 | Both devices idle for 10+ minutes. | The "Playing on" bar goes away. |
 
 ### 12d. Music files
