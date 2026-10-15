@@ -659,11 +659,19 @@ class Library extends ChangeNotifier {
 
   // The user's playlists ------------------------------------------------------
 
-  Playlist createPlaylist(String name) {
+  /// A new playlist of yours, empty or with [tracks].
+  Playlist createPlaylist(String name, {List<Track> tracks = const []}) {
     final id =
         '${DateTime.now().microsecondsSinceEpoch}'
         '${Random().nextInt(1 << 20)}';
-    _saved = [..._saved, SavedPlaylist(id, name, const [])];
+    final seen = <String>{};
+    _saved = [
+      ..._saved,
+      SavedPlaylist(id, name, [
+        for (final t in tracks)
+          if (seen.add(t.path)) _save(t),
+      ]),
+    ];
     _commit();
     return byId('$_customPrefix$id')!;
   }

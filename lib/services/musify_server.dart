@@ -283,14 +283,39 @@ class MusifyServer extends ChangeNotifier {
         )
       : null;
 
-  Future<Map<String, dynamic>> _getJson(String path) async {
+  Future<Map<String, dynamic>> _getJson(
+    String path, {
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
     final response = await http
         .get(Uri.parse('${await _base()}$path'), headers: await _headers())
-        .timeout(const Duration(seconds: 30));
+        .timeout(timeout);
     if (response.statusCode != 200) {
       throw ServerError(_errorOf(response, response.body));
     }
     return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  /// The YouTube (or YouTube Music) playlist [id], with its songs. Long
+  /// ones take the server a while to read.
+  Future<Playlist> youtubePlaylist(String id) async => _playlist(
+    await _getJson(
+      '/playlist?id=${Uri.encodeQueryComponent(id)}',
+      timeout: const Duration(minutes: 2),
+    ),
+  );
+
+  /// The playlist id in a YouTube or YouTube Music link ("...?list=PL..."),
+  /// or a bare id; null if there's none.
+  static String? playlistIdOf(String text) {
+    final trimmed = text.trim();
+    final id = RegExp(r'^[A-Za-z0-9_-]{10,64}$');
+    if (id.hasMatch(trimmed)) return trimmed;
+    final uri = Uri.tryParse(
+      trimmed.contains('://') ? trimmed : 'https://$trimmed',
+    );
+    final list = uri?.queryParameters['list'];
+    return list != null && id.hasMatch(list) ? list : null;
   }
 
   /// YouTube Music's songs for [query] (no videos or mixes), and the

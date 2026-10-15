@@ -10,6 +10,7 @@ import '../widgets/list_scrollbar.dart';
 import '../widgets/folders_sheet.dart';
 import '../widgets/navigation.dart';
 import '../widgets/covers.dart';
+import '../widgets/import_playlist.dart';
 import '../widgets/offline_badge.dart';
 import '../widgets/playlist_actions.dart';
 
@@ -74,6 +75,15 @@ class _LibraryTabState extends State<LibraryTab> {
                 onTap: () {
                   Navigator.of(sheet).pop();
                   _createPlaylist();
+                },
+              ),
+              _MenuTile(
+                icon: Icons.playlist_add,
+                title: 'Import playlist',
+                subtitle: 'From a YouTube or YouTube Music link',
+                onTap: () {
+                  Navigator.of(sheet).pop();
+                  importPlaylist(context);
                 },
               ),
               const SizedBox(height: 8),

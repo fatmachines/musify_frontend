@@ -236,6 +236,26 @@ void main() {
     expect(reloaded.pinned, isEmpty);
   });
 
+  test('a playlist can be made with its songs at once', () async {
+    SharedPreferences.setMockInitialValues({
+      'library_folders': [first.path],
+    });
+    final library = Library.fresh();
+    await library.ensureLoaded();
+    final a = library.allSongs.first;
+    final video = YouTubeTrack(videoId: 'abcdefghijk', name: 'Video');
+    final imported = library.createPlaylist(
+      'From YouTube',
+      tracks: [video, a, video],
+    );
+    expect(imported.tracks.map((t) => t.path), [video.path, a.path]);
+    final reloaded = Library.fresh();
+    await reloaded.ensureLoaded();
+    final again = reloaded.byId(imported.id)!;
+    expect(again.name, 'From YouTube');
+    expect((again.tracks.first as YouTubeTrack).name, 'Video');
+  });
+
   test('YouTube songs can be liked and put in playlists', () async {
     SharedPreferences.setMockInitialValues({
       'library_folders': [first.path],
