@@ -26,7 +26,17 @@ const _fallbackColor = Color(0xFF3E3E3E);
 class NowPlaying extends StatelessWidget {
   final VoidCallback onClose;
 
-  const NowPlaying({super.key, required this.onClose});
+  /// Dragging down to close, for where the player scrolls (a song with
+  /// lyrics) and the shell's own drag can't see it.
+  final GestureDragUpdateCallback? onDragUpdate;
+  final GestureDragEndCallback? onDragEnd;
+
+  const NowPlaying({
+    super.key,
+    required this.onClose,
+    this.onDragUpdate,
+    this.onDragEnd,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -61,8 +71,12 @@ class NowPlaying extends StatelessWidget {
                 child: SafeArea(
                   child: FutureBuilder(
                     future: MetadataService.loadInfo([track]),
-                    builder: (context, _) =>
-                        _Body(track: track, onClose: onClose),
+                    builder: (context, _) => _Body(
+                      track: track,
+                      onClose: onClose,
+                      onDragUpdate: onDragUpdate,
+                      onDragEnd: onDragEnd,
+                    ),
                   ),
                 ),
               ),
@@ -74,145 +88,260 @@ class NowPlaying extends StatelessWidget {
   }
 }
 
+/// How much of the lyrics card shows below the player, hinting that it
+/// scrolls up. Left empty for songs without lyrics, so the cover and the
+/// controls stay put from one song to the next.
+const _peek = 28.0;
+
 class _Body extends StatelessWidget {
   final Track track;
   final VoidCallback onClose;
+  final GestureDragUpdateCallback? onDragUpdate;
+  final GestureDragEndCallback? onDragEnd;
 
-  const _Body({required this.track, required this.onClose});
+  const _Body({
+    required this.track,
+    required this.onClose,
+    this.onDragUpdate,
+    this.onDragEnd,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final lyrics = MetadataService.cachedInfo(track)?.lyrics;
+    final page = Padding(
+      padding: EdgeInsets.symmetric(horizontal: 24),
+      child: _page(context),
+    );
+    if (lyrics == null) {
+      return Column(
+        children: [
+          Expanded(child: page),
+          const SizedBox(height: _peek),
+        ],
+      );
+    }
+    // Lyrics below the fold, as Spotify has them.
+    return _BelowTheFold(
+      onDragUpdate: onDragUpdate,
+      onDragEnd: onDragEnd,
+      page: page,
+      below: Padding(
+        padding: EdgeInsets.fromLTRB(24, 0, 24, 24),
+        child: _LyricsCard(track: track, lyrics: lyrics),
+      ),
+    );
+  }
+
+  Widget _page(BuildContext context) {
     final info = MetadataService.cachedInfo(track);
     final playlist = PlayerService.instance.current;
-    final lyrics = info?.lyrics;
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        children: [
-          SizedBox(
-            height: 56,
-            child: Row(
-              children: [
-                // The icons sit centred in their buttons (so the hover and
-                // press circles are round them), the buttons nudged out so
-                // the icons still line up with the cover's edges.
-                Transform.translate(
-                  offset: Offset(-8, 0),
-                  child: IconButton(
-                    tooltip: 'Close',
-                    iconSize: 32,
-                    onPressed: onClose,
-                    icon: Icon(Icons.keyboard_arrow_down_rounded),
+    return Column(
+      children: [
+        SizedBox(
+          height: 56,
+          child: Row(
+            children: [
+              // The icons sit centred in their buttons (so the hover and
+              // press circles are round them), the buttons nudged out so
+              // the icons still line up with the cover's edges.
+              Transform.translate(
+                offset: Offset(-8, 0),
+                child: IconButton(
+                  tooltip: 'Close',
+                  iconSize: 32,
+                  onPressed: onClose,
+                  icon: Icon(Icons.keyboard_arrow_down_rounded),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  playlist?.name ?? '',
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                ),
+              ),
+              Transform.translate(
+                offset: Offset(12, 0),
+                child: IconButton(
+                  tooltip: 'More',
+                  onPressed: () => _showMore(context, track),
+                  icon: Icon(Icons.more_horiz),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, box) {
+              final size = box.maxWidth < box.maxHeight - 16
+                  ? box.maxWidth
+                  : box.maxHeight - 16;
+              // Swipe the cover sideways for the previous or next song.
+              // The pages run the full screen width (past the side
+              // padding) so covers slide in from the screen edge.
+              return OverflowBox(
+                maxWidth: box.maxWidth + 48,
+                child: TrackSwiper(
+                  itemBuilder: (context, track) => Center(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: TrackCover(track: track, size: size),
+                    ),
                   ),
                 ),
-                Expanded(
-                  child: Text(
-                    playlist?.name ?? '',
-                    textAlign: TextAlign.center,
+              );
+            },
+          ),
+        ),
+        // Like sits between the cover and the title.
+        Align(
+          alignment: Alignment.centerRight,
+          child: _LikeButton(track: track),
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    info?.title ?? track.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                    style: TextStyle(
+                      color: AppColors.text,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ),
-                Transform.translate(
-                  offset: Offset(12, 0),
-                  child: IconButton(
-                    tooltip: 'More',
-                    onPressed: () => _showMore(context, track),
-                    icon: Icon(Icons.more_horiz),
+                  SizedBox(height: 4),
+                  Text(
+                    info?.artist ?? 'Unknown artist',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: AppColors.subtle, fontSize: 16),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, box) {
-                final size = box.maxWidth < box.maxHeight - 16
-                    ? box.maxWidth
-                    : box.maxHeight - 16;
-                // Swipe the cover sideways for the previous or next song.
-                // The pages run the full screen width (past the side
-                // padding) so covers slide in from the screen edge.
-                return OverflowBox(
-                  maxWidth: box.maxWidth + 48,
-                  child: TrackSwiper(
-                    itemBuilder: (context, track) => Center(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: TrackCover(track: track, size: size),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          // Like sits between the cover and the title.
-          Align(
-            alignment: Alignment.centerRight,
-            child: _LikeButton(track: track),
-          ),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      info?.title ?? track.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: AppColors.text,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      info?.artist ?? 'Unknown artist',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: AppColors.subtle, fontSize: 16),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 16),
-          _SeekBar(),
-          SizedBox(height: 4),
-          _Controls(),
-          // Another device has the music: say so, and offer to play here.
-          const PlayingElsewhereStrip(
-            margin: EdgeInsets.only(top: 12),
-            radius: BorderRadius.all(Radius.circular(8)),
-          ),
-          SizedBox(height: 8),
-          Row(
-            children: [
-              _RepeatButton(),
-              Spacer(),
-              IconButton(
-                tooltip: 'Share',
-                onPressed: () => _share(context, track),
-                icon: Icon(Icons.ios_share, size: 22),
-              ),
-              IconButton(
-                tooltip: 'Queue',
-                onPressed: () => showQueueSheet(context),
-                icon: Icon(Icons.queue_music, size: 24),
-              ),
-            ],
-          ),
-          if (lyrics != null) ...[
-            SizedBox(height: 8),
-            _LyricsCard(track: track, lyrics: lyrics),
           ],
-          SizedBox(height: 12),
-        ],
+        ),
+        SizedBox(height: 16),
+        _SeekBar(),
+        SizedBox(height: 4),
+        _Controls(),
+        // Another device has the music: say so, and offer to play here.
+        const PlayingElsewhereStrip(
+          margin: EdgeInsets.only(top: 12),
+          radius: BorderRadius.all(Radius.circular(8)),
+        ),
+        SizedBox(height: 8),
+        Row(
+          children: [
+            _RepeatButton(),
+            Spacer(),
+            IconButton(
+              tooltip: 'Share',
+              onPressed: () => _share(context, track),
+              icon: Icon(Icons.ios_share, size: 22),
+            ),
+            IconButton(
+              tooltip: 'Queue',
+              onPressed: () => showQueueSheet(context),
+              icon: Icon(Icons.queue_music, size: 24),
+            ),
+          ],
+        ),
+        SizedBox(height: 12),
+      ],
+    );
+  }
+}
+
+/// [page] filling the screen (but for [_peek]) with [below] under it,
+/// scrolling. At the top, dragging down still closes the player: the
+/// pull past the top goes to the shell's drag.
+class _BelowTheFold extends StatefulWidget {
+  final Widget page;
+  final Widget below;
+  final GestureDragUpdateCallback? onDragUpdate;
+  final GestureDragEndCallback? onDragEnd;
+
+  const _BelowTheFold({
+    required this.page,
+    required this.below,
+    this.onDragUpdate,
+    this.onDragEnd,
+  });
+
+  @override
+  State<_BelowTheFold> createState() => _BelowTheFoldState();
+}
+
+class _BelowTheFoldState extends State<_BelowTheFold> {
+  final _scroll = ScrollController();
+
+  /// This drag moves the player, not the page.
+  bool _closing = false;
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _drag(DragUpdateDetails? from, double dy) {
+    widget.onDragUpdate?.call(
+      DragUpdateDetails(
+        globalPosition: from?.globalPosition ?? Offset.zero,
+        delta: Offset(0, dy),
+        primaryDelta: dy,
+      ),
+    );
+  }
+
+  bool _onScroll(ScrollNotification n) {
+    if (widget.onDragUpdate == null) return false;
+    if (n is OverscrollNotification &&
+        n.dragDetails != null &&
+        (n.overscroll < 0 || _closing)) {
+      _closing = true;
+      _drag(n.dragDetails, -n.overscroll);
+    } else if (n is ScrollUpdateNotification &&
+        _closing &&
+        n.dragDetails != null) {
+      // Back up while closing: the player follows; the page stays put.
+      _drag(n.dragDetails, -(n.scrollDelta ?? 0));
+      _scroll.jumpTo(0);
+    } else if (n is ScrollEndNotification && _closing) {
+      _closing = false;
+      widget.onDragEnd?.call(
+        n.dragDetails ?? DragEndDetails(primaryVelocity: 0),
+      );
+    }
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, box) => NotificationListener<ScrollNotification>(
+        onNotification: _onScroll,
+        child: SingleChildScrollView(
+          controller: _scroll,
+          // Clamped, so pulling past the top is an overscroll to pass on.
+          physics: const ClampingScrollPhysics(),
+          child: Column(
+            children: [
+              SizedBox(height: box.maxHeight - _peek, child: widget.page),
+              widget.below,
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -534,7 +534,14 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               ),
             ],
           ),
-          _buildTagChips(),
+          // Slides open when the first tag here is added, rather than
+          // jumping the songs down.
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: _buildTagChips(),
+          ),
           const SizedBox(height: 8),
         ],
       ),
@@ -727,7 +734,14 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               ),
             ],
           ),
-          _buildTagChips(),
+          // Slides open when the first tag here is added, rather than
+          // jumping the songs down.
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: _buildTagChips(),
+          ),
           const SizedBox(height: 8),
         ],
       ),

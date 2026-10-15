@@ -299,7 +299,11 @@ class _HomeShellState extends State<HomeShell>
             child: GestureDetector(
               onVerticalDragUpdate: _dragPlayer,
               onVerticalDragEnd: _releasePlayer,
-              child: NowPlaying(onClose: _closePlayer),
+              child: NowPlaying(
+                onClose: _closePlayer,
+                onDragUpdate: _dragPlayer,
+                onDragEnd: _releasePlayer,
+              ),
             ),
           ),
         ],

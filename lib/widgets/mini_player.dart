@@ -47,7 +47,11 @@ class MiniPlayer extends StatelessWidget {
               margin: const EdgeInsets.fromLTRB(8, 0, 8, 10),
               height: 60,
               decoration: BoxDecoration(
-                color: AppColors.backdrop(color.data ?? _fallbackColor, 0.3),
+                // Light enough in the light theme for dark text to read.
+                color: AppColors.backdrop(
+                  color.data ?? _fallbackColor,
+                  AppColors.dark ? 0.3 : 0.7,
+                ),
                 borderRadius: BorderRadius.circular(8),
               ),
               clipBehavior: Clip.antiAlias,
@@ -136,7 +140,10 @@ class _TrackText extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: elsewhere == null
-                            ? AppColors.subtle
+                            ? AppColors.dark
+                                  ? AppColors.subtle
+                                  // Grey on a cover's colour is too faint.
+                                  : AppColors.text.withValues(alpha: 0.75)
                             : AppColors.green,
                         fontSize: 13,
                         fontWeight: elsewhere == null
