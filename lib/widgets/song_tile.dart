@@ -112,7 +112,8 @@ class SongTile extends StatelessWidget {
                           const SizedBox(width: 4),
                         ],
                         if (youtube)
-                          // Green once it's on the device.
+                          // The green mark once it's on the device; none
+                          // while it plays from YouTube.
                           ListenableBuilder(
                             listenable: LocalCopies.instance,
                             builder: (context, _) =>
@@ -120,14 +121,17 @@ class SongTile extends StatelessWidget {
                                       track as YouTubeTrack,
                                     ) ==
                                     null
-                                ? const YouTubeBadge()
-                                : const OfflineBadge(),
+                                ? const SizedBox.shrink()
+                                : const Padding(
+                                    padding: EdgeInsets.only(right: 6),
+                                    child: OfflineBadge(),
+                                  ),
                           )
                         else ...[
                           TagDots(track: track),
                           const OfflineBadge(),
+                          const SizedBox(width: 6),
                         ],
-                        const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             '$subtitlePrefix${info?.artist ?? 'Unknown artist'}',

@@ -97,14 +97,18 @@ class PlayerService {
       source is ClippingAudioSource && source.tag is YouTubeTrack;
 
   /// The next two YouTube songs get fetched by the server ahead of time,
-  /// so one starts as the last ends.
+  /// so one starts as the last ends (local songs need nothing).
   void _warmNext(AudioPlayer player) {
     final index = player.currentIndex;
     if (index == null) return;
     final sequence = player.sequence;
+    // Shuffled or not, the queue is in play order. Repeating all, the top
+    // of the list comes after its end.
+    final wrap = player.loopMode == LoopMode.all;
     var warmed = 0;
-    for (var i = index + 1; i < sequence.length && warmed < 2; i++) {
-      final tag = sequence[i].tag;
+    for (var k = 1; k < sequence.length && warmed < 2; k++) {
+      if (!wrap && index + k >= sequence.length) break;
+      final tag = sequence[(index + k) % sequence.length].tag;
       if (tag is YouTubeTrack && !_noStream.contains(tag.videoId)) {
         _fetchThenStream(player, tag);
         warmed++;
