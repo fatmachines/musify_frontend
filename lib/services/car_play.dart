@@ -13,14 +13,25 @@ import 'library.dart';
 class CarPlay {
   static const _channel = MethodChannel('musify/carplay');
   static Timer? _changedSoon;
+  static const nowPlayingId = 'now-playing';
 
   static Future<void> init(AudioHandler handler) async {
     if (!Platform.isIOS) return;
     _channel.setMethodCallHandler((call) async {
       switch (call.method) {
         case 'children':
-          final items = await handler.getChildren(call.arguments as String);
+          final parent = call.arguments as String;
+          final items = await handler.getChildren(parent);
+          final playing = handler.mediaItem.value;
           return [
+            // Opens CarPlay's Now Playing screen (see the native side).
+            if (parent == AudioService.browsableRootId && playing != null)
+              {
+                'id': nowPlayingId,
+                'title': playing.title,
+                'subtitle': ['Now playing', ?playing.artist].join(' · '),
+                'playable': true,
+              },
             for (final item in items)
               {
                 'id': item.id,
@@ -49,9 +60,16 @@ class CarPlay {
       }
     }
     Library.instance.addListener(_changedLater);
+    // Keeps the "Now playing" row on the car's first list current.
+    String? shownId;
+    handler.mediaItem.listen((item) {
+      if (item?.id == shownId) return;
+      shownId = item?.id;
+      _changedLater();
+    });
   }
 
-  /// Refreshes the car's playlist list after library edits.
+  /// Refreshes the car's first list after library edits or a new song.
   static void _changedLater() {
     _changedSoon?.cancel();
     _changedSoon = Timer(const Duration(seconds: 1), () {

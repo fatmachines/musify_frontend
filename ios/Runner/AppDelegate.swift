@@ -371,15 +371,24 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
   /// A song: plays it (with the rest of its playlist after it) and shows
   /// Now Playing.
   private func play(_ id: String, done: @escaping () -> Void) {
+    // The "Now playing" row (car_play.dart's nowPlayingId) only shows it.
+    if id == "now-playing" {
+      showNowPlaying()
+      return done()
+    }
     CarPlayBridge.shared.play(id) { [weak self] in
-      defer { done() }
-      guard let interfaceController = self?.interfaceController else { return }
-      let nowPlaying = CPNowPlayingTemplate.shared
-      if interfaceController.templates.contains(where: { $0 === nowPlaying }) {
-        interfaceController.pop(to: nowPlaying, animated: true, completion: nil)
-      } else {
-        interfaceController.pushTemplate(nowPlaying, animated: true, completion: nil)
-      }
+      self?.showNowPlaying()
+      done()
+    }
+  }
+
+  private func showNowPlaying() {
+    guard let interfaceController else { return }
+    let nowPlaying = CPNowPlayingTemplate.shared
+    if interfaceController.templates.contains(where: { $0 === nowPlaying }) {
+      interfaceController.pop(to: nowPlaying, animated: true, completion: nil)
+    } else {
+      interfaceController.pushTemplate(nowPlaying, animated: true, completion: nil)
     }
   }
 }
