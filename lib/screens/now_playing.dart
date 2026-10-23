@@ -199,7 +199,7 @@ class _Body extends StatelessWidget {
               IconButton(
                 tooltip: 'Share',
                 onPressed: () => _share(context, track),
-                icon: AppIconView(AppIcon.share, size: 22),
+                icon: AppIconView(AppIcon.share, size: 26),
               ),
               IconButton(
                 tooltip: 'Queue',

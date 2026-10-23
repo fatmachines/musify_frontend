@@ -17,9 +17,10 @@ class AppIconView extends StatelessWidget {
     final theme = IconTheme.of(context);
     final box = size ?? theme.size ?? 24;
     final paint = color ?? theme.color ?? Colors.white;
-    // The artwork fills its whole box, where Material's icons leave a
-    // margin: drawn a little smaller to match them.
-    final glyph = box * 0.8;
+    // The shuffle and repeat artwork fills its whole box, where Material's
+    // icons leave a margin: drawn a little smaller to match them. Share's
+    // artwork has its own margin.
+    final glyph = icon == AppIcon.share ? box : box * 0.8;
     Widget svg(String name) => SvgPicture.asset(
       'assets/icons/$name.svg',
       width: glyph,
