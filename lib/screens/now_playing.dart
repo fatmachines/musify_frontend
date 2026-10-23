@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -198,7 +199,7 @@ class _Body extends StatelessWidget {
               IconButton(
                 tooltip: 'Share',
                 onPressed: () => _share(context, track),
-                icon: Icon(Icons.ios_share, size: 22),
+                icon: Icon(Symbols.ios_share_rounded, size: 22),
               ),
               IconButton(
                 tooltip: 'Queue',
@@ -363,7 +364,7 @@ class _Controls extends StatelessWidget {
           builder: (context, on, _) {
             return _DotButton(
               tooltip: 'Shuffle',
-              icon: Icons.shuffle,
+              icon: Symbols.shuffle_rounded,
               active: on,
               onTap: () => service.setShuffle(!on),
             );
@@ -487,7 +488,9 @@ class _RepeatButton extends StatelessWidget {
             LoopMode.all => 'Repeat all',
             LoopMode.one => 'Repeat one',
           },
-          icon: mode == LoopMode.one ? Icons.repeat_one : Icons.repeat,
+          icon: mode == LoopMode.one
+              ? Symbols.repeat_one_rounded
+              : Symbols.repeat_rounded,
           active: mode != LoopMode.off,
           onTap: service.cycleRepeat,
         );
@@ -626,7 +629,7 @@ void _showMore(BuildContext context, Track track) {
                 },
               ),
             ListTile(
-              leading: const Icon(Icons.ios_share),
+              leading: const Icon(Symbols.ios_share_rounded),
               title: const Text('Share'),
               onTap: () {
                 Navigator.of(sheet).pop();
@@ -653,7 +656,7 @@ void _showMore(BuildContext context, Track track) {
               stream: service.player.loopModeStream,
               initialData: service.player.loopMode,
               builder: (context, snapshot) => ListTile(
-                leading: const Icon(Icons.repeat),
+                leading: const Icon(Symbols.repeat_rounded),
                 title: const Text('Repeat'),
                 trailing: Text(switch (snapshot.data ?? LoopMode.off) {
                   LoopMode.off => 'Off',

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:just_audio/just_audio.dart';
@@ -600,7 +601,7 @@ class _Controls extends StatelessWidget {
         ValueListenableBuilder<bool>(
           valueListenable: service.shuffleOn,
           builder: (context, on, _) => small(
-            Icons.shuffle,
+            Symbols.shuffle_rounded,
             on ? 'Shuffle off' : 'Shuffle',
             () => service.setShuffle(!on),
             on: on,
@@ -641,7 +642,9 @@ class _Controls extends StatelessWidget {
           builder: (context, snapshot) {
             final mode = snapshot.data ?? LoopMode.off;
             return small(
-              mode == LoopMode.one ? Icons.repeat_one : Icons.repeat,
+              mode == LoopMode.one
+                  ? Symbols.repeat_one_rounded
+                  : Symbols.repeat_rounded,
               switch (mode) {
                 LoopMode.off => 'Repeat off',
                 LoopMode.all => 'Repeat all',
