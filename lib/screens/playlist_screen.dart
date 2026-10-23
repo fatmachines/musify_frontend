@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
+import '../widgets/app_icons.dart';
 import '../models/playlist.dart';
 import '../services/local_copies.dart';
 import '../services/app_log.dart';
@@ -971,7 +971,7 @@ class _ShuffleButton extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Symbols.shuffle_rounded, size: 32, color: color),
+              AppIconView(AppIcon.shuffle, size: 32, color: color),
               // Spotify marks shuffle-on with a dot under the icon.
               Container(
                 width: 4,

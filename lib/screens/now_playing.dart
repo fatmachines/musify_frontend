@@ -1,10 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../widgets/app_icons.dart';
 import '../models/playlist.dart';
 import '../services/app_log.dart';
 import '../services/library.dart';
@@ -199,7 +199,7 @@ class _Body extends StatelessWidget {
               IconButton(
                 tooltip: 'Share',
                 onPressed: () => _share(context, track),
-                icon: Icon(Symbols.ios_share_rounded, size: 22),
+                icon: AppIconView(AppIcon.share, size: 22),
               ),
               IconButton(
                 tooltip: 'Queue',
@@ -364,7 +364,7 @@ class _Controls extends StatelessWidget {
           builder: (context, on, _) {
             return _DotButton(
               tooltip: 'Shuffle',
-              icon: Symbols.shuffle_rounded,
+              icon: AppIcon.shuffle,
               active: on,
               onTap: () => service.setShuffle(!on),
             );
@@ -428,7 +428,9 @@ class _Controls extends StatelessWidget {
 /// shuffle.
 class _DotButton extends StatelessWidget {
   final String tooltip;
-  final IconData icon;
+
+  /// An [AppIcon] or a Material [IconData].
+  final Object icon;
   final bool active;
   final VoidCallback onTap;
 
@@ -453,7 +455,10 @@ class _DotButton extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 26, color: color),
+              if (icon case final AppIcon own)
+                AppIconView(own, size: 26, color: color)
+              else
+                Icon(icon as IconData, size: 26, color: color),
               Container(
                 width: 4,
                 height: 4,
@@ -488,9 +493,7 @@ class _RepeatButton extends StatelessWidget {
             LoopMode.all => 'Repeat all',
             LoopMode.one => 'Repeat one',
           },
-          icon: mode == LoopMode.one
-              ? Symbols.repeat_one_rounded
-              : Symbols.repeat_rounded,
+          icon: mode == LoopMode.one ? AppIcon.repeatOne : AppIcon.repeat,
           active: mode != LoopMode.off,
           onTap: service.cycleRepeat,
         );
@@ -629,7 +632,7 @@ void _showMore(BuildContext context, Track track) {
                 },
               ),
             ListTile(
-              leading: const Icon(Symbols.ios_share_rounded),
+              leading: const AppIconView(AppIcon.share),
               title: const Text('Share'),
               onTap: () {
                 Navigator.of(sheet).pop();
@@ -656,7 +659,7 @@ void _showMore(BuildContext context, Track track) {
               stream: service.player.loopModeStream,
               initialData: service.player.loopMode,
               builder: (context, snapshot) => ListTile(
-                leading: const Icon(Symbols.repeat_rounded),
+                leading: const AppIconView(AppIcon.repeat),
                 title: const Text('Repeat'),
                 trailing: Text(switch (snapshot.data ?? LoopMode.off) {
                   LoopMode.off => 'Off',

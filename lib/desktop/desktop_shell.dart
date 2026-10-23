@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:just_audio/just_audio.dart';
 
+import '../widgets/app_icons.dart';
 import '../models/playlist.dart';
 import '../screens/now_playing.dart';
 import '../services/library.dart';
@@ -586,14 +586,20 @@ class _Controls extends StatelessWidget {
     final service = PlayerService.instance;
     final player = service.player;
     Widget small(
-      IconData icon,
+      Object icon,
       String tip,
       VoidCallback onTap, {
       bool on = false,
     }) => IconButton(
       tooltip: tip,
       onPressed: enabled ? onTap : null,
-      icon: Icon(icon, size: 20, color: on ? AppColors.green : null),
+      icon: icon is AppIcon
+          ? AppIconView(icon, size: 20, color: on ? AppColors.green : null)
+          : Icon(
+              icon as IconData,
+              size: 20,
+              color: on ? AppColors.green : null,
+            ),
     );
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -601,7 +607,7 @@ class _Controls extends StatelessWidget {
         ValueListenableBuilder<bool>(
           valueListenable: service.shuffleOn,
           builder: (context, on, _) => small(
-            Symbols.shuffle_rounded,
+            AppIcon.shuffle,
             on ? 'Shuffle off' : 'Shuffle',
             () => service.setShuffle(!on),
             on: on,
@@ -642,9 +648,7 @@ class _Controls extends StatelessWidget {
           builder: (context, snapshot) {
             final mode = snapshot.data ?? LoopMode.off;
             return small(
-              mode == LoopMode.one
-                  ? Symbols.repeat_one_rounded
-                  : Symbols.repeat_rounded,
+              mode == LoopMode.one ? AppIcon.repeatOne : AppIcon.repeat,
               switch (mode) {
                 LoopMode.off => 'Repeat off',
                 LoopMode.all => 'Repeat all',
