@@ -87,6 +87,14 @@ like an album copied at once) are in name order.
 - Existing library copied in one go: name order, as before.
 - Playlists you make: new songs were already added at the end; still are.
 
+### Tags in Your Library
+
+- Your tags are listed at the end of Your Library, each in its colour
+  with its song count; tapping one opens its songs.
+- In a tag's song list (from Your Library or Search), each song shows
+  where it is after the artist: its folder, then any of your playlists
+  holding it ("Artist • Folder, Gym").
+
 ### Icons
 
 Shuffle, repeat (and repeat-one, with a "1"), and share use new soft,
@@ -97,7 +105,6 @@ size as their neighbours, coloured green when on, greyed when disabled
 
 ## Not in this build (don't report as missing)
 
-- Tags in the app's Your Library list (planned next).
 - A CarPlay search tab (CarPlay doesn't allow keyboard search for
   music apps; voice via Siri works).
 - Detecting the car's mute (no API for it).

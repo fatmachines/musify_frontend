@@ -96,6 +96,19 @@ void main() {
     expect(reloaded.custom, isEmpty);
   });
 
+  test('a song says which folder and playlists it is in', () async {
+    SharedPreferences.setMockInitialValues({
+      'library_folders': [first.path],
+    });
+    final library = Library.fresh();
+    await library.ensureLoaded();
+    final rock = library.all.firstWhere((pl) => pl.name == 'Rock');
+    final song = rock.tracks.single;
+    expect(library.placesOf(song), ['Rock']);
+    library.addTrack(library.createPlaylist('Gym'), song);
+    expect(library.placesOf(song), ['Rock', 'Gym']);
+  });
+
   test('songs that disappeared drop out of user playlists', () async {
     SharedPreferences.setMockInitialValues({
       'library_folders': [second.path],

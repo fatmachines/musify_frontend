@@ -29,6 +29,9 @@ class SongTile extends StatelessWidget {
   /// Before the artist, e.g. "Song • ".
   final String subtitlePrefix;
 
+  /// After the artist, e.g. " • Thriller" (where the song is).
+  final String subtitleSuffix;
+
   /// After the ••• button.
   final Widget? trailing;
 
@@ -40,6 +43,7 @@ class SongTile extends StatelessWidget {
     this.current = false,
     this.playing = false,
     this.subtitlePrefix = '',
+    this.subtitleSuffix = '',
     this.trailing,
   });
 
@@ -134,7 +138,7 @@ class SongTile extends StatelessWidget {
                         ],
                         Expanded(
                           child: Text(
-                            '$subtitlePrefix${info?.artist ?? 'Unknown artist'}',
+                            '$subtitlePrefix${info?.artist ?? 'Unknown artist'}$subtitleSuffix',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(

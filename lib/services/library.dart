@@ -187,6 +187,18 @@ class Library extends ChangeNotifier {
     ],
   );
 
+  /// Where [track] lives: its folder, then the playlists the user made
+  /// that hold it (shown on a tag's songs).
+  List<String> placesOf(Track track) {
+    final folder = p.dirname(track.path);
+    return [
+      for (final playlist in _folderPlaylists)
+        if (p.equals(playlist.id, folder)) playlist.name,
+      for (final playlist in _custom)
+        if (playlist.tracks.any((t) => t.path == track.path)) playlist.name,
+    ];
+  }
+
   Playlist? byId(String id) {
     if (id.startsWith(_tagPrefix)) {
       final tagId = id.substring(_tagPrefix.length);

@@ -66,7 +66,9 @@ Music/
   another folder, or delete songs from the device.
 - **Your own playlists** mix songs from any folder (and YouTube songs, if
   you use the server). **Liked Songs** like Spotify's. **Tags** are coloured
-  labels ("To replace", "Gym") that work as playlists of their own.
+  labels ("To replace", "Gym") that work as playlists of their own,
+  listed at the end of Your Library; each song in a tag shows which folder
+  and playlists it's in.
 - **Home** shows what you pinned: any playlist, folder, tag, Liked Songs,
   and (with the server) artists and albums.
 - **Find on this page** in every playlist (⌘F / Ctrl+F on the Mac).

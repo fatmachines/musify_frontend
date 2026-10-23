@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/playlist.dart';
+import '../models/song_tag.dart';
 import '../screens/name_playlist_screen.dart';
 import '../services/library.dart';
 import '../services/player_service.dart';
@@ -187,6 +188,9 @@ class _LibraryTabState extends State<LibraryTab> {
                   playlist: playlist,
                   playing: PlayerService.instance.isCurrent(playlist),
                 ),
+              // Tags last, each a playlist of its songs.
+              for (final tag in _library.tags)
+                _TagTile(tag: tag, playlist: _library.tagPlaylist(tag)),
             ],
           ),
         ),
@@ -290,6 +294,65 @@ class _PlaylistTile extends StatelessWidget {
                         ),
                       ),
                     ],
+                  ),
+                ],
+              ),
+            ),
+            if (playing)
+              Icon(Icons.volume_up, color: AppColors.green, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TagTile extends StatelessWidget {
+  final SongTag tag;
+  final Playlist playlist;
+
+  const _TagTile({required this.tag, required this.playlist});
+
+  @override
+  Widget build(BuildContext context) {
+    final songs = playlist.tracks.length;
+    final playing = PlayerService.instance.isCurrent(playlist);
+    return InkWell(
+      onTap: () => openPlaylist(context, playlist),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: Color.lerp(tag.color, Colors.black, 0.25),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Icon(Icons.sell, color: Colors.white, size: 30),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    tag.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: playing ? AppColors.green : AppColors.text,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Tag • $songs ${songs == 1 ? 'song' : 'songs'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: AppColors.subtle, fontSize: 13),
                   ),
                 ],
               ),

@@ -849,14 +849,20 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     return '$songs • $length';
   }
 
+  bool get _isTag =>
+      Library.isSystem(_playlist) && _playlist.id != Library.likedId;
+
   Widget _buildTrack(int index) {
     final track = _playlist.tracks[index];
     final current =
         _isCurrent && LocalCopies.instance.resolve(track).path == _currentPath;
+    // A tag gathers songs from everywhere: each says where it's from.
+    final places = _isTag ? Library.instance.placesOf(track) : const <String>[];
     return SongTile(
       track: track,
       current: current,
       playing: current && _playing,
+      subtitleSuffix: places.isEmpty ? '' : ' • ${places.join(', ')}',
       onTap: () => _onTrack(index),
       onMore: () => showSongMenu(
         context,
