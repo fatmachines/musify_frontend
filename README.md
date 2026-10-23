@@ -105,8 +105,12 @@ Music/
 - **Equalizer**: 10 bands you drag into shape, and presets (Rock, Bass
   Booster, Vocal and more), on iPhone, Mac and Android.
 - **Lock screen and Control Center**, AirPods and headphone buttons,
-  **Siri** ("play Thriller on Musify"), **Android Auto** and **CarPlay**
-  (your playlists, folders and tags, and Now Playing).
+  **Siri** ("play Thriller on Musify"), **Android Auto** and **CarPlay**.
+- **CarPlay** laid out like Spotify's: Home (a greeting over your recent
+  playlists, then what's pinned, your playlists and folders), Recently
+  Played and Your Library. Now Playing shows the queue and has buttons to
+  add the song to a playlist, tag it with one of your tags, or download it
+  (a YouTube song) into a folder.
 - **Light or dark**, or as the device is set.
 - Comes back after a restart paused where you left off, queue and all.
 

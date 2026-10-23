@@ -149,7 +149,7 @@ offline.
 | 5.14 | Fully close the app while playing, then reopen. | The same song comes back **paused** where it was, with its queue. |
 | 5.15 | **Equalizer** (Settings): turn it on, pick presets, drag the bands. | The sound changes right away. Off gives the original sound. |
 | 5.16 | iPhone: Siri, "Play Album 1 on Musify". | Plays that playlist. |
-| 5.17 | In a car: CarPlay or Android Auto. | Now Playing shows and controls work. CarPlay lists Liked Songs, playlists, folders and tags; tapping one shows its songs, tapping a song plays it and opens Now Playing. Renaming a playlist on the phone updates the car's list. |
+| 5.17 | In a car: CarPlay or Android Auto. | Now Playing shows and controls work. CarPlay: tabs Home, Recently Played, Your Library. Home shows the greeting over recent covers, then Now playing, Pinned, playlists, folders. A playlist shows Shuffle and its songs; a song plays and opens Now Playing. Now Playing: Queue lists what's next (tap jumps); the + button adds to/removes from a playlist (ticked if in it); the tag button lists your tags, tapping one tags or untags; the download button (YouTube songs) lists folders and starts the download. Renaming a playlist on the phone updates the car within a second. |
 | 5.18 | Settings → Appearance: Light, Dark, Same as this device. Then change the phone's own setting. | Switches instantly, everywhere, including open screens. |
 
 ---

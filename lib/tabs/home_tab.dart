@@ -14,6 +14,14 @@ import '../widgets/server_key_dialog.dart';
 /// tiles (two to a row, one tap away), then YouTube Music's charts as a
 /// grid, from Musify's server.
 class HomeTab extends StatefulWidget {
+  /// "Good morning" and so on (also CarPlay's Home).
+  static String greeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 5 || hour >= 18) return 'Good evening';
+    if (hour < 12) return 'Good morning';
+    return 'Good afternoon';
+  }
+
   const HomeTab({super.key});
 
   @override
@@ -68,13 +76,6 @@ class _HomeTabState extends State<HomeTab> {
     }
   }
 
-  static String _greeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 5 || hour >= 18) return 'Good evening';
-    if (hour < 12) return 'Good morning';
-    return 'Good afternoon';
-  }
-
   void _open(Playlist playlist) => openPlaylist(context, playlist);
 
   @override
@@ -109,7 +110,7 @@ class _HomeTabState extends State<HomeTab> {
                             fit: BoxFit.scaleDown,
                             alignment: Alignment.centerLeft,
                             child: Text(
-                              _greeting(),
+                              HomeTab.greeting(),
                               maxLines: 1,
                               style: const TextStyle(
                                 fontSize: 26,

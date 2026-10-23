@@ -258,17 +258,20 @@ final class SiriBridge: NSObject, INPlayMediaIntentHandling {
   }
 }
 
-/// CarPlay's library screens. The car connects its own scene (Info.plist,
-/// CPTemplateApplicationSceneSessionRoleApplication); its lists come from
-/// Dart (CarPlay in car_play.dart) over the "musify/carplay" channel, the
-/// same tree Android Auto browses. Now Playing is CarPlay's own screen,
-/// fed by audio_service like the lock screen.
+/// CarPlay's screens, in the style of Spotify's: tabs for Home, Recently
+/// Played and Your Library; Home has the greeting over a row of recent
+/// covers, then what's playing, pinned, playlists and folders. The car
+/// connects its own scene (Info.plist,
+/// CPTemplateApplicationSceneSessionRoleApplication); the lists come from
+/// Dart (CarPlay in car_play.dart) over the "musify/carplay" channel. Now
+/// Playing is CarPlay's own screen, fed by audio_service like the lock
+/// screen, with Musify's buttons (see setUpNowPlaying).
 final class CarPlayBridge: NSObject {
   static let shared = CarPlayBridge()
 
   private var channel: FlutterMethodChannel?
   private(set) var dartReady = false
-  /// The car's screen, to reload when Dart starts or the library changes.
+  /// The car's screens, to reload when Dart starts or the library changes.
   var onChange: (() -> Void)?
 
   func attach(messenger: FlutterBinaryMessenger) {
@@ -286,97 +289,317 @@ final class CarPlayBridge: NSObject {
     self.channel = channel
   }
 
-  /// What's inside [parent] ("root" for the top list), or nil when Dart
-  /// isn't running.
-  func children(_ parent: String, completion: @escaping ([[String: Any]]?) -> Void) {
+  /// Dart's answer, or nil when Dart isn't running (or failed).
+  func call(_ method: String, _ arguments: Any? = nil, completion: @escaping (Any?) -> Void) {
     guard dartReady, let channel else { return completion(nil) }
-    channel.invokeMethod("children", arguments: parent) { result in
-      completion(result as? [[String: Any]])
+    channel.invokeMethod(method, arguments: arguments) { result in
+      completion(result is FlutterError ? nil : result)
     }
-  }
-
-  func play(_ id: String, completion: @escaping () -> Void) {
-    guard dartReady, let channel else { return completion() }
-    channel.invokeMethod("play", arguments: id) { _ in completion() }
   }
 }
 
-class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
+/// One row from Dart (see car_play.dart).
+struct CarEntry {
+  let id: String
+  let title: String
+  let subtitle: String?
+  let playable: Bool
+  let art: String
+  let color: UIColor?
+  let images: [String]
+
+  init(_ map: [String: Any]) {
+    id = map["id"] as? String ?? ""
+    title = map["title"] as? String ?? ""
+    subtitle = map["subtitle"] as? String
+    playable = map["playable"] as? Bool ?? true
+    art = map["art"] as? String ?? "song"
+    images = map["images"] as? [String] ?? []
+    if let argb = (map["color"] as? NSNumber)?.uint32Value {
+      color = UIColor(
+        red: CGFloat((argb >> 16) & 0xFF) / 255, green: CGFloat((argb >> 8) & 0xFF) / 255,
+        blue: CGFloat(argb & 0xFF) / 255, alpha: 1)
+    } else {
+      color = nil
+    }
+  }
+
+  static func list(_ value: Any?) -> [CarEntry] {
+    (value as? [[String: Any]] ?? []).map(CarEntry.init)
+  }
+}
+
+/// Square artwork as the app draws it: the playlist's 2x2 mosaic of
+/// covers, Liked Songs' heart on its gradient, a tag's colour.
+enum CarArtwork {
+  static func image(_ entry: CarEntry, side: CGFloat = 240) -> UIImage {
+    let rect = CGRect(x: 0, y: 0, width: side, height: side)
+    let covers = entry.images.prefix(4).compactMap { UIImage(contentsOfFile: $0) }
+    return UIGraphicsImageRenderer(size: rect.size).image { context in
+      switch entry.art {
+      case "liked":
+        let colors = [0x450AF5, 0x8E8EE5, 0xC4EFD9].map { rgb($0).cgColor } as CFArray
+        if let gradient = CGGradient(
+          colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: nil)
+        {
+          context.cgContext.drawLinearGradient(
+            gradient, start: .zero, end: CGPoint(x: side, y: side), options: [])
+        }
+        symbol("heart.fill", in: rect)
+      case "tag":
+        (entry.color ?? rgb(0x535353)).setFill()
+        context.fill(rect)
+        symbol("tag.fill", in: rect)
+      default:
+        if covers.count >= 4 {
+          let half = side / 2
+          for (i, cover) in covers.enumerated() {
+            fill(cover, in: CGRect(
+              x: CGFloat(i % 2) * half, y: CGFloat(i / 2) * half, width: half, height: half))
+          }
+        } else if let cover = covers.first {
+          fill(cover, in: rect)
+        } else {
+          rgb(0x282828).setFill()
+          context.fill(rect)
+          symbol(entry.art == "folder" ? "folder.fill" : "music.note", in: rect, alpha: 0.6)
+        }
+      }
+    }
+  }
+
+  private static func rgb(_ value: Int) -> UIColor {
+    UIColor(
+      red: CGFloat((value >> 16) & 0xFF) / 255, green: CGFloat((value >> 8) & 0xFF) / 255,
+      blue: CGFloat(value & 0xFF) / 255, alpha: 1)
+  }
+
+  /// Draws [image] filling [rect], cropped to keep its shape (YouTube
+  /// thumbnails are wide).
+  private static func fill(_ image: UIImage, in rect: CGRect) {
+    let scale = max(rect.width / image.size.width, rect.height / image.size.height)
+    let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+    UIGraphicsGetCurrentContext()?.saveGState()
+    UIRectClip(rect)
+    image.draw(in: CGRect(
+      x: rect.midX - size.width / 2, y: rect.midY - size.height / 2,
+      width: size.width, height: size.height))
+    UIGraphicsGetCurrentContext()?.restoreGState()
+  }
+
+  private static func symbol(_ name: String, in rect: CGRect, alpha: CGFloat = 1) {
+    let config = UIImage.SymbolConfiguration(pointSize: rect.width * 0.36, weight: .semibold)
+    guard
+      let image = UIImage(systemName: name, withConfiguration: config)?
+        .withTintColor(UIColor.white.withAlphaComponent(alpha), renderingMode: .alwaysOriginal)
+    else { return }
+    image.draw(at: CGPoint(
+      x: rect.midX - image.size.width / 2, y: rect.midY - image.size.height / 2))
+  }
+
+  /// Draws [entries]' artwork off the main thread.
+  static func images(
+    _ entries: [CarEntry], side: CGFloat = 240, completion: @escaping ([UIImage]) -> Void
+  ) {
+    DispatchQueue.global(qos: .userInitiated).async {
+      let images = entries.map { image($0, side: side) }
+      DispatchQueue.main.async { completion(images) }
+    }
+  }
+}
+
+class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate,
+  CPTabBarTemplateDelegate, CPNowPlayingTemplateObserver
+{
   private var interfaceController: CPInterfaceController?
-  private let root = CPListTemplate(title: "Musify", sections: [])
+  private var tabs: CPTabBarTemplate?
+  private let home = CPListTemplate(title: "Home", sections: [])
+  private let recent = CPListTemplate(title: "Recently Played", sections: [])
+  private let library = CPListTemplate(title: "Your Library", sections: [])
 
   func templateApplicationScene(
     _ templateApplicationScene: CPTemplateApplicationScene,
     didConnect interfaceController: CPInterfaceController
   ) {
     self.interfaceController = interfaceController
-    interfaceController.setRootTemplate(root, animated: false, completion: nil)
-    CarPlayBridge.shared.onChange = { [weak self] in self?.reloadRoot() }
-    reloadRoot()
+    for (template, symbol) in [
+      (home, "house.fill"),
+      (recent, "clock.fill"),
+      (library, "books.vertical.fill"),
+    ] {
+      template.tabTitle = template.title
+      template.tabImage = UIImage(systemName: symbol)
+      template.emptyViewTitleVariants = ["Nothing here yet"]
+    }
+    let tabs = CPTabBarTemplate(templates: [home, recent, library])
+    tabs.delegate = self
+    self.tabs = tabs
+    interfaceController.setRootTemplate(tabs, animated: false, completion: nil)
+    setUpNowPlaying()
+    CarPlayBridge.shared.onChange = { [weak self] in self?.reloadAll() }
+    reloadAll()
   }
 
   func templateApplicationScene(
     _ templateApplicationScene: CPTemplateApplicationScene,
     didDisconnectInterfaceController interfaceController: CPInterfaceController
   ) {
+    CPNowPlayingTemplate.shared.remove(self)
     self.interfaceController = nil
+    self.tabs = nil
     CarPlayBridge.shared.onChange = nil
   }
 
-  private func reloadRoot() {
-    CarPlayBridge.shared.children("root") { [weak self] entries in
+  func tabBarTemplate(_ tabBarTemplate: CPTabBarTemplate, didSelect selectedTemplate: CPTemplate) {
+    if selectedTemplate === home { reloadHome() }
+  }
+
+  private func reloadAll() {
+    reloadHome()
+    reloadRecent()
+    reloadLibrary()
+  }
+
+  /// Opened from the car with the app not running yet: Dart says "ready"
+  /// once it is, which reloads everything.
+  private func showNotRunning(_ template: CPListTemplate) {
+    let item = CPListItem(
+      text: "Open Musify on your iPhone",
+      detailText: "Your music shows here once it's running")
+    template.updateSections([CPListSection(items: [item])])
+  }
+
+  // The tabs -------------------------------------------------------------------
+
+  /// Like Spotify's: the greeting over a row of recent covers, then
+  /// what's playing, what's pinned, the playlists and folders.
+  private func reloadHome() {
+    CarPlayBridge.shared.call("home") { [weak self] result in
       guard let self else { return }
-      guard let entries else {
-        // Opened from the car with the app not running yet: Dart says
-        // "ready" once it is, which reloads this.
-        let item = CPListItem(
-          text: "Open Musify on your iPhone",
-          detailText: "Your library shows here once it's running")
-        self.root.updateSections([CPListSection(items: [item])])
-        return
+      guard let map = result as? [String: Any] else { return self.showNotRunning(self.home) }
+      let greeting = map["greeting"] as? String ?? "Musify"
+      let now = (map["nowPlaying"] as? [String: Any]).map(CarEntry.init)
+      let recent = Array(CarEntry.list(map["recent"]).prefix(CPMaximumNumberOfGridImages))
+      let lists: [(String, [CarEntry])] = [
+        ("Pinned", CarEntry.list(map["pinned"])),
+        ("Your playlists", CarEntry.list(map["playlists"])),
+        ("Your folders", CarEntry.list(map["folders"])),
+      ]
+      let side = CPListImageRowItem.maximumImageSize.width * 3
+      CarArtwork.images(recent, side: max(side, 120)) { covers in
+        var sections: [CPListSection] = []
+        if let now {
+          let item = self.listItems([now]).first!
+          item.isPlaying = true
+          sections.append(CPListSection(items: [item]))
+        }
+        let row = CPListImageRowItem(text: greeting, images: covers)
+        row.handler = { [weak self] _, done in
+          self?.showRecent()
+          done()
+        }
+        row.listImageRowHandler = { [weak self] _, index, done in
+          self?.open(recent[index], done: done)
+        }
+        sections.append(CPListSection(items: [row]))
+        for (header, entries) in lists where !entries.isEmpty {
+          sections.append(self.section(header, self.listItems(entries)))
+        }
+        self.home.updateSections(sections)
       }
-      self.root.updateSections([CPListSection(items: self.items(entries))])
     }
   }
 
-  private func items(_ entries: [[String: Any]]) -> [CPListItem] {
-    entries.prefix(CPListTemplate.maximumItemCount).map { entry in
-      let id = entry["id"] as? String ?? ""
-      let title = entry["title"] as? String ?? ""
-      let playable = entry["playable"] as? Bool ?? true
-      let item = CPListItem(text: title, detailText: entry["subtitle"] as? String)
-      if !playable { item.accessoryType = .disclosureIndicator }
-      item.handler = { [weak self] _, done in
-        if playable {
-          self?.play(id, done: done)
-        } else {
-          self?.open(id, title: title, done: done)
+  private func showRecent() {
+    if #available(iOS 17.0, *) {
+      tabs?.select(recent)
+    } else {
+      CarPlayBridge.shared.call("recent") { [weak self] result in
+        guard let self else { return }
+        let items = self.listItems(CarEntry.list(result))
+        self.push(CPListTemplate(title: "Recently Played", sections: [CPListSection(items: items)]))
+      }
+    }
+  }
+
+  private func reloadRecent() {
+    CarPlayBridge.shared.call("recent") { [weak self] result in
+      guard let self else { return }
+      guard result != nil else { return self.showNotRunning(self.recent) }
+      self.recent.updateSections([CPListSection(items: self.listItems(CarEntry.list(result)))])
+    }
+  }
+
+  private func reloadLibrary() {
+    CarPlayBridge.shared.call("library") { [weak self] result in
+      guard let self else { return }
+      guard let map = result as? [String: Any] else { return self.showNotRunning(self.library) }
+      let sections = [("Playlists", "playlists"), ("Folders", "folders"), ("Tags", "tags")]
+        .compactMap { pair -> CPListSection? in
+          let (header, key) = pair
+          let entries = CarEntry.list(map[key])
+          return entries.isEmpty ? nil : self.section(header, self.listItems(entries))
         }
+      self.library.updateSections(sections)
+    }
+  }
+
+  private func section(_ header: String, _ items: [CPListTemplateItem]) -> CPListSection {
+    CPListSection(
+      items: items, header: header, headerSubtitle: nil, headerImage: nil, headerButton: nil,
+      sectionIndexTitle: nil)
+  }
+
+  /// Rows that get their artwork once it's drawn (lists can be long).
+  private func listItems(_ entries: [CarEntry], in playlist: String? = nil) -> [CPListItem] {
+    let shown = Array(entries.prefix(CPListTemplate.maximumItemCount))
+    let items = shown.map { entry in
+      let item = CPListItem(text: entry.title, detailText: entry.subtitle)
+      if !entry.playable { item.accessoryType = .disclosureIndicator }
+      item.handler = { [weak self] _, done in
+        self?.select(entry, in: playlist, done: done)
       }
       return item
     }
+    CarArtwork.images(shown, side: 120) { images in
+      for (item, image) in zip(items, images) { item.setImage(image) }
+    }
+    return items
   }
 
-  /// A playlist: its songs.
-  private func open(_ id: String, title: String, done: @escaping () -> Void) {
-    CarPlayBridge.shared.children(id) { [weak self] entries in
+  private func select(_ entry: CarEntry, in playlist: String? = nil, done: @escaping () -> Void) {
+    if entry.id == "now-playing" {
+      showNowPlaying()
+      done()
+    } else if entry.playable {
+      play(["id": entry.id, "playlist": playlist ?? NSNull()], done: done)
+    } else {
+      open(entry, done: done)
+    }
+  }
+
+  /// A playlist: Shuffle, then its songs.
+  private func open(_ entry: CarEntry, done: @escaping () -> Void) {
+    CarPlayBridge.shared.call("children", entry.id) { [weak self] result in
       defer { done() }
-      guard let self, let entries, let interfaceController = self.interfaceController else { return }
+      guard let self, let interfaceController = self.interfaceController else { return }
+      let shuffle = CPListItem(
+        text: "Shuffle", detailText: nil, image: UIImage(systemName: "shuffle"))
+      shuffle.handler = { [weak self] _, done in
+        self?.play(["id": entry.id, "playlist": entry.id, "shuffle": true], done: done)
+      }
+      let songs = self.listItems(CarEntry.list(result), in: entry.id)
       let list = CPListTemplate(
-        title: title, sections: [CPListSection(items: self.items(entries))])
+        title: entry.title,
+        sections: [CPListSection(items: [shuffle]), CPListSection(items: songs)])
       interfaceController.pushTemplate(list, animated: true, completion: nil)
     }
   }
 
-  /// A song: plays it (with the rest of its playlist after it) and shows
-  /// Now Playing.
-  private func play(_ id: String, done: @escaping () -> Void) {
-    // The "Now playing" row (car_play.dart's nowPlayingId) only shows it.
-    if id == "now-playing" {
-      showNowPlaying()
-      return done()
-    }
-    CarPlayBridge.shared.play(id) { [weak self] in
+  /// Plays (a song with the rest of its playlist after it, or the playlist
+  /// shuffled) and shows Now Playing.
+  private func play(_ request: [String: Any], done: @escaping () -> Void) {
+    CarPlayBridge.shared.call("play", request) { [weak self] _ in
       self?.showNowPlaying()
       done()
     }
@@ -389,6 +612,128 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
       interfaceController.pop(to: nowPlaying, animated: true, completion: nil)
     } else {
       interfaceController.pushTemplate(nowPlaying, animated: true, completion: nil)
+    }
+  }
+
+  // Now Playing ------------------------------------------------------------------
+
+  /// CarPlay's own Now Playing screen (cover, controls and progress from
+  /// audio_service), with Queue at the top and buttons to add the song to
+  /// a playlist, tag it, and download it (YouTube songs).
+  private func setUpNowPlaying() {
+    let nowPlaying = CPNowPlayingTemplate.shared
+    nowPlaying.isUpNextButtonEnabled = true
+    nowPlaying.upNextTitle = "Queue"
+    nowPlaying.isAlbumArtistButtonEnabled = false
+    nowPlaying.add(self)
+    func button(_ symbol: String, _ action: @escaping () -> Void) -> CPNowPlayingButton {
+      let image = UIImage(systemName: symbol) ?? UIImage()
+      return CPNowPlayingImageButton(image: image) { _ in action() }
+    }
+    nowPlaying.updateNowPlayingButtons([
+      button("text.badge.plus") { [weak self] in self?.showAddToPlaylist() },
+      button("tag") { [weak self] in self?.showTags() },
+      button("arrow.down.circle") { [weak self] in self?.showDownload() },
+    ])
+  }
+
+  func nowPlayingTemplateUpNextButtonTapped(_ nowPlayingTemplate: CPNowPlayingTemplate) {
+    CarPlayBridge.shared.call("queue") { [weak self] result in
+      guard let self, let map = result as? [String: Any] else { return }
+      let queued = CarEntry.list(map["queued"])
+      let rest = CarEntry.list(map["rest"])
+      var sections: [CPListSection] = []
+      for (header, entries) in [
+        ("Next in queue", queued),
+        ((map["from"] as? String).map { "Next from: \($0)" } ?? "Next up", rest),
+      ] where !entries.isEmpty {
+        let items = self.listItems(entries)
+        for (item, entry) in zip(items, entries) {
+          item.handler = { [weak self] _, done in
+            CarPlayBridge.shared.call("jump", Int(entry.id) ?? 0) { _ in
+              self?.showNowPlaying()
+              done()
+            }
+          }
+        }
+        sections.append(self.section(header, items))
+      }
+      if sections.isEmpty {
+        sections = [CPListSection(items: [CPListItem(text: "Nothing up next", detailText: nil)])]
+      }
+      self.push(CPListTemplate(title: "Queue", sections: sections))
+    }
+  }
+
+  func nowPlayingTemplateAlbumArtistButtonTapped(_ nowPlayingTemplate: CPNowPlayingTemplate) {}
+
+  private func push(_ template: CPTemplate) {
+    interfaceController?.pushTemplate(template, animated: true, completion: nil)
+  }
+
+  /// A list of choices from Dart ({items} or a {note} saying why not),
+  /// each ticked when "on".
+  private func choices(
+    _ method: String, title: String, onTap: @escaping (CarEntry, CPListItem) -> Void
+  ) {
+    CarPlayBridge.shared.call(method) { [weak self] result in
+      guard let self else { return }
+      let map = result as? [String: Any] ?? [:]
+      let raw = map["items"] as? [[String: Any]] ?? []
+      guard !raw.isEmpty else {
+        let note = map["note"] as? String ?? "Open Musify on your iPhone"
+        let item = CPListItem(text: note, detailText: nil)
+        return self.push(CPListTemplate(title: title, sections: [CPListSection(items: [item])]))
+      }
+      let entries = raw.map(CarEntry.init)
+      let items = self.listItems(entries)
+      for (index, item) in items.enumerated() {
+        let entry = entries[index]
+        self.tick(item, raw[index]["on"] as? Bool ?? false)
+        item.accessoryType = .none
+        item.handler = { [weak item] _, done in
+          if let item { onTap(entry, item) }
+          done()
+        }
+      }
+      self.push(CPListTemplate(title: title, sections: [CPListSection(items: items)]))
+    }
+  }
+
+  private func tick(_ item: CPListItem, _ on: Bool) {
+    item.setAccessoryImage(on ? UIImage(systemName: "checkmark") : nil)
+  }
+
+  private func showAddToPlaylist() {
+    choices("addTargets", title: "Add to playlist") { entry, item in
+      CarPlayBridge.shared.call("toggleInPlaylist", entry.id) { [weak self] added in
+        self?.tick(item, added as? Bool ?? false)
+      }
+    }
+  }
+
+  private func showTags() {
+    choices("tags", title: "Tag") { entry, item in
+      CarPlayBridge.shared.call("toggleTag", entry.id) { [weak self] on in
+        self?.tick(item, on as? Bool ?? false)
+      }
+    }
+  }
+
+  private func showDownload() {
+    choices("downloadTargets", title: "Download to") { entry, _ in
+      CarPlayBridge.shared.call("download", entry.id) { [weak self] message in
+        guard let self, let interfaceController = self.interfaceController else { return }
+        self.showNowPlaying()
+        let alert = CPAlertTemplate(
+          titleVariants: [message as? String ?? "Downloading"],
+          actions: [
+            CPAlertAction(title: "OK", style: .default) { [weak interfaceController] _ in
+              interfaceController?.dismissTemplate(animated: true, completion: nil)
+            }
+          ])
+        interfaceController.presentTemplate(alert, animated: true, completion: nil)
+      }
     }
   }
 }
