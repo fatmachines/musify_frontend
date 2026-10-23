@@ -149,7 +149,7 @@ offline.
 | 5.14 | Fully close the app while playing, then reopen. | The same song comes back **paused** where it was, with its queue. |
 | 5.15 | **Equalizer** (Settings): turn it on, pick presets, drag the bands. | The sound changes right away. Off gives the original sound. |
 | 5.16 | iPhone: Siri, "Play Album 1 on Musify". | Plays that playlist. |
-| 5.17 | In a car: CarPlay or Android Auto. | Now Playing shows and controls work. (CarPlay can't browse the library: known.) |
+| 5.17 | In a car: CarPlay or Android Auto. | Now Playing shows and controls work. CarPlay lists Liked Songs, playlists, folders and tags; tapping one shows its songs, tapping a song plays it and opens Now Playing. Renaming a playlist on the phone updates the car's list. |
 | 5.18 | Settings → Appearance: Light, Dark, Same as this device. Then change the phone's own setting. | Switches instantly, everywhere, including open screens. |
 
 ---
@@ -337,7 +337,7 @@ internet back on: first on one device, then on the other.
 ## 14. Known limits (not bugs)
 
 - **iPhone app:** only available by building it with Xcode (no App Store).
-- **CarPlay:** shows Now Playing only; browsing needs an Apple entitlement.
+- **CarPlay:** browsing needs Apple's CarPlay audio entitlement. Opened from the car with Musify not running, it asks to open Musify on the iPhone first.
 - **First play of a YouTube song:** a short blip a few seconds in, when it switches to the server's stream.
 - **Remote control:** about 3 seconds of delay. The idle device's lock-screen controls only control that device.
 - **Top-level folders** you added can't be renamed in the app.

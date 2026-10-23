@@ -1,3 +1,4 @@
+import CarPlay
 import Flutter
 import Intents
 import UIKit
@@ -25,6 +26,11 @@ import UniformTypeIdentifiers
       engineBridge.pluginRegistry.registrar(forPlugin: "SiriBridge")
     if let siriRegistrar {
       SiriBridge.shared.attach(messenger: siriRegistrar.messenger())
+    }
+    let carPlayRegistrar: FlutterPluginRegistrar? =
+      engineBridge.pluginRegistry.registrar(forPlugin: "CarPlayBridge")
+    if let carPlayRegistrar {
+      CarPlayBridge.shared.attach(messenger: carPlayRegistrar.messenger())
     }
   }
 
@@ -248,6 +254,132 @@ final class SiriBridge: NSObject, INPlayMediaIntentHandling {
     case .artist: return "artist"
     case .album: return "album"
     default: return "any"
+    }
+  }
+}
+
+/// CarPlay's library screens. The car connects its own scene (Info.plist,
+/// CPTemplateApplicationSceneSessionRoleApplication); its lists come from
+/// Dart (CarPlay in car_play.dart) over the "musify/carplay" channel, the
+/// same tree Android Auto browses. Now Playing is CarPlay's own screen,
+/// fed by audio_service like the lock screen.
+final class CarPlayBridge: NSObject {
+  static let shared = CarPlayBridge()
+
+  private var channel: FlutterMethodChannel?
+  private(set) var dartReady = false
+  /// The car's screen, to reload when Dart starts or the library changes.
+  var onChange: (() -> Void)?
+
+  func attach(messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(name: "musify/carplay", binaryMessenger: messenger)
+    channel.setMethodCallHandler { [weak self] call, result in
+      switch call.method {
+      case "ready", "changed":
+        self?.dartReady = true
+        self?.onChange?()
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    self.channel = channel
+  }
+
+  /// What's inside [parent] ("root" for the top list), or nil when Dart
+  /// isn't running.
+  func children(_ parent: String, completion: @escaping ([[String: Any]]?) -> Void) {
+    guard dartReady, let channel else { return completion(nil) }
+    channel.invokeMethod("children", arguments: parent) { result in
+      completion(result as? [[String: Any]])
+    }
+  }
+
+  func play(_ id: String, completion: @escaping () -> Void) {
+    guard dartReady, let channel else { return completion() }
+    channel.invokeMethod("play", arguments: id) { _ in completion() }
+  }
+}
+
+class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
+  private var interfaceController: CPInterfaceController?
+  private let root = CPListTemplate(title: "Musify", sections: [])
+
+  func templateApplicationScene(
+    _ templateApplicationScene: CPTemplateApplicationScene,
+    didConnect interfaceController: CPInterfaceController
+  ) {
+    self.interfaceController = interfaceController
+    interfaceController.setRootTemplate(root, animated: false, completion: nil)
+    CarPlayBridge.shared.onChange = { [weak self] in self?.reloadRoot() }
+    reloadRoot()
+  }
+
+  func templateApplicationScene(
+    _ templateApplicationScene: CPTemplateApplicationScene,
+    didDisconnectInterfaceController interfaceController: CPInterfaceController
+  ) {
+    self.interfaceController = nil
+    CarPlayBridge.shared.onChange = nil
+  }
+
+  private func reloadRoot() {
+    CarPlayBridge.shared.children("root") { [weak self] entries in
+      guard let self else { return }
+      guard let entries else {
+        // Opened from the car with the app not running yet: Dart says
+        // "ready" once it is, which reloads this.
+        let item = CPListItem(
+          text: "Open Musify on your iPhone",
+          detailText: "Your library shows here once it's running")
+        self.root.updateSections([CPListSection(items: [item])])
+        return
+      }
+      self.root.updateSections([CPListSection(items: self.items(entries))])
+    }
+  }
+
+  private func items(_ entries: [[String: Any]]) -> [CPListItem] {
+    entries.prefix(CPListTemplate.maximumItemCount).map { entry in
+      let id = entry["id"] as? String ?? ""
+      let title = entry["title"] as? String ?? ""
+      let playable = entry["playable"] as? Bool ?? true
+      let item = CPListItem(text: title, detailText: entry["subtitle"] as? String)
+      if !playable { item.accessoryType = .disclosureIndicator }
+      item.handler = { [weak self] _, done in
+        if playable {
+          self?.play(id, done: done)
+        } else {
+          self?.open(id, title: title, done: done)
+        }
+      }
+      return item
+    }
+  }
+
+  /// A playlist: its songs.
+  private func open(_ id: String, title: String, done: @escaping () -> Void) {
+    CarPlayBridge.shared.children(id) { [weak self] entries in
+      defer { done() }
+      guard let self, let entries, let interfaceController = self.interfaceController else { return }
+      let list = CPListTemplate(
+        title: title, sections: [CPListSection(items: self.items(entries))])
+      interfaceController.pushTemplate(list, animated: true, completion: nil)
+    }
+  }
+
+  /// A song: plays it (with the rest of its playlist after it) and shows
+  /// Now Playing.
+  private func play(_ id: String, done: @escaping () -> Void) {
+    CarPlayBridge.shared.play(id) { [weak self] in
+      defer { done() }
+      guard let interfaceController = self?.interfaceController else { return }
+      let nowPlaying = CPNowPlayingTemplate.shared
+      if interfaceController.templates.contains(where: { $0 === nowPlaying }) {
+        interfaceController.pop(to: nowPlaying, animated: true, completion: nil)
+      } else {
+        interfaceController.pushTemplate(nowPlaying, animated: true, completion: nil)
+      }
     }
   }
 }

@@ -9,6 +9,7 @@ import 'services/app_log.dart';
 import 'services/musify_server.dart';
 import 'services/appearance.dart';
 import 'services/audio_handler.dart';
+import 'services/car_play.dart';
 import 'services/equalizer_service.dart';
 import 'services/playback_session.dart';
 import 'services/player_service.dart';
@@ -35,7 +36,7 @@ Future<void> main() async {
   await MusifyServer.instance.load();
   await PlayerService.init();
   try {
-    await AudioService.init(
+    final handler = await AudioService.init(
       builder: MusifyAudioHandler.new,
       config: AudioServiceConfig(
         androidNotificationChannelId: 'com.fatmachines.musify.playback',
@@ -43,6 +44,8 @@ Future<void> main() async {
         androidNotificationOngoing: true,
       ),
     );
+    // CarPlay browses the same playlists as Android Auto.
+    CarPlay.init(handler);
   } catch (e) {
     AppLog.add('audio service setup failed: $e');
   }

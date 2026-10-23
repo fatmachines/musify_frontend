@@ -105,8 +105,8 @@ Music/
 - **Equalizer**: 10 bands you drag into shape, and presets (Rock, Bass
   Booster, Vocal and more), on iPhone, Mac and Android.
 - **Lock screen and Control Center**, AirPods and headphone buttons,
-  **Siri** ("play Thriller on Musify"), **Android Auto**, and CarPlay's Now
-  Playing.
+  **Siri** ("play Thriller on Musify"), **Android Auto** and **CarPlay**
+  (your playlists, folders and tags, and Now Playing).
 - **Light or dark**, or as the device is set.
 - Comes back after a restart paused where you left off, queue and all.
 
@@ -210,8 +210,11 @@ flutter run            # on a connected phone
    Siri).
 4. `flutter run`, or Run in Xcode.
 
-CarPlay needs Apple's CarPlay audio entitlement, which Apple gives on
-request; without it Musify shows in CarPlay's Now Playing only.
+CarPlay needs Apple's CarPlay audio entitlement
+(`com.apple.developer.carplay-audio` in `Runner.entitlements`), which Apple
+gives on request. Without it, remove that line: Musify then shows in
+CarPlay's Now Playing only. Xcode's CarPlay simulator (I/O → External
+Displays → CarPlay) works with a development build.
 
 ### Mac
 
