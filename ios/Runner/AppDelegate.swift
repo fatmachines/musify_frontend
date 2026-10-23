@@ -260,7 +260,7 @@ final class SiriBridge: NSObject, INPlayMediaIntentHandling {
 
 /// CarPlay's screens, in the style of Spotify's: tabs for Home, Recently
 /// Played and Your Library; Home has the greeting over a row of recent
-/// covers, then what's playing, pinned, playlists and folders. The car
+/// covers, then pinned, playlists and folders. The car
 /// connects its own scene (Info.plist,
 /// CPTemplateApplicationSceneSessionRoleApplication); the lists come from
 /// Dart (CarPlay in car_play.dart) over the "musify/carplay" channel. Now
@@ -472,13 +472,12 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate,
   // The tabs -------------------------------------------------------------------
 
   /// Like Spotify's: the greeting over a row of recent covers, then
-  /// what's playing, what's pinned, the playlists and folders.
+  /// what's pinned, the playlists and folders.
   private func reloadHome() {
     CarPlayBridge.shared.call("home") { [weak self] result in
       guard let self else { return }
       guard let map = result as? [String: Any] else { return self.showNotRunning(self.home) }
       let greeting = map["greeting"] as? String ?? "Musify"
-      let now = (map["nowPlaying"] as? [String: Any]).map(CarEntry.init)
       let recent = Array(CarEntry.list(map["recent"]).prefix(CPMaximumNumberOfGridImages))
       let lists: [(String, [CarEntry])] = [
         ("Pinned", CarEntry.list(map["pinned"])),
@@ -488,11 +487,6 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate,
       let side = CPListImageRowItem.maximumImageSize.width * 3
       CarArtwork.images(recent, side: max(side, 120)) { covers in
         var sections: [CPListSection] = []
-        if let now {
-          let item = self.listItems([now]).first!
-          item.isPlaying = true
-          sections.append(CPListSection(items: [item]))
-        }
         let row = CPListImageRowItem(text: greeting, images: covers)
         row.handler = { [weak self] _, done in
           self?.showRecent()
@@ -568,10 +562,7 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate,
   }
 
   private func select(_ entry: CarEntry, in playlist: String? = nil, done: @escaping () -> Void) {
-    if entry.id == "now-playing" {
-      showNowPlaying()
-      done()
-    } else if entry.playable {
+    if entry.playable {
       play(["id": entry.id, "playlist": playlist ?? NSNull()], done: done)
     } else {
       open(entry, done: done)

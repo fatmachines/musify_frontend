@@ -30,7 +30,6 @@ import 'player_service.dart';
 class CarPlay {
   static const _channel = MethodChannel('musify/carplay');
   static const _recentKey = 'carplay_recent';
-  static const nowPlayingId = 'now-playing';
 
   /// Songs shown with their covers in a playlist (reading covers is slow).
   static const _coveredSongs = 100;
@@ -80,7 +79,7 @@ class CarPlay {
     await library.ensureLoaded();
     switch (call.method) {
       case 'home':
-        return _home(handler);
+        return _home();
       case 'recent':
         return Future.wait(_recentPlaylists().map(_playlistEntry));
       case 'library':
@@ -320,12 +319,10 @@ class CarPlay {
   }
 
   /// Spotify's car Home: the greeting over a row of recent covers, then
-  /// what's pinned, the user's playlists and folders.
-  static Future<Map<String, Object?>> _home(AudioHandler handler) async {
+  /// what's pinned, the user's playlists and folders. (Now Playing is
+  /// CarPlay's own button, top right.)
+  static Future<Map<String, Object?>> _home() async {
     final library = Library.instance;
-    final player = PlayerService.instance;
-    final playing = handler.mediaItem.value;
-    final art = playing?.artUri;
     final (playlists, folders, _) = _library();
     var recent = _recentPlaylists();
     if (recent.isEmpty) {
@@ -336,15 +333,6 @@ class CarPlay {
         Future.wait(list.take(8).map(_playlistEntry));
     return {
       'greeting': HomeTab.greeting(),
-      if (playing != null && player.currentTrack != null)
-        'nowPlaying': {
-          'id': nowPlayingId,
-          'title': playing.title,
-          'subtitle': ['Now playing', ?playing.artist].join(' · '),
-          'playable': true,
-          'art': 'song',
-          'images': [if (art != null && art.isScheme('file')) art.toFilePath()],
-        },
       'recent': await entries(recent),
       'pinned': await entries(library.pinned),
       'playlists': await entries(playlists),
