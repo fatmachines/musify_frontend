@@ -33,11 +33,19 @@ class ScanResult {
 class LibraryScanner {
   /// Walks [rootPath] off the UI isolate and returns one playlist per folder
   /// that holds audio files, sorted by relative path.
-  static Future<ScanResult> scan(String rootPath) {
-    return Isolate.run(() => _scanSync(rootPath));
+  ///
+  /// A folder's songs are in the order they were added (oldest first, so
+  /// new songs come last); songs added together, like an album copied in
+  /// one go, are in name order. Added means the file's change time
+  /// (ctime), which a copy, download or move sets.
+  static Future<ScanResult> scan(
+    String rootPath, {
+    Duration batchGap = const Duration(minutes: 2),
+  }) {
+    return Isolate.run(() => _scanSync(rootPath, batchGap));
   }
 
-  static ScanResult _scanSync(String rootPath) {
+  static ScanResult _scanSync(String rootPath, Duration batchGap) {
     final log = <String>['scan: root=$rootPath'];
     final playlists = <Playlist>[];
     final pending = [Directory(rootPath)];
@@ -60,7 +68,7 @@ class LibraryScanner {
         continue;
       }
 
-      final tracks = <Track>[];
+      final found = <(Track, DateTime)>[];
       final skipped = <String>[];
       var dirs = 0;
       for (final entry in entries) {
@@ -74,12 +82,13 @@ class LibraryScanner {
           pending.add(entry);
         } else if (entry is File &&
             audioExtensions.contains(p.extension(name).toLowerCase())) {
-          tracks.add(Track(entry.path));
+          found.add((Track(entry.path), entry.statSync().changed));
         } else {
           skipped.add('$name (${entry.runtimeType})');
         }
       }
 
+      final tracks = _inAddedOrder(found, batchGap);
       log.add(
         'scan: [$rel] entries=${entries.length} dirs=$dirs '
         'audio=${tracks.length} skipped=${skipped.length}',
@@ -89,9 +98,6 @@ class LibraryScanner {
       }
 
       if (tracks.isNotEmpty) {
-        tracks.sort(
-          (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
-        );
         playlists.add(
           Playlist(
             id: dir.path,
@@ -108,5 +114,28 @@ class LibraryScanner {
     );
     log.add('scan: done, playlists=${playlists.length}');
     return ScanResult(playlists, log, rootError);
+  }
+
+  /// Oldest first; songs added within [batchGap] of each other count as
+  /// one batch, in name order.
+  static List<Track> _inAddedOrder(
+    List<(Track, DateTime)> found,
+    Duration batchGap,
+  ) {
+    int byName(Track a, Track b) =>
+        a.title.toLowerCase().compareTo(b.title.toLowerCase());
+    found.sort((a, b) => a.$2.compareTo(b.$2));
+    final ordered = <Track>[];
+    var batch = <Track>[];
+    DateTime? previous;
+    for (final (track, added) in found) {
+      if (previous != null && added.difference(previous) > batchGap) {
+        ordered.addAll(batch..sort(byName));
+        batch = [];
+      }
+      batch.add(track);
+      previous = added;
+    }
+    return ordered..addAll(batch..sort(byName));
   }
 }

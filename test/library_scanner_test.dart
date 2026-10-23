@@ -34,6 +34,21 @@ void main() {
     expect(playlists[1].tracks.last.extension, 'FLAC');
   });
 
+  test('songs added later come last; ones added together by name', () async {
+    Future<void> add(String name) =>
+        File(p.join(root.path, 'New', name)).create(recursive: true);
+    await add('m.mp3');
+    await add('c.mp3');
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    await add('a.mp3');
+    final playlists = (await LibraryScanner.scan(
+      root.path,
+      batchGap: const Duration(milliseconds: 100),
+    )).playlists;
+    final folder = playlists.firstWhere((pl) => pl.location == 'New');
+    expect(folder.tracks.map((t) => t.title), ['c', 'm', 'a']);
+  });
+
   test('unreadable root is reported instead of looking empty', () async {
     final result = await LibraryScanner.scan(p.join(root.path, 'missing'));
     expect(result.rootError, isNotNull);

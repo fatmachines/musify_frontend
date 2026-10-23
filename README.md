@@ -57,7 +57,9 @@ Music/
 - **Files stay files.** Musify reads MP3, M4A/AAC, FLAC, WAV, OGG and more,
   with titles, artists, covers and lyrics from their tags. Nothing is
   copied or converted. Add as many folders as you like; **Rescan** (or
-  pull down) picks up songs you add later.
+  pull down) picks up songs you add later. A folder's songs are in the
+  order they were added, so new ones come last (an album copied in one go
+  keeps name order).
 - **Folders can be managed from the app**: rename a folder (it's renamed
   on disk; its songs stay in your playlists, likes and tags, and what's
   playing carries on), hide a folder you don't want to see, move a song to
