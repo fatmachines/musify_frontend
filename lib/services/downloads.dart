@@ -236,9 +236,12 @@ class Downloads extends ChangeNotifier {
       _safe(track.name, track.videoId);
 
   static String _safe(String raw, String fallback) {
+    // Quotes become single ones rather than gaps: Darasal (From 'Raabta').
     final safe = raw
-        .replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1F]'), ' ')
+        .replaceAll('"', "'")
+        .replaceAll(RegExp(r'[\\/:*?<>|\x00-\x1F]'), ' ')
         .replaceAll(RegExp(r'\s+'), ' ')
+        .replaceAllMapped(RegExp(r'([(\[]) | ([)\]])'), (m) => m[1] ?? m[2]!)
         .trim();
     final name = safe.isEmpty || safe.startsWith('.') ? fallback : safe;
     return name.length > 120 ? name.substring(0, 120).trim() : name;

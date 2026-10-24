@@ -341,10 +341,11 @@ class _SearchTabState extends State<SearchTab> {
           padding: EdgeInsets.only(
             bottom: MediaQuery.paddingOf(context).bottom + 16,
           ),
-          // Your music, then a "YouTube" heading and what YouTube found.
-          itemCount: top + local + 1 + (youtube?.length ?? 0),
+          // Your music, then the artist, then a "YouTube" heading and what
+          // YouTube found.
+          itemCount: local + top + 1 + (youtube?.length ?? 0),
           itemBuilder: (context, row) {
-            if (artist != null && row == 0) {
+            if (artist != null && row == local) {
               return _ArtistCard(
                 artist: artist,
                 onTap: () {
@@ -353,7 +354,7 @@ class _SearchTabState extends State<SearchTab> {
                 },
               );
             }
-            final i = row - top;
+            final i = row < local ? row : row - top;
             if (i == local) {
               return _YouTubeHeading(
                 searching: searching,

@@ -109,6 +109,22 @@ void main() {
     expect(library.placesOf(song), ['Rock', 'Gym']);
   });
 
+  test('folders at the same path in two music folders say which', () async {
+    await touch(second, 'Rock/d.mp3');
+    SharedPreferences.setMockInitialValues({
+      'library_folders': [first.path, second.path],
+    });
+    final library = Library.fresh();
+    await library.ensureLoaded();
+    final rocks = library.all.where((pl) => pl.name == 'Rock').toList();
+    expect(rocks.map(library.locationLabel).toSet(), {
+      p.join(p.basename(first.path), 'Rock'),
+      p.join(p.basename(second.path), 'Rock'),
+    });
+    final pop = library.all.firstWhere((pl) => pl.name == 'Pop');
+    expect(library.locationLabel(pop), 'Pop');
+  });
+
   test('songs that disappeared drop out of user playlists', () async {
     SharedPreferences.setMockInitialValues({
       'library_folders': [second.path],

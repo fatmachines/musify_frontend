@@ -397,6 +397,15 @@ enum CarArtwork {
       x: rect.midX - image.size.width / 2, y: rect.midY - image.size.height / 2))
   }
 
+  /// A plain tile rows start with, so they don't shift when their artwork
+  /// arrives.
+  static let blank: UIImage = UIGraphicsImageRenderer(
+    size: CGSize(width: 120, height: 120)
+  ).image { context in
+    rgb(0x282828).setFill()
+    context.fill(CGRect(x: 0, y: 0, width: 120, height: 120))
+  }
+
   /// Draws [entries]' artwork off the main thread.
   static func images(
     _ entries: [CarEntry], side: CGFloat = 240, completion: @escaping ([UIImage]) -> Void
@@ -545,10 +554,14 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate,
   }
 
   /// Rows that get their artwork once it's drawn (lists can be long).
+  /// Rows that get their artwork once it's drawn (lists can be long). A
+  /// list longer than the car shows ends with a row saying so.
   private func listItems(_ entries: [CarEntry], in playlist: String? = nil) -> [CPListItem] {
-    let shown = Array(entries.prefix(CPListTemplate.maximumItemCount))
+    let limit = CPListTemplate.maximumItemCount
+    let cut = entries.count > limit
+    let shown = Array(entries.prefix(cut ? limit - 1 : limit))
     let items = shown.map { entry in
-      let item = CPListItem(text: entry.title, detailText: entry.subtitle)
+      let item = CPListItem(text: entry.title, detailText: entry.subtitle, image: CarArtwork.blank)
       if !entry.playable { item.accessoryType = .disclosureIndicator }
       item.handler = { [weak self] _, done in
         self?.select(entry, in: playlist, done: done)
@@ -558,7 +571,12 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate,
     CarArtwork.images(shown, side: 120) { images in
       for (item, image) in zip(items, images) { item.setImage(image) }
     }
-    return items
+    guard cut else { return items }
+    let more = CPListItem(
+      text: "\(entries.count - shown.count) more",
+      detailText: playlist == nil ? "See them in Musify on your iPhone" : "Shuffle plays them all")
+    more.isEnabled = false
+    return items + [more]
   }
 
   private func select(_ entry: CarEntry, in playlist: String? = nil, done: @escaping () -> Void) {
@@ -678,7 +696,8 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate,
       }
       let entries = raw.map(CarEntry.init)
       let items = self.listItems(entries)
-      for (index, item) in items.enumerated() {
+      // Not the "N more" row a short car list ends with.
+      for (index, item) in items.enumerated() where item.isEnabled {
         let entry = entries[index]
         self.tick(item, raw[index]["on"] as? Bool ?? false)
         item.accessoryType = .none
@@ -697,8 +716,11 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate,
 
   private func showAddToPlaylist() {
     choices("addTargets", title: "Add to playlist") { entry, item in
-      CarPlayBridge.shared.call("toggleInPlaylist", entry.id) { [weak self] added in
-        self?.tick(item, added as? Bool ?? false)
+      CarPlayBridge.shared.call("toggleInPlaylist", entry.id) { [weak self] answer in
+        let map = answer as? [String: Any] ?? [:]
+        self?.tick(item, map["on"] as? Bool ?? false)
+        // "1 song" now, not the count from before.
+        if let count = map["subtitle"] as? String { item.setDetailText(count) }
       }
     }
   }
@@ -724,6 +746,13 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate,
             }
           ])
         interfaceController.presentTemplate(alert, animated: true, completion: nil)
+        // A confirmation, not a question: it goes away by itself.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak interfaceController] in
+          guard let interfaceController, interfaceController.presentedTemplate === alert else {
+            return
+          }
+          interfaceController.dismissTemplate(animated: true, completion: nil)
+        }
       }
     }
   }

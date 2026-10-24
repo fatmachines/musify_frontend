@@ -245,9 +245,12 @@ class _PlaylistTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final songs = playlist.tracks.length;
     final count = '$songs ${songs == 1 ? 'song' : 'songs'}';
-    final location = playlist.location;
-    // Only nested folders need their path to tell them apart.
-    final detail = playlist.isCustom
+    final location = playlist.isCustom
+        ? null
+        : Library.instance.locationLabel(playlist);
+    // Only nested folders (or ones in two music folders) need their path to
+    // tell them apart.
+    final detail = location == null
         ? 'Playlist • $count'
         : location != '.' && location != playlist.name
         ? 'Folder • $location'

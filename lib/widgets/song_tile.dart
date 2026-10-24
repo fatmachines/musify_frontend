@@ -85,6 +85,9 @@ class SongTile extends StatelessWidget {
       onSwipeLeft: youtube ? null : () => _swipeTag(context),
       child: InkWell(
         onTap: onTap,
+        // Right-click (the Mac) or long-press: the same menu as •••.
+        onSecondaryTap: onMore,
+        onLongPress: onMore,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
           child: Row(

@@ -790,53 +790,54 @@ void showQueueSheet(BuildContext context) {
       child: StreamBuilder<SequenceState>(
         stream: player.sequenceStateStream,
         initialData: player.sequenceState,
-        builder: (context, snapshot) {
-          final state = snapshot.data!;
-          final sequence = state.sequence;
-          final current = state.currentIndex ?? -1;
-          final upNext = [
-            for (var i = current + 1; i < sequence.length; i++) i,
-          ];
-          final queued = [
-            for (final i in upNext)
-              if (sequence[i].tag is QueuedTrack) i,
-          ];
-          final rest = [
-            for (final i in upNext)
-              if (sequence[i].tag is! QueuedTrack) i,
-          ];
-          Widget tile(int i) => _QueueTile(
-            track: sequence[i].tag as Track,
-            onTap: () => player.seek(Duration.zero, index: i),
-          );
-          return ListView(
-            children: [
-              const _QueueHeading('Now playing'),
-              if (current >= 0 && sequence[current].tag is Track)
-                _QueueTile(
-                  track: sequence[current].tag as Track,
-                  playing: true,
-                ),
-              if (queued.isNotEmpty)
-                _QueueHeading(
-                  'Next in queue',
-                  action: TextButton(
-                    onPressed: PlayerService.instance.clearQueue,
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.subtle,
-                    ),
-                    child: const Text('Clear queue'),
-                  ),
-                ),
-              for (final i in queued) tile(i),
-              if (rest.isNotEmpty)
-                _QueueHeading('Next from: ${playlist?.name ?? ''}'),
-              for (final i in rest) tile(i),
-            ],
-          );
-        },
+        builder: (context, snapshot) => FutureBuilder(
+          // Songs restored at launch may not have had their tags read yet.
+          future: MetadataService.loadInfo([
+            for (final source in snapshot.data!.sequence)
+              if (source.tag case final Track track) track,
+          ]),
+          builder: (context, _) => _queueList(snapshot.data!, playlist),
+        ),
       ),
     ),
+  );
+}
+
+Widget _queueList(SequenceState state, Playlist? playlist) {
+  final player = PlayerService.instance.player;
+  final sequence = state.sequence;
+  final current = state.currentIndex ?? -1;
+  final upNext = [for (var i = current + 1; i < sequence.length; i++) i];
+  final queued = [
+    for (final i in upNext)
+      if (sequence[i].tag is QueuedTrack) i,
+  ];
+  final rest = [
+    for (final i in upNext)
+      if (sequence[i].tag is! QueuedTrack) i,
+  ];
+  Widget tile(int i) => _QueueTile(
+    track: sequence[i].tag as Track,
+    onTap: () => player.seek(Duration.zero, index: i),
+  );
+  return ListView(
+    children: [
+      const _QueueHeading('Now playing'),
+      if (current >= 0 && sequence[current].tag is Track)
+        _QueueTile(track: sequence[current].tag as Track, playing: true),
+      if (queued.isNotEmpty)
+        _QueueHeading(
+          'Next in queue',
+          action: TextButton(
+            onPressed: PlayerService.instance.clearQueue,
+            style: TextButton.styleFrom(foregroundColor: AppColors.subtle),
+            child: const Text('Clear queue'),
+          ),
+        ),
+      for (final i in queued) tile(i),
+      if (rest.isNotEmpty) _QueueHeading('Next from: ${playlist?.name ?? ''}'),
+      for (final i in rest) tile(i),
+    ],
   );
 }
 

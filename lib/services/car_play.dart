@@ -193,17 +193,18 @@ class CarPlay {
     };
   }
 
-  static bool _toggleInPlaylist(String id) {
+  /// Whether the song is in the playlist now, and its new song count.
+  static Map<String, Object?> _toggleInPlaylist(String id) {
     final track = _playingTrack();
     final library = Library.instance;
     final playlist = library.byId(id);
-    if (track == null || playlist == null) return false;
-    if (library.contains(playlist, track)) {
-      library.removeTrack(playlist, track);
-      return false;
-    }
-    library.addTrack(playlist, track);
-    return true;
+    if (track == null || playlist == null) return {'on': false};
+    final on = !library.contains(playlist, track);
+    on
+        ? library.addTrack(playlist, track)
+        : library.removeTrack(playlist, track);
+    final count = library.byId(id)?.tracks.length ?? 0;
+    return {'on': on, 'subtitle': count == 1 ? '1 song' : '$count songs'};
   }
 
   static Map<String, Object?> _tags() {
@@ -211,7 +212,7 @@ class CarPlay {
     final library = Library.instance;
     if (track == null) return {'note': 'Nothing is playing'};
     if (track is YouTubeTrack) {
-      return {'note': 'YouTube songs can be tagged once downloaded'};
+      return {'note': 'Download it to tag it'};
     }
     if (library.tags.isEmpty) {
       return {'note': 'Make a tag in Musify on your iPhone first'};
@@ -282,9 +283,10 @@ class CarPlay {
     final track = _playingTrack();
     if (track is! YouTubeTrack) return 'Nothing to download';
     final downloads = Downloads.instance;
+    // Short: the car cuts long lines (and YouTube titles are long).
     final message = downloads.current == null
-        ? 'Downloading ${track.name} to ${p.basename(folder)}'
-        : 'Will download after the current song';
+        ? 'Downloading to ${p.basename(folder)}'
+        : 'Downloading next, to ${p.basename(folder)}';
     downloads.download(
       track,
       folder,

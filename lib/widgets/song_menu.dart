@@ -124,7 +124,7 @@ Future<void> showSongMenu(
                 ListTile(
                   leading: const Icon(Icons.download_rounded),
                   title: const Text('Download'),
-                  subtitle: const Text('Save to a folder on this phone'),
+                  subtitle: const Text('Save to a folder on this device'),
                   onTap: () => then(() => downloadWithPicker(context, track)),
                 ),
               if (from != null && from.isCustom && !Library.isRemote(from))
@@ -184,7 +184,7 @@ Future<void> _confirmDelete(BuildContext context, Track track) async {
       backgroundColor: AppColors.elevated,
       title: Text('Delete "$name"?'),
       content: const Text(
-        'The file is deleted from this phone, and the song leaves every '
+        'The file is deleted from this device, and the song leaves every '
         'playlist. This can\'t be undone.',
       ),
       actions: [
@@ -217,6 +217,7 @@ Future<void> _move(BuildContext context, Track track) async {
     context,
     title: 'Move "$name" to',
     remember: false,
+    except: p.dirname(track.path),
   );
   if (folder == null ||
       !overlay.mounted ||

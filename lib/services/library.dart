@@ -194,6 +194,23 @@ class Library extends ChangeNotifier {
 
   /// Where [track] lives: its folder, then the playlists the user made
   /// that hold it (shown on a tag's songs).
+  /// Where folder [playlist] is, for telling folders apart: its path in
+  /// its music folder, starting with that music folder's name when
+  /// another music folder has one at the same path.
+  String locationLabel(Playlist playlist) {
+    final location = playlist.location ?? '';
+    final twins = _folderPlaylists.where((pl) => pl.location == location);
+    if (twins.length < 2) return location;
+    for (final folder in _folders) {
+      if (p.isWithin(folder.path, playlist.id) ||
+          p.equals(folder.path, playlist.id)) {
+        final root = p.basename(folder.path);
+        return location == '.' ? root : p.join(root, location);
+      }
+    }
+    return location;
+  }
+
   List<String> placesOf(Track track) {
     final folder = p.dirname(track.path);
     return [
