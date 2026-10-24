@@ -447,6 +447,7 @@ class Library extends ChangeNotifier {
     final affected = sequence.any(
       (t) => t is! YouTubeTrack && p.isWithin(from, t.path),
     );
+    final order = player.order;
     final index = player.player.currentIndex;
     final position = player.player.position;
     final wasPlaying = player.player.playing;
@@ -508,6 +509,7 @@ class Library extends ChangeNotifier {
       await player.restore(
         playlist: current == null ? null : byId(currentId(current.id)),
         sequence: sequence.map(there).toList(),
+        order: order.map(there).toList(),
         index: index,
         position: position,
         shuffle: player.shuffleOn.value,

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_platform_interface/just_audio_platform_interface.dart';
 import 'package:musify/models/playlist.dart';
 import 'package:musify/services/playback_session.dart';
@@ -184,5 +185,108 @@ void main() {
       [song('q1').path, 1],
       [song('c').path],
     ]);
+  });
+
+  group('a big playlist goes to the player a window at a time', () {
+    late Playlist big;
+    setUp(() async {
+      PlayerService.window = 4;
+      for (var i = 0; i < 20; i++) {
+        await File(p.join(dir.path, 's$i.mp3')).create();
+      }
+      big = Playlist(
+        id: dir.path,
+        name: 'Big',
+        location: '.',
+        tracks: [for (var i = 0; i < 20; i++) song('s$i')],
+      );
+    });
+    tearDown(() => PlayerService.window = 50);
+
+    test('it moves along with playback and wraps round', () async {
+      final service = PlayerService.fresh();
+      await service.play(big, shuffle: false, startIndex: 0);
+      await settle(service);
+      expect(order(service), 's18 s19 [s0] s1 s2 s3 s4');
+
+      await service.next();
+      await service.next();
+      await service.next();
+      await settle(service);
+      expect(order(service), 's1 s2 [s3] s4 s5 s6 s7');
+
+      for (var i = 0; i < 20; i++) {
+        await service.next();
+        await settle(service);
+      }
+      expect(service.currentTrack?.path, song('s3').path);
+      expect(service.player.sequence.length, lessThanOrEqualTo(9));
+      expect(service.order.length, 20);
+    });
+
+    test('queued songs stay put; shuffle still plays each song once', () async {
+      final service = PlayerService.fresh();
+      await service.play(big, shuffle: false, startIndex: 10);
+      await service.playNext(song('x1'));
+      await settle(service);
+      expect(order(service), 's8 s9 [s10] x1* s11 s12 s13 s14');
+
+      await service.setShuffle(true);
+      await settle(service);
+      expect(service.order.length, 20);
+      expect(service.order.map((t) => t.path).toSet().length, 20);
+      final shown = order(service).split(' ');
+      expect(shown.skip(shown.indexOf('[s10]')).take(2), ['[s10]', 'x1*']);
+    });
+
+    test('repeat off stops at the end of the playlist', () async {
+      final service = PlayerService.fresh();
+      await service.play(big, shuffle: false, startIndex: 16);
+      await service.player.setLoopMode(LoopMode.off);
+      await settle(service);
+      for (var i = 0; i < 5; i++) {
+        await service.next();
+        await settle(service);
+      }
+      expect(service.currentTrack?.path, song('s19').path);
+      expect(service.neighbour(1), isNull);
+    });
+
+    test('the session keeps the whole playlist, not just the window', () async {
+      SharedPreferences.setMockInitialValues({});
+      addTearDown(PlaybackSession.reset);
+      await PlaybackSession.start();
+      final service = PlayerService.instance;
+      await service.clearQueue();
+      await service.play(big, shuffle: false, startIndex: 5);
+      await settle(service);
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+
+      final prefs = await SharedPreferences.getInstance();
+      final saved = jsonDecode(prefs.getString('playback_session_v1')!);
+      final savedOrder = jsonDecode(prefs.getString('playback_order_v1')!);
+      expect((saved['tracks'] as List).length, 7);
+      expect((savedOrder as List).length, 20);
+
+      await service.restore(
+        playlist: big,
+        sequence: [
+          for (final t in saved['tracks'] as List) Track((t as List)[0]),
+        ],
+        order: [for (final t in savedOrder) Track((t as List)[0])],
+        index: saved['index'] as int,
+        position: Duration.zero,
+        shuffle: false,
+        loop: LoopMode.all,
+      );
+      await settle(service);
+      expect(order(service), 's3 s4 [s5] s6 s7 s8 s9');
+      expect(service.order.length, 20);
+      for (var i = 0; i < 10; i++) {
+        await service.next();
+        await settle(service);
+      }
+      expect(service.currentTrack?.path, song('s15').path);
+    });
   });
 }

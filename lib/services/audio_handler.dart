@@ -39,9 +39,14 @@ class MusifyAudioHandler extends BaseAudioHandler with SeekHandler {
         mediaItem.add(item.copyWith(duration: duration));
       }
     });
+    // Only when the songs change, not on every move along them.
     _player.sequenceStateStream
         .map((state) => state.sequence)
-        .distinct()
+        .distinct(
+          (a, b) =>
+              a.length == b.length &&
+              Iterable.generate(a.length).every((i) => identical(a[i], b[i])),
+        )
         .listen(_publishQueue);
     _service.trackStream.listen((track) {
       _publishTrack(track);

@@ -37,6 +37,12 @@ class SleepTimer {
 /// The playlist part holds each of its songs once, shuffled or not, so with
 /// repeat-all the list loops. A queued song ([QueuedTrack]) plays once and is
 /// removed as soon as playback moves off it, so it never comes round again.
+///
+/// A big playlist goes to just_audio a window at a time ([window] songs
+/// ahead, half that behind), moved along as playback moves: the iPhone's
+/// player opens every song it's given, and a 1,000-song folder ran it out
+/// of threads; Android's media session got the whole list on every song.
+/// The playlist part in full is [order].
 class PlayerService {
   @visibleForTesting
   PlayerService.fresh();
@@ -48,6 +54,19 @@ class PlayerService {
   AudioPlayer get player => _player ??= _create();
 
   Playlist? _loaded;
+
+  /// The playlist part in play order, all of it; the player holds the
+  /// window of it starting at [_orderStart] (wrapping round with
+  /// repeat-all), plus the queued songs.
+  List<Track> _order = const [];
+  int _orderStart = 0;
+
+  /// Songs ahead of the current one handed to the player; half as many are
+  /// kept behind it.
+  @visibleForTesting
+  static int window = 50;
+
+  List<Track> get order => _order;
 
   /// Whether the playlist part plays shuffled.
   final shuffleOn = ValueNotifier<bool>(false);
@@ -99,9 +118,11 @@ class PlayerService {
     );
     player.currentIndexStream.listen((_) {
       _dropPlayedQueue();
+      _keepWindow();
       _streamNear(player);
       _warmNext(player);
     });
+    player.loopModeStream.listen((_) => _keepWindow());
     player.errorStream.listen((e) => _streamFailed(player, e));
     _handleInterruptions(player);
     return player;
@@ -373,23 +394,30 @@ class PlayerService {
     }
     final queued = upcomingQueue;
     final (before, after) = _around(tracks, index, shuffle);
-    await player.setShuffleModeEnabled(false);
-    _lastSource = null;
-    await player.setAudioSources(
-      _sourcesAround([
-        ...before,
-        tracks[index],
-        ...queued,
-        ...after,
-      ], before.length),
-      initialIndex: before.length,
-    );
+    // Set first: the new song is announced while the sources load, and
+    // what it's from (CarPlay's Recently Played, the album shown) must be
+    // this playlist by then.
     _loaded = Playlist(
       id: playlist.id,
       name: playlist.name,
       tracks: tracks,
       location: playlist.location,
       artworkUrl: playlist.artworkUrl,
+    );
+    _order = [...before, tracks[index], ...after];
+    final at = before.length;
+    final from = max(0, at - window ~/ 2);
+    final to = min(_order.length, at + 1 + window);
+    _orderStart = from;
+    await player.setShuffleModeEnabled(false);
+    _lastSource = null;
+    await player.setAudioSources(
+      _sourcesAround([
+        ..._order.sublist(from, at + 1),
+        ...queued,
+        ..._order.sublist(at + 1, to),
+      ], at - from),
+      initialIndex: at - from,
     );
     shuffleOn.value = shuffle;
     if (!_loopChosen) {
@@ -452,11 +480,14 @@ class PlayerService {
     }
 
     final (before, after) = _around(playlist.tracks, anchorIndex, enabled);
+    _order = [...before, playlist.tracks[anchorIndex], ...after];
+    final keptBefore = before.sublist(max(0, before.length - window ~/ 2));
+    _orderStart = before.length - keptBefore.length;
     await player.removeAudioSourceRange(queueEnd, sequence.length);
-    await player.addAudioSources(after.map(_source).toList());
+    await player.addAudioSources(after.take(window).map(_source).toList());
     if (anchorAt > 0) await player.removeAudioSourceRange(0, anchorAt);
-    if (before.isNotEmpty) {
-      await player.insertAudioSources(0, before.map(_source).toList());
+    if (keptBefore.isNotEmpty) {
+      await player.insertAudioSources(0, keptBefore.map(_source).toList());
     }
     _streamNear(player);
   });
@@ -474,6 +505,7 @@ class PlayerService {
     final current = player.currentIndex;
     if (current == null || player.sequence.isEmpty) {
       // Nothing loaded: the song waits, paused, in the mini player.
+      _order = const [];
       await player.setAudioSources([source]);
       _streamNear(player);
       return;
@@ -527,7 +559,55 @@ class PlayerService {
     return i < 0 ? null : i;
   }
 
+  /// Moves the player's window of a big playlist along with playback:
+  /// more songs ahead (round to the top with repeat-all) and behind as it
+  /// gets near either end, and songs long played dropped.
+  void _keepWindow() => _serial(() async {
+    final n = _order.length;
+    final current = player.currentIndex;
+    final sequence = player.sequence;
+    if (n == 0 || current == null || current >= sequence.length) return;
+    var count = 0, behind = 0, ahead = 0;
+    for (var i = 0; i < sequence.length; i++) {
+      if (sequence[i].tag is QueuedTrack) continue;
+      count++;
+      if (i < current) behind++;
+      if (i > current) ahead++;
+    }
+    final wrap = player.loopMode == LoopMode.all;
+    Track at(int k) => _order[k % n];
+
+    if (ahead < window ~/ 2) {
+      final end = _orderStart + count;
+      final add = min(window - ahead, wrap ? n - count : n - end);
+      if (add > 0) {
+        await player.addAudioSources([
+          for (var k = end; k < end + add; k++) _source(at(k)),
+        ]);
+        count += add;
+      }
+    }
+    final keep = window ~/ 2;
+    if (behind < keep ~/ 2) {
+      final add = min(keep - behind, min(n - count, wrap ? n : _orderStart));
+      if (add > 0) {
+        await player.insertAudioSources(0, [
+          for (var k = _orderStart - add; k < _orderStart; k++) _source(at(k)),
+        ]);
+        _orderStart = (_orderStart - add) % n;
+      }
+    } else if (behind > keep * 2) {
+      final drop = behind - keep;
+      await player.removeAudioSourceRange(0, drop);
+      _orderStart = (_orderStart + drop) % n;
+    }
+  });
+
   /// Puts back a saved session, paused at [position].
+  ///
+  /// [sequence] is the play order with queued songs, all of it or the
+  /// window that was loaded; [order], if given, is the playlist part in
+  /// full (see [order]) that a window came from.
   Future<void> restore({
     required Playlist? playlist,
     required List<Track> sequence,
@@ -535,20 +615,53 @@ class PlayerService {
     required Duration position,
     required bool shuffle,
     required LoopMode loop,
+    List<Track>? order,
   }) => _serial(() async {
+    final copies = LocalCopies.instance;
+    var songs = sequence.map(copies.resolve).toList();
+    final inOrder = [
+      for (final t in songs)
+        if (t is! QueuedTrack) t,
+    ];
+    _order = inOrder;
+    _orderStart = 0;
+    if (order != null && order.length > inOrder.length && inOrder.isNotEmpty) {
+      final full = order.map(copies.resolve).toList();
+      final n = full.length;
+      final start = full.indexWhere((t) => t.path == inOrder.first.path);
+      var lines = start >= 0;
+      for (var k = 0; lines && k < inOrder.length; k++) {
+        lines = full[(start + k) % n].path == inOrder[k].path;
+      }
+      if (lines) {
+        _order = full;
+        _orderStart = start;
+      }
+    }
+    // Only a window of a long list goes to the player.
+    var at = index;
+    final from = max(0, at - window ~/ 2);
+    if (from > 0) {
+      final dropped = songs.take(from).where((t) => t is! QueuedTrack).length;
+      if (_order.isNotEmpty) {
+        _orderStart = (_orderStart + dropped) % _order.length;
+      }
+      songs = songs.sublist(from);
+      at -= from;
+    }
+    final queued = songs.skip(at + 1).whereType<QueuedTrack>().length;
+    songs = songs.take(min(songs.length, at + 1 + queued + window)).toList();
+
     await player.setShuffleModeEnabled(false);
     await player.setLoopMode(loop);
     _loopChosen = true;
     _lastSource = null;
+    _loaded = playlist;
     await player.setAudioSources(
-      _sourcesAround(
-        sequence.map(LocalCopies.instance.resolve).toList(),
-        index,
-      ),
-      initialIndex: index,
+      _sourcesAround(songs, at),
+      initialIndex: at,
       initialPosition: position,
     );
-    _loaded = playlist;
     shuffleOn.value = shuffle;
     AppLog.add('player: restored ${sequence.length} songs at #$index');
   });
@@ -558,6 +671,7 @@ class PlayerService {
     await player.stop();
     await player.clearAudioSources();
     _loaded = null;
+    _order = const [];
   });
 
   /// Set by sync while another device has the music: the controls here

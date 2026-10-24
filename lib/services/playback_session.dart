@@ -18,6 +18,11 @@ import 'player_service.dart';
 class PlaybackSession {
   static const _key = 'playback_session_v1';
 
+  /// A big playlist's play order in full (the player holds a window of it,
+  /// which is what [_key] has), saved only when it changes.
+  static const _orderKey = 'playback_order_v1';
+  static List<Track>? _savedOrder;
+
   static bool _started = false;
   static Timer? _saveSoon;
   static Timer? _whilePlaying;
@@ -78,6 +83,14 @@ class PlaybackSession {
       await prefs.remove(_key);
       return;
     }
+    final order = service.order;
+    if (!identical(order, _savedOrder)) {
+      _savedOrder = order;
+      await prefs.setString(
+        _orderKey,
+        jsonEncode([for (final t in order) _entry(t)]),
+      );
+    }
     final playlist = service.current;
     await prefs.setString(
       _key,
@@ -86,10 +99,7 @@ class PlaybackSession {
         'name': playlist?.name,
         'tracks': [
           for (final source in sequence)
-            if (source.tag case final Track track)
-              track is YouTubeTrack
-                  ? {...track.toJson(), if (track is QueuedTrack) 'queued': 1}
-                  : [track.path, if (track is QueuedTrack) 1],
+            if (source.tag case final Track track) _entry(track),
         ],
         'index': index,
         'position': player.position.inMilliseconds,
@@ -97,6 +107,22 @@ class PlaybackSession {
         'loop': player.loopMode.name,
       }),
     );
+  }
+
+  static Object _entry(Track track) => track is YouTubeTrack
+      ? {...track.toJson(), if (track is QueuedTrack) 'queued': 1}
+      : [track.path, if (track is QueuedTrack) 1];
+
+  /// [entry] as saved by [_entry], or null for a file that's gone.
+  static Track? _track(Object? entry) {
+    if (entry is Map) {
+      // A YouTube song.
+      final json = entry.cast<String, Object?>();
+      return YouTubeTrack.fromJson(json, queued: json['queued'] != null);
+    }
+    final path = (entry as List)[0] as String;
+    if (!File(path).existsSync()) return null;
+    return entry.length > 1 ? QueuedTrack(path) : Track(path);
   }
 
   static Future<void> _restore(PlayerService service) async {
@@ -112,19 +138,10 @@ class PlaybackSession {
     var index = -1;
     var resume = true;
     for (var i = 0; i < saved.length; i++) {
-      final entry = saved[i];
-      final Track track;
-      if (entry is Map) {
-        // A YouTube song.
-        final json = entry.cast<String, Object?>();
-        track = YouTubeTrack.fromJson(json, queued: json['queued'] != null);
-      } else {
-        final path = (entry as List)[0] as String;
-        if (!File(path).existsSync()) {
-          if (i == savedIndex) resume = false;
-          continue;
-        }
-        track = entry.length > 1 ? QueuedTrack(path) : Track(path);
+      final track = _track(saved[i]);
+      if (track == null) {
+        if (i == savedIndex) resume = false;
+        continue;
       }
       if (i >= savedIndex && index < 0) index = sequence.length;
       sequence.add(track);
@@ -147,9 +164,18 @@ class PlaybackSession {
                 tracks: inOrder,
               ));
 
+    List<Track>? order;
+    if (prefs.getString(_orderKey) case final String raw) {
+      order = [
+        for (final entry in jsonDecode(raw) as List)
+          if (_track(entry) case final Track t) t,
+      ];
+    }
+
     await service.restore(
       playlist: playlist,
       sequence: sequence,
+      order: order,
       index: index,
       position: resume
           ? Duration(milliseconds: data['position'] as int? ?? 0)
@@ -166,5 +192,6 @@ class PlaybackSession {
     _whilePlaying?.cancel();
     _lifecycle?.dispose();
     _lifecycle = null;
+    _savedOrder = null;
   }
 }
