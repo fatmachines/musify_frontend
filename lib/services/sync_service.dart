@@ -1006,6 +1006,9 @@ class SyncService extends ChangeNotifier implements RemoteControl {
     Timer.periodic(const Duration(seconds: 3), (_) => _checkPlayback());
   }
 
+  /// The last "songs are missing" message shown (see file sync).
+  String? _missingSaid;
+
   /// The other device playing right now (its name), shown as "Playing on
   /// …" with a way to play here instead; null if none.
   final playingElsewhere = ValueNotifier<String?>(null);
@@ -1035,11 +1038,18 @@ class SyncService extends ChangeNotifier implements RemoteControl {
   bool _checking = false;
 
   Future<void> _checkPlayback() async {
-    if (_checking || status != SyncStatus.on || !_server.setUpNow) return;
+    if (_checking) return;
+    if (status != SyncStatus.on || !_server.setUpNow) {
+      if (playingElsewhere.value != null) _noteElsewhere(null);
+      return;
+    }
     _checking = true;
     try {
       final (code, data) = await _call('GET', '/sync/state/playback');
-      if (code != 200) return;
+      if (code != 200) {
+        _noteElsewhere(_remoteDoc);
+        return;
+      }
       _playbackRev = data['rev'] as int? ?? _playbackRev;
       final doc = (data['data'] as Map?)?.cast<String, dynamic>();
       _noteElsewhere(doc);
@@ -1061,7 +1071,10 @@ class SyncService extends ChangeNotifier implements RemoteControl {
         await _followPlayback(doc);
       }
     } catch (_) {
-      // The next check tries again.
+      // Offline or the server's down: the last word from the other device
+      // still ages out, rather than "Playing on …" staying for good. The
+      // next check tries again.
+      _noteElsewhere(_remoteDoc);
     } finally {
       _checking = false;
     }
@@ -1539,7 +1552,6 @@ class SyncService extends ChangeNotifier implements RemoteControl {
       );
     }
 
-    await reportHoldings();
     var (remote, wanted) = await listing();
 
     final plan = planFiles(
@@ -1576,11 +1588,22 @@ class SyncService extends ChangeNotifier implements RemoteControl {
     final held = {for (final f in local.values) f.sha1};
     final missing = deleteThere.where((rel) => !held.contains(synced[rel]));
     if (missing.length > 10 && missing.length > synced.length / 2) {
-      throw SyncFailed(
-        '${missing.length} synced songs are missing from '
-        '${folder.name}; not deleting them on your other devices',
-      );
+      final message =
+          '${missing.length} synced songs are missing from '
+          '${folder.name}; not deleting them on your other devices';
+      // Said once, not every sync, and before this device says what it
+      // has: otherwise the others would upload all those songs for it.
+      if (_missingSaid != message) {
+        _missingSaid = message;
+        handoff.value = message;
+      }
+      throw SyncFailed(message);
     }
+    _missingSaid = null;
+
+    // What this device has, then what the others want of it.
+    await reportHoldings();
+    wanted = (await listing()).$2;
 
     // New or changed here: listed for the others (not uploaded: only songs
     // another device lacks are, below).

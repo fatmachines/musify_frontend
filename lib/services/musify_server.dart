@@ -186,7 +186,7 @@ class MusifyServer extends ChangeNotifier {
     }
     final response = await http.Response.fromStream(
       await request.send().timeout(timeout),
-    );
+    ).timeout(timeout);
     Map<String, dynamic> data;
     try {
       data = jsonDecode(response.body) as Map<String, dynamic>;
