@@ -51,6 +51,7 @@ dependencies:
   webview_flutter_wkwebview: ^3.27.0
   flutter_svg: ^2.3.0
   crypto: ^3.0.7
+  package_info_plus: ^10.2.2
 dependency_overrides:
   just_audio:
     path: packages/just_audio

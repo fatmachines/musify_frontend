@@ -181,7 +181,13 @@ class SyncService extends ChangeNotifier implements RemoteControl {
                 '${lastError != null ? ' • last sync failed' : ''}',
   };
 
+  /// The Mac's name as the user gave it (see [start]).
+  static String? _computerName;
+
   static String get deviceName {
+    if (_computerName case final name?) return name;
+    // On a Mac this can be the network's name for it (an ISP's), hence
+    // the computer name above.
     final host = Platform.localHostname.replaceAll(RegExp(r'\.local$'), '');
     final kind = Platform.isIOS
         ? 'iPhone'
@@ -202,6 +208,8 @@ class SyncService extends ChangeNotifier implements RemoteControl {
   Future<void> start() async {
     if (_started) return;
     _started = true;
+    _computerName = await FolderAccess.computerName();
+    MusifyServer.deviceName = deviceName;
     await _load();
     await Library.instance.ensureLoaded();
     // Last time's songs first: what another device played comes after.

@@ -29,7 +29,18 @@ class LibraryFolder {
 class FolderAccess {
   static const _channel = MethodChannel('musify/folder_access');
 
-  static bool get _native => Platform.isIOS || Platform.isMacOS;
+  // Not under `flutter test`, which has no native side even on a Mac.
+  static bool get _native =>
+      (Platform.isIOS || Platform.isMacOS) &&
+      !Platform.environment.containsKey('FLUTTER_TEST');
+
+  /// The Mac's own name (System Settings → General → Sharing), or null
+  /// elsewhere or if it can't be read.
+  static Future<String?> computerName() async {
+    if (!_native || !Platform.isMacOS) return null;
+    final name = (await _callNative('computerName'))?['name'];
+    return name is String && name.trim().isNotEmpty ? name.trim() : null;
+  }
 
   static Future<LibraryFolder?> pick() async {
     if (_native) {

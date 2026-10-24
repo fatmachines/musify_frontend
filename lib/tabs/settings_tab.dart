@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../screens/sync_screen.dart';
 import '../services/app_log.dart';
@@ -165,6 +166,7 @@ class SettingsTab extends StatelessWidget {
             title: const Text('Copy debug log'),
             onTap: () => _copyLog(context),
           ),
+          const _Version(),
         ],
       ),
     );
@@ -189,6 +191,31 @@ class _Heading extends StatelessWidget {
           letterSpacing: 0.4,
         ),
       ),
+    );
+  }
+}
+
+/// "Musify 1.0.3 (4)", for bug reports.
+class _Version extends StatelessWidget {
+  const _Version();
+
+  static final _info = PackageInfo.fromPlatform();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<PackageInfo>(
+      future: _info,
+      builder: (context, snapshot) {
+        final info = snapshot.data;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Text(
+            info == null ? '' : 'Musify ${info.version} (${info.buildNumber})',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.subtle, fontSize: 13),
+          ),
+        );
+      },
     );
   }
 }

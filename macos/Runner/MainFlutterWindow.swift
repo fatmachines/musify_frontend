@@ -53,6 +53,9 @@ class FolderAccessPlugin: NSObject, FlutterPlugin {
       pick(result)
     case "restoreAll":
       result(reply(["folders": restoreAll()]))
+    case "computerName":
+      // The name in System Settings, not the network's host name for us.
+      result(reply(["name": Host.current().localizedName ?? ""]))
     case "remove":
       if let args = call.arguments as? [String: Any], let id = args["id"] as? String {
         remove(id)

@@ -198,9 +198,15 @@ class MusifyServer extends ChangeNotifier {
 
   Future<Uri> syncUri(String path) async => Uri.parse('${await _base()}$path');
 
+  /// What this device is called in sync (set by SyncService), sent along
+  /// so a name that changed (the Mac used its network name) shows on the others.
+  static String? deviceName;
+
   Future<Map<String, String>> syncHeaders(String? token) async => {
     ...await _headers(),
     'X-Musify-Sync': ?token,
+    if (token != null && deviceName != null)
+      'X-Musify-Device-Name': Uri.encodeComponent(deviceName!),
   };
 
   // Playlists -----------------------------------------------------------------
