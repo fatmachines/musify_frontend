@@ -315,9 +315,11 @@ class PlayerService {
         continue;
       }
       // From where the video got to (the stand-in runs ahead while the
-      // video loads).
-      final position =
-          YouTubeWebPlayer.instance.playedOf(track) ?? Duration.zero;
+      // video loads), and never past the stand-in: a video time from
+      // before it settled once skipped 15 s of a song.
+      final video = YouTubeWebPlayer.instance.playedOf(track) ?? Duration.zero;
+      final ceiling = player.position + const Duration(seconds: 1);
+      final position = video > ceiling ? ceiling : video;
       final playing = player.playing;
       await player.removeAudioSourceAt(i);
       await player.insertAudioSource(i, stream);

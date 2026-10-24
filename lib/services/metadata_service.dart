@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:path/path.dart' as p;
 
 import '../models/playlist.dart';
 
@@ -106,6 +107,8 @@ class MetadataService {
       _covers.remove(path);
       _loadedCovers.remove(path);
     }
+    // A cover.jpg added or changed since: looked for again.
+    _folderCovers.clear();
     if (changed.isNotEmpty) {
       // Mosaics are picked again from the songs' covers as they are now.
       _playlistCovers.clear();
@@ -116,13 +119,21 @@ class MetadataService {
 
   static Future<Uint8List?> cover(Track track) {
     return _covers.putIfAbsent(track.path, () async {
+      final path = track.path;
       final bytes = track is YouTubeTrack
           ? await _download(track.thumbnail)
-          : await Isolate.run(() => _readCover(track.path));
+          : await _Worker.run(() => _readCover(path)) ??
+                await _folderCovers.putIfAbsent(p.dirname(path), () {
+                  final dir = Directory(p.dirname(path));
+                  return _Worker.run(() => _folderCover(dir));
+                });
       _loadedCovers[track.path] = bytes;
       return bytes;
     });
   }
+
+  /// Each folder's picture (see [_folderCover]), looked for once.
+  static final _folderCovers = <String, Future<Uint8List?>>{};
 
   /// Up to four different covers from random songs in [playlist], for the
   /// Spotify-style mosaic. Picked once per playlist per app run.
@@ -208,22 +219,20 @@ class MetadataService {
     }
   }
 
-  /// The song's embedded cover, or else its folder's picture (cover.jpg
-  /// and the like, as ripped albums have).
+  /// The song's embedded cover; without one, [cover] uses its folder's
+  /// picture (cover.jpg and the like, as ripped albums have).
   static Uint8List? _readCover(String path) {
     try {
       final pictures = readMetadata(File(path), getImage: true).pictures;
-      if (pictures.isNotEmpty) {
-        final front = pictures.firstWhere(
-          (p) => p.pictureType == PictureType.coverFront,
-          orElse: () => pictures.first,
-        );
-        return front.bytes;
-      }
+      if (pictures.isEmpty) return null;
+      final front = pictures.firstWhere(
+        (picture) => picture.pictureType == PictureType.coverFront,
+        orElse: () => pictures.first,
+      );
+      return front.bytes;
     } catch (_) {
-      // No tags it can read: the folder's picture may still do.
+      return null;
     }
-    return _folderCover(File(path).parent);
   }
 
   static const _folderCoverNames = ['cover', 'folder', 'front', 'album'];
@@ -252,11 +261,7 @@ class MetadataService {
     return null;
   }
 
-  static String _baseName(String path) {
-    final name = path.split(RegExp(r'[/\\]')).last;
-    final dot = name.lastIndexOf('.');
-    return dot < 0 ? name : name.substring(0, dot);
-  }
+  static String _baseName(String path) => p.basenameWithoutExtension(path);
 
   static String? _clean(String? value) {
     final trimmed = value?.replaceAll('\u0000', '').trim();
@@ -270,5 +275,41 @@ class MetadataService {
       hash = (hash * 31 + bytes[i]) & 0x3fffffff;
     }
     return hash;
+  }
+}
+
+/// One isolate kept for reading covers: scrolling a big folder reads one
+/// per row, and starting an isolate for each was a cost of its own.
+class _Worker {
+  static Future<SendPort>? _port;
+
+  static Future<T> run<T>(T Function() task) async {
+    final port = await (_port ??= _start());
+    final reply = ReceivePort();
+    port.send((task, reply.sendPort));
+    final result = await reply.first;
+    reply.close();
+    return result as T;
+  }
+
+  static Future<SendPort> _start() async {
+    final ready = ReceivePort();
+    await Isolate.spawn(_serve, ready.sendPort);
+    return await ready.first as SendPort;
+  }
+
+  static void _serve(SendPort ready) {
+    final tasks = ReceivePort();
+    ready.send(tasks.sendPort);
+    tasks.listen((message) {
+      final (task, reply) = message as (Object? Function(), SendPort);
+      Object? result;
+      try {
+        result = task();
+      } catch (_) {
+        result = null;
+      }
+      reply.send(result);
+    });
   }
 }

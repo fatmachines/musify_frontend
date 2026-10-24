@@ -93,6 +93,9 @@ class MiniPlayer extends StatelessWidget {
 class _TrackText extends StatelessWidget {
   final Track track;
 
+  static Color get _elsewhere =>
+      AppColors.dark ? AppColors.green : AppColors.text;
+
   const _TrackText({required this.track});
 
   @override
@@ -118,13 +121,15 @@ class _TrackText extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 2),
-            // Playing on another device: its name, in green, as Spotify.
+            // Playing on another device: its name, in green, as Spotify
+            // (in the light theme the bar takes the cover's light colour,
+            // where green doesn't read: the text colour, bold, instead).
             ValueListenableBuilder<String?>(
               valueListenable: SyncService.instance.playingElsewhere,
               builder: (context, elsewhere, _) => Row(
                 children: [
                   if (elsewhere != null) ...[
-                    Icon(Icons.speaker_group, size: 14, color: AppColors.green),
+                    Icon(Icons.speaker_group, size: 14, color: _elsewhere),
                     const SizedBox(width: 4),
                   ],
                   Expanded(
@@ -137,7 +142,7 @@ class _TrackText extends StatelessWidget {
                       style: TextStyle(
                         color: elsewhere == null
                             ? AppColors.subtle
-                            : AppColors.green,
+                            : _elsewhere,
                         fontSize: 13,
                         fontWeight: elsewhere == null
                             ? FontWeight.w400
