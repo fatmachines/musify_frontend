@@ -149,7 +149,10 @@ class MusifyServer extends ChangeNotifier {
     try {
       return (jsonDecode(body) as Map)['error'] as String;
     } catch (_) {
-      return 'the server answered ${response.statusCode}';
+      return response.statusCode >= 500
+          ? "the server couldn't answer (${response.statusCode}); try again "
+                'in a moment'
+          : 'the server answered ${response.statusCode}';
     }
   }
 
@@ -306,17 +309,21 @@ class MusifyServer extends ChangeNotifier {
     ),
   );
 
-  /// A public Spotify playlist, each song found on YouTube Music, and the
-  /// songs that couldn't be ("Title – Artist"). Takes the server a while:
-  /// a few seconds per 50 songs.
-  Future<(Playlist, List<String>)> spotifyPlaylist(String id) async {
+  /// A public Spotify playlist, each song found on YouTube Music, the
+  /// songs that couldn't be ("Title – Artist"), and how many were left out
+  /// as repeats (in it twice, or found as the same song) or as not songs
+  /// (podcast episodes, gone from Spotify). Takes the server a while: a few
+  /// seconds per 50 songs.
+  Future<SpotifyImport> spotifyPlaylist(String id) async {
     final data = await _getJson(
       '/spotify?id=${Uri.encodeQueryComponent(id)}',
       timeout: const Duration(minutes: 10),
     );
     return (
-      _playlist(data),
-      [for (final m in (data['missing'] as List?) ?? const []) '$m'],
+      playlist: _playlist(data),
+      missing: [for (final m in (data['missing'] as List?) ?? const []) '$m'],
+      repeats: data['repeats'] as int? ?? 0,
+      skipped: data['skipped'] as int? ?? 0,
     );
   }
 
@@ -437,6 +444,13 @@ class MusifyServer extends ChangeNotifier {
     }
   }
 }
+
+typedef SpotifyImport = ({
+  Playlist playlist,
+  List<String> missing,
+  int repeats,
+  int skipped,
+});
 
 class ServerError implements Exception {
   final String message;

@@ -1,4 +1,8 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 import '../services/musify_server.dart';
 import '../theme.dart';
@@ -8,16 +12,14 @@ import 'toast.dart';
 /// a working server is saved.
 Future<bool> showServerKeyDialog(BuildContext context) async {
   final server = MusifyServer.instance;
-  final url = TextEditingController(text: await server.url() ?? '');
-  final key = TextEditingController(text: await server.key() ?? '');
+  final url = await server.url() ?? '';
+  final key = await server.key() ?? '';
   if (!context.mounted) return false;
   final saved = await showDialog<bool>(
     context: context,
     useRootNavigator: true,
     builder: (dialog) => _ServerDialog(url: url, secret: key),
   );
-  url.dispose();
-  key.dispose();
   return saved ?? false;
 }
 
@@ -29,8 +31,8 @@ Future<bool> ensureServerKey(BuildContext context) async {
 }
 
 class _ServerDialog extends StatefulWidget {
-  final TextEditingController url;
-  final TextEditingController secret;
+  final String url;
+  final String secret;
 
   const _ServerDialog({required this.url, required this.secret});
 
@@ -39,8 +41,18 @@ class _ServerDialog extends StatefulWidget {
 }
 
 class _ServerDialogState extends State<_ServerDialog> {
+  // Owned here: the dialog's closing animation still shows the fields.
+  late final _url = TextEditingController(text: widget.url);
+  late final _secret = TextEditingController(text: widget.secret);
   bool _checking = false;
   String? _error;
+
+  @override
+  void dispose() {
+    _url.dispose();
+    _secret.dispose();
+    super.dispose();
+  }
 
   Future<void> _save() async {
     setState(() {
@@ -50,7 +62,7 @@ class _ServerDialogState extends State<_ServerDialog> {
     final server = MusifyServer.instance;
     final oldUrl = await server.url();
     final oldKey = await server.key();
-    await server.setUp(widget.url.text, widget.secret.text);
+    await server.setUp(_url.text, _secret.text);
     try {
       final version = await server.check();
       if (!mounted) return;
@@ -62,7 +74,7 @@ class _ServerDialogState extends State<_ServerDialog> {
       if (!mounted) return;
       setState(() {
         _checking = false;
-        _error = "Couldn't connect: $e";
+        _error = "Couldn't connect: ${plainError(e)}";
       });
     }
   }
@@ -83,7 +95,7 @@ class _ServerDialogState extends State<_ServerDialog> {
           ),
           const SizedBox(height: 12),
           TextField(
-            controller: widget.url,
+            controller: _url,
             autofocus: true,
             autocorrect: false,
             enableSuggestions: false,
@@ -94,7 +106,7 @@ class _ServerDialogState extends State<_ServerDialog> {
             ),
           ),
           TextField(
-            controller: widget.secret,
+            controller: _secret,
             autocorrect: false,
             enableSuggestions: false,
             cursorColor: AppColors.green,
@@ -124,4 +136,25 @@ class _ServerDialogState extends State<_ServerDialog> {
       ],
     );
   }
+}
+
+/// What went wrong reaching a server, in words rather than the exception.
+String plainError(Object e) {
+  final text = '$e';
+  if (e is ServerError) return e.message;
+  if (e is TimeoutException) return 'the server took too long to answer';
+  if (e is HandshakeException || e is TlsException) {
+    return "the server's certificate isn't valid";
+  }
+  if (e is FormatException || e is ArgumentError) {
+    return "that isn't a server address";
+  }
+  if (e is SocketException || e is http.ClientException) {
+    if (text.contains('host lookup')) {
+      return "can't find that server; check the address";
+    }
+    if (text.contains('refused')) return "the server isn't answering";
+    return "can't reach the server; check the address and your internet";
+  }
+  return text;
 }

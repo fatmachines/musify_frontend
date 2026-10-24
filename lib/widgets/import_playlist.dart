@@ -20,19 +20,17 @@ Future<void> importPlaylist(BuildContext context) async {
   // A playlist link just copied goes in by itself.
   final copied = (await Clipboard.getData(Clipboard.kTextPlain))?.text ?? '';
   if (!context.mounted) return;
-  final link = TextEditingController(
-    text: _isPlaylistLink(copied) ? copied.trim() : '',
-  );
-  final imported = await showDialog<(Playlist, List<String>)>(
+  final imported = await showDialog<SpotifyImport>(
     context: context,
     useRootNavigator: true,
-    builder: (_) => _ImportDialog(link: link),
+    builder: (_) =>
+        _ImportDialog(link: _isPlaylistLink(copied) ? copied.trim() : ''),
   );
-  link.dispose();
   if (imported == null || !context.mounted) return;
-  final (remote, missing) = imported;
+  final (:playlist, :missing, :repeats, :skipped) = imported;
+  final remote = playlist;
 
-  final playlist = Library.instance.createPlaylist(
+  final made = Library.instance.createPlaylist(
     remote.name,
     tracks: remote.tracks,
   );
@@ -40,15 +38,18 @@ Future<void> importPlaylist(BuildContext context) async {
       .whereType<YouTubeTrack>()
       .where((t) => LocalCopies.instance.copyOf(t) != null)
       .length;
-  final count = playlist.tracks.length;
+  final count = made.tracks.length;
+  String songs(int n) => '$n ${n == 1 ? 'song' : 'songs'}';
   showToast(
     context,
-    'Imported $count ${count == 1 ? 'song' : 'songs'}'
+    'Imported ${songs(count)}'
     '${here > 0 ? ', $here already on this device' : ''}'
     '${missing.isEmpty ? '' : '. Not on YouTube: ${missing.take(3).join('; ')}'
-              '${missing.length > 3 ? ' and ${missing.length - 3} more' : ''}'}',
+              '${missing.length > 3 ? ' and ${missing.length - 3} more' : ''}'}'
+    '${repeats > 0 ? '. ${songs(repeats)} in it twice' : ''}'
+    '${skipped > 0 ? '. $skipped not songs (podcasts, or gone from Spotify)' : ''}',
   );
-  openPlaylist(context, playlist);
+  openPlaylist(context, made);
 }
 
 bool _isPlaylistLink(String text) =>
@@ -56,7 +57,7 @@ bool _isPlaylistLink(String text) =>
     MusifyServer.playlistIdOf(text) != null;
 
 class _ImportDialog extends StatefulWidget {
-  final TextEditingController link;
+  final String link;
 
   const _ImportDialog({required this.link});
 
@@ -65,14 +66,22 @@ class _ImportDialog extends StatefulWidget {
 }
 
 class _ImportDialogState extends State<_ImportDialog> {
+  // Owned here: the dialog's closing animation still shows the field.
+  late final _link = TextEditingController(text: widget.link);
   bool _reading = false;
+
+  @override
+  void dispose() {
+    _link.dispose();
+    super.dispose();
+  }
 
   /// Finding a Spotify playlist's songs on YouTube takes a while: say so.
   bool _spotify = false;
   String? _error;
 
   Future<void> _import() async {
-    final text = widget.link.text;
+    final text = _link.text;
     final spotify = MusifyServer.spotifyPlaylistIdOf(text);
     final youtube = MusifyServer.playlistIdOf(text);
     if (spotify == null && youtube == null) {
@@ -86,9 +95,15 @@ class _ImportDialogState extends State<_ImportDialog> {
     });
     try {
       final server = MusifyServer.instance;
-      final (playlist, missing) = spotify != null
+      final SpotifyImport result = spotify != null
           ? await server.spotifyPlaylist(spotify)
-          : (await server.youtubePlaylist(youtube!), const <String>[]);
+          : (
+              playlist: await server.youtubePlaylist(youtube!),
+              missing: const <String>[],
+              repeats: 0,
+              skipped: 0,
+            );
+      final playlist = result.playlist;
       if (!mounted) return;
       if (playlist.tracks.isEmpty) {
         setState(() {
@@ -97,12 +112,12 @@ class _ImportDialogState extends State<_ImportDialog> {
         });
         return;
       }
-      Navigator.of(context).pop((playlist, missing));
+      Navigator.of(context).pop(result);
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _reading = false;
-        _error = "Couldn't read it: $e";
+        _error = "Couldn't read it: ${plainError(e)}";
       });
     }
   }
@@ -124,7 +139,7 @@ class _ImportDialogState extends State<_ImportDialog> {
           ),
           const SizedBox(height: 12),
           TextField(
-            controller: widget.link,
+            controller: _link,
             autofocus: true,
             autocorrect: false,
             enableSuggestions: false,
