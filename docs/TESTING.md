@@ -86,13 +86,13 @@ offline.
 |---|---|---|
 | 3.1 | Your Library → **+** → **Add folder** → pick `Music`. | Each folder that holds songs becomes a playlist: Album 1, Album 2, Artist B, Deeper. Folders with no songs of their own (`Artist A`, `Mixed`) don't appear. |
 | 3.2 | Look at each playlist's subtitle. | Shows "Folder" and where it is (e.g. `Artist A/Album 1`). |
-| 3.3 | Open a folder playlist. | Songs show with title, artist and cover from their tags. The untagged song shows its file name. The `.txt` and `.jpg` don't appear. |
+| 3.3 | Open a folder playlist. | Songs show with title, artist and cover from their tags. The untagged song shows its file name. The `.txt` and `.jpg` don't appear. A folder whose songs have no cover of their own but a `cover.jpg` (or `folder.jpg`) shows that picture. |
 | 3.4 | Add a second, separate folder (e.g. from iCloud Drive, or another disk on Mac). | Its playlists join the library. |
 | 3.5 | Outside the app (Files / Finder), add a song to a folder, then pull down in Your Library. | The new song appears. |
 | 3.6 | Outside the app, delete a song, then pull down. | It disappears, including from any playlist it was in. |
 | 3.7 | Settings → **Manage folders** → remove a folder. | Its playlists disappear. **The files on disk are untouched** (check in Files / Finder). |
 | 3.8 | Folder ••• → **Delete** → **Hide from Musify**. Then Settings → Manage folders → unhide it. | It disappears, then comes back. |
-| 3.9 | Folder ••• → **Rename folder** → a new name. | Renamed in the app **and on disk**. The songs stay in Liked Songs and your playlists. |
+| 3.9 | Folder ••• → **Rename folder** → a new name. | Renamed in the app **and on disk**. The songs stay in Liked Songs and your playlists. **Android 11+:** the first time, Musify explains and opens "All files access"; after allowing it, renaming, moving and deleting work on songs copied over USB too. |
 | 3.10 | Rename a folder while one of its songs is playing. | The music keeps playing without stopping. |
 | 3.11 | Rename a folder to a name that already exists next to it, or a name with `/` in it. | Refused, with a clear message; nothing changes. |
 | 3.12 | Try to rename a top-level folder you added in 3.1. | Refused, with a message telling you to rename it in Files / Finder. |
@@ -354,7 +354,7 @@ Title: <short, specific>
 
 Severity: Blocker / Major / Minor / Polish
 Device + OS: iPhone 15 Pro, iOS 26.1   (or Mac model + macOS / Android model)
-Musify version: 1.0.2
+Musify version: (Settings, at the bottom, e.g. 1.0.3 (5))
 Server connected: yes / no      Sync on: yes / no
 
 Steps:

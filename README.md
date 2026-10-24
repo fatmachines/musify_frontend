@@ -55,7 +55,8 @@ Music/
 </p>
 
 - **Files stay files.** Musify reads MP3, M4A/AAC, FLAC, WAV, OGG and more,
-  with titles, artists, covers and lyrics from their tags. Nothing is
+  with titles, artists, covers and lyrics from their tags (or a folder's
+  `cover.jpg` when a song has no cover of its own). Nothing is
   copied or converted. Add as many folders as you like; **Rescan** (or
   pull down) picks up songs you add later. A folder's songs are in the
   order they were added, so new ones come last (an album copied in one go
