@@ -8,10 +8,12 @@ import 'package:path/path.dart' as p;
 import '../models/playlist.dart';
 import '../models/song_tag.dart';
 import 'app_log.dart';
+import 'cover_files.dart';
 import 'downloads.dart';
 import 'folder_access.dart';
 import 'library_scanner.dart';
 import 'library_store.dart';
+import 'metadata_service.dart';
 import 'player_service.dart';
 import 'sync_service.dart';
 
@@ -244,6 +246,10 @@ class Library extends ChangeNotifier {
     );
     _folderPlaylists = playlists;
     _resolveCustom();
+    // Songs changed in another app show their new tags, length and cover.
+    for (final path in await MetadataService.forgetChanged()) {
+      CoverFiles.forget(path);
+    }
     _scanning = false;
     _ready = true;
     notifyListeners();

@@ -11,6 +11,11 @@ import 'metadata_service.dart';
 class CoverFiles {
   static final _uris = <String, Future<Uri?>>{};
 
+  /// Writes [track]'s cover again next time (its file changed).
+  static void forget(String path) => _uris.remove(path)?.then((uri) {
+    if (uri != null) File.fromUri(uri).delete().ignore();
+  });
+
   static Future<Uri?> uriFor(Track track) {
     return _uris.putIfAbsent(track.path, () async {
       final bytes = await MetadataService.cover(track);

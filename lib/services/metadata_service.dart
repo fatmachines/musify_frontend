@@ -28,10 +28,13 @@ class TrackInfo {
   static const empty = TrackInfo();
 }
 
-/// Reads tags and embedded cover art off the UI isolate and caches them for
-/// the app's lifetime.
+/// Reads tags and embedded cover art off the UI isolate and caches them
+/// until the file changes (see [forgetChanged]).
 class MetadataService {
   static final _info = <String, TrackInfo>{};
+
+  /// Each read file's modified time and size when it was read.
+  static final _stamps = <String, (int, int)>{};
   static final _covers = <String, Future<Uint8List?>>{};
   static final _playlistCovers = <String, Future<List<Uint8List>>>{};
 
@@ -68,9 +71,47 @@ class MetadataService {
     ];
     if (missing.isEmpty) return;
     final read = await Isolate.run(
-      () => {for (final path in missing) path: _readInfo(path)},
+      () => {for (final path in missing) path: (_readInfo(path), _stamp(path))},
     );
-    _info.addAll(read);
+    for (final MapEntry(key: path, value: (info, stamp)) in read.entries) {
+      _info[path] = info;
+      if (stamp != null) _stamps[path] = stamp;
+    }
+  }
+
+  static (int, int)? _stamp(String path) {
+    try {
+      final stat = File(path).statSync();
+      return (stat.modified.millisecondsSinceEpoch, stat.size);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Drops what was read from files changed since (re-tagged in another
+  /// app, or replaced), so they're read again; the library calls this on
+  /// every rescan. Returns the paths dropped.
+  static Future<List<String>> forgetChanged() async {
+    final stamps = Map.of(_stamps);
+    if (stamps.isEmpty) return const [];
+    final changed = await Isolate.run(
+      () => [
+        for (final MapEntry(key: path, value: stamp) in stamps.entries)
+          if (_stamp(path) != stamp) path,
+      ],
+    );
+    for (final path in changed) {
+      _info.remove(path);
+      _stamps.remove(path);
+      _covers.remove(path);
+      _loadedCovers.remove(path);
+    }
+    if (changed.isNotEmpty) {
+      // Mosaics are picked again from the songs' covers as they are now.
+      _playlistCovers.clear();
+      _loadedPlaylistCovers.clear();
+    }
+    return changed;
   }
 
   static Future<Uint8List?> cover(Track track) {
@@ -167,18 +208,54 @@ class MetadataService {
     }
   }
 
+  /// The song's embedded cover, or else its folder's picture (cover.jpg
+  /// and the like, as ripped albums have).
   static Uint8List? _readCover(String path) {
     try {
       final pictures = readMetadata(File(path), getImage: true).pictures;
-      if (pictures.isEmpty) return null;
-      final front = pictures.firstWhere(
-        (p) => p.pictureType == PictureType.coverFront,
-        orElse: () => pictures.first,
-      );
-      return front.bytes;
+      if (pictures.isNotEmpty) {
+        final front = pictures.firstWhere(
+          (p) => p.pictureType == PictureType.coverFront,
+          orElse: () => pictures.first,
+        );
+        return front.bytes;
+      }
     } catch (_) {
-      return null;
+      // No tags it can read: the folder's picture may still do.
     }
+    return _folderCover(File(path).parent);
+  }
+
+  static const _folderCoverNames = ['cover', 'folder', 'front', 'album'];
+
+  static Uint8List? _folderCover(Directory dir) {
+    try {
+      final images = <String, File>{
+        for (final entry in dir.listSync(followLinks: false))
+          if (entry is File &&
+              RegExp(
+                r'\.(jpe?g|png)$',
+                caseSensitive: false,
+              ).hasMatch(entry.path))
+            _baseName(entry.path).toLowerCase(): entry,
+      };
+      for (final name in _folderCoverNames) {
+        if (images[name] case final file?) return file.readAsBytesSync();
+      }
+      // Windows Media Player's "AlbumArt_{…}_Large.jpg".
+      for (final MapEntry(:key, :value) in images.entries) {
+        if (key.startsWith('albumart') && key.endsWith('large')) {
+          return value.readAsBytesSync();
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  static String _baseName(String path) {
+    final name = path.split(RegExp(r'[/\\]')).last;
+    final dot = name.lastIndexOf('.');
+    return dot < 0 ? name : name.substring(0, dot);
   }
 
   static String? _clean(String? value) {
