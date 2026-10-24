@@ -96,6 +96,7 @@ class LibraryStore {
   static const _foldersKey = 'library_folders';
   static const _playlistsKey = 'custom_playlists_v1';
   static const _hiddenKey = 'hidden_folder_playlists';
+  static const _folderedKey = 'library_foldered';
   static const _likedKey = 'liked_songs_v1';
   static const _tagsKey = 'song_tags_v1';
   static const _pinnedKey = 'home_pins_v1';
@@ -125,6 +126,18 @@ class LibraryStore {
   static Future<void> saveHidden(Set<String> hidden) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_hiddenKey, hidden.toList());
+  }
+
+  /// Your playlists that became a folder on this device (Download
+  /// playlist): not shown here, but kept, as other devices still have them.
+  static Future<Set<String>> loadFoldered() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getStringList(_folderedKey) ?? const []).toSet();
+  }
+
+  static Future<void> saveFoldered(Set<String> ids) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_folderedKey, ids.toList());
   }
 
   /// Liked songs, most recently liked first.

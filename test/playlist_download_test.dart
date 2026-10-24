@@ -47,5 +47,7 @@ void main() {
     final folderPlaylist = library.byId(folder)!;
     expect(folderPlaylist.tracks, hasLength(2));
     expect(library.pinned.map((pl) => pl.id), [folder]);
+    // Other devices may not have the folder: they keep the playlist.
+    expect(library.savedPlaylists.map((s) => s.name), ['Road Trip']);
   });
 }

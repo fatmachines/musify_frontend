@@ -154,6 +154,9 @@ class Library extends ChangeNotifier {
   /// iOS moves the folder's path.
   Set<String> _hidden = {};
 
+  /// Your playlists replaced by a folder here (see [replaceWithFolder]).
+  Set<String> _foldered = {};
+
   /// Each folder playlist's key in [_hidden], by playlist id.
   final _hideKeys = <String, String>{};
 
@@ -219,6 +222,7 @@ class Library extends ChangeNotifier {
     _folders = await FolderAccess.restoreAll();
     _saved = await LibraryStore.loadPlaylists();
     _hidden = await LibraryStore.loadHidden();
+    _foldered = await LibraryStore.loadFoldered();
     _pins = await LibraryStore.loadPinned();
     _pages = {for (final p in await LibraryStore.loadPages()) p.id: p};
     _likedSaved = await LibraryStore.loadLiked();
@@ -700,6 +704,20 @@ class Library extends ChangeNotifier {
     _update(playlist, (s) => SavedPlaylist(s.id, name, s.tracks));
   }
 
+  /// [playlist] (one of yours) is now [folder] on this device, Download
+  /// playlist having saved its songs there: it's no longer shown here and
+  /// its pin moves to the folder, but it's kept, so other devices, which
+  /// may not have the folder, keep the playlist.
+  void replaceWithFolder(Playlist playlist, Playlist folder) {
+    final pinned = isPinned(playlist);
+    final key = playlist.id.substring(_customPrefix.length);
+    _foldered = {..._foldered, key};
+    LibraryStore.saveFoldered(_foldered);
+    if (pinned && !isPinned(folder)) togglePin(folder);
+    _resolveCustom();
+    notifyListeners();
+  }
+
   void deletePlaylist(Playlist playlist) {
     if (playlist.id == likedId) return;
     _saved = [
@@ -811,11 +829,12 @@ class Library extends ChangeNotifier {
     _resolveTags();
     _custom = [
       for (final s in _saved)
-        Playlist(
-          id: _idOf(s),
-          name: s.name,
-          tracks: [for (final t in s.tracks) ?_trackOf(t)],
-        ),
+        if (!_foldered.contains(s.id))
+          Playlist(
+            id: _idOf(s),
+            name: s.name,
+            tracks: [for (final t in s.tracks) ?_trackOf(t)],
+          ),
     ];
   }
 }

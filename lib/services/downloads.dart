@@ -130,8 +130,9 @@ class Downloads extends ChangeNotifier {
   ///
   /// One of the user's own playlists becomes that folder: its songs on the
   /// device are copied in too, and once every song is there the playlist
-  /// is deleted (the folder takes its place on Home if it was pinned). If
-  /// any song fails, the playlist stays.
+  /// is no longer shown on this device (the folder takes its place on Home
+  /// if it was pinned); other devices keep it. If any song fails, the
+  /// playlist stays.
   ///
   /// Returns how many songs were queued, and the folder. [onDone] gets how
   /// many were saved and failed, and whether the playlist became the folder.
@@ -183,16 +184,11 @@ class Downloads extends ChangeNotifier {
       var converted = false;
       if (convert && failed == 0 && copyFailed == 0) {
         await library.rescan();
-        final pinned = library.isPinned(playlist);
         final folderPlaylist = library.byId(folder.path);
-        library.deletePlaylist(playlist);
-        if (pinned && folderPlaylist != null) {
-          library.togglePin(playlist);
-          if (!library.isPinned(folderPlaylist)) {
-            library.togglePin(folderPlaylist);
-          }
+        if (folderPlaylist != null) {
+          library.replaceWithFolder(playlist, folderPlaylist);
+          converted = true;
         }
-        converted = true;
         AppLog.add('download: ${playlist.name} is now a folder');
       }
       onDone?.call(saved, failed + copyFailed, converted);
