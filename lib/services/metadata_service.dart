@@ -16,15 +16,8 @@ class TrackInfo {
   final String? artist;
   final String? album;
   final Duration? duration;
-  final String? lyrics;
 
-  const TrackInfo({
-    this.title,
-    this.artist,
-    this.album,
-    this.duration,
-    this.lyrics,
-  });
+  const TrackInfo({this.title, this.artist, this.album, this.duration});
 
   static const empty = TrackInfo();
 }
@@ -212,7 +205,6 @@ class MetadataService {
         artist: _clean(m.artist),
         album: _clean(m.album),
         duration: m.duration,
-        lyrics: _clean(m.lyrics),
       );
     } catch (_) {
       return TrackInfo.empty;

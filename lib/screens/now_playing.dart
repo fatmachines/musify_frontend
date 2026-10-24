@@ -85,7 +85,6 @@ class _Body extends StatelessWidget {
   Widget build(BuildContext context) {
     final info = MetadataService.cachedInfo(track);
     final playlist = PlayerService.instance.current;
-    final lyrics = info?.lyrics;
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 24),
       child: Column(
@@ -208,10 +207,6 @@ class _Body extends StatelessWidget {
               ),
             ],
           ),
-          if (lyrics != null) ...[
-            SizedBox(height: 8),
-            _LyricsCard(track: track, lyrics: lyrics),
-          ],
           SizedBox(height: 12),
         ],
       ),
@@ -498,54 +493,6 @@ class _RepeatButton extends StatelessWidget {
           onTap: service.cycleRepeat,
         );
       },
-    );
-  }
-}
-
-class _LyricsCard extends StatelessWidget {
-  final Track track;
-  final String lyrics;
-
-  const _LyricsCard({required this.track, required this.lyrics});
-
-  @override
-  Widget build(BuildContext context) {
-    final preview = lyrics
-        .split('\n')
-        .map((l) => l.trim())
-        .where((l) => l.isNotEmpty)
-        .take(2)
-        .join('\n');
-    return GestureDetector(
-      onTap: () => _showLyrics(context, track, lyrics),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.faint,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Lyrics preview',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              preview,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                height: 1.3,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -892,30 +839,4 @@ class _QueueTile extends StatelessWidget {
       ),
     );
   }
-}
-
-void _showLyrics(BuildContext context, Track track, String lyrics) {
-  showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    isScrollControlled: true,
-    builder: (sheet) => SizedBox(
-      height: MediaQuery.sizeOf(context).height * 0.85,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-        children: [
-          _sheetHeader(track),
-          const SizedBox(height: 8),
-          Text(
-            lyrics,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              height: 1.5,
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
 }

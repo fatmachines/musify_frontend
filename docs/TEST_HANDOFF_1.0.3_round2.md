@@ -88,8 +88,11 @@ tested** (and why).
 | C5 | Rows start with a plain tile, so they don't shift when covers arrive. | Open Big Archive in the car. |
 | C6 | A list longer than the car allows ends with "N more" ("Shuffle plays them all"). | Scroll to the end of Big Archive in the car (or note the limit if you can't reach it). |
 
+I7 (lyrics) is gone: Musify no longer shows lyrics, so don't test or
+report them.
+
 Not changed, as info only: A7 (Android Auto needs a newer head unit or a
-real car), I6 (Siri), I7 (lyrics only from USLT frames), I8 (artist page
+real car), I6 (Siri), I8 (artist page
 marks with sine-wave test files: re-check with real rips if you can).
 
 ## 2. Regressions to watch

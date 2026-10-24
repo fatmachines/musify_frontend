@@ -39,7 +39,6 @@ sync between devices. Test both halves.
   Include a few awkward ones:
   - names with emoji, accents and long titles;
   - a song with no tags (no title or artist inside the file);
-  - a song with lyrics in its tags;
   - one non-music file (a `.txt` or `.jpg`).
 - **Also have:** a public YouTube playlist link, a public YouTube Music
   playlist link, and two public Spotify playlist links (one under 100 songs,
@@ -141,7 +140,6 @@ offline.
 | 5.6b | Turn shuffle **on**, fully close the app, reopen, start any playlist (play button or tap a song). | Shuffle is still on and the playlist plays shuffled. Turning it off is remembered the same way. |
 | 5.7 | Repeat: tap through all → one → off. | Repeat one replays the song; repeat all goes from the last song back to the first; off stops at the end. |
 | 5.8 | **Sleep timer:** 5 minutes, then "End of track". | The music stops when it should. The countdown shows. |
-| 5.9 | Open lyrics on the song that has them. | They show. |
 | 5.10 | **Lock screen / Control Center:** play, pause, skip, seek. | All work. The right title and cover show. |
 | 5.11 | Pull headphones out / take AirPods out. | The music pauses. |
 | 5.12 | **Get a phone call** while playing (or start a voice memo or another music app). After the call, press play. | Pauses for the call; plays again after. |
