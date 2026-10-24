@@ -1397,7 +1397,7 @@ class SyncService extends ChangeNotifier implements RemoteControl {
         return;
       }
       final name = p.basename(event.path);
-      if (name.startsWith('.') || name.endsWith('.part')) return;
+      if (name.startsWith('.') || isPartFile(name)) return;
       _folderSettle?.cancel();
       _folderSettle = Timer(const Duration(seconds: 5), filesChanged);
     }
@@ -1801,7 +1801,7 @@ class SyncService extends ChangeNotifier implements RemoteControl {
     void Function(double) onProgress,
   ) async {
     final client = http.Client();
-    final part = File('${target.path}.part');
+    final part = partFileFor(target);
     try {
       final request = http.Request(
         'GET',
@@ -1972,6 +1972,7 @@ List<(String, int, int)> _listFolder(String root) {
     final rel = p.relative(entity.path, from: root).replaceAll(r'\', '/');
     if (rel.split('/').any((part) => part.startsWith('.'))) continue;
     if (!audioExtensions.contains(p.extension(rel).toLowerCase())) continue;
+    if (isPartFile(rel)) continue;
     final stat = entity.statSync();
     found.add((rel, stat.size, stat.modified.millisecondsSinceEpoch));
   }

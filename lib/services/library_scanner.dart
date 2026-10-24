@@ -18,6 +18,21 @@ const audioExtensions = {
   '.aiff',
 };
 
+/// Where a song being downloaded to [file] goes until it's complete: next
+/// to it, keeping its audio extension (Android only lets an app write
+/// files with a music extension into Music/), so not a ".part" ending.
+File partFileFor(File file) {
+  final ext = p.extension(file.path);
+  return File('${p.withoutExtension(file.path)}$partSuffix$ext');
+}
+
+const partSuffix = '.musify-part';
+
+/// Whether [path] is a download not yet complete (see [partFileFor]).
+bool isPartFile(String path) =>
+    p.basenameWithoutExtension(path).endsWith(partSuffix) ||
+    path.endsWith('.part');
+
 class ScanResult {
   final List<Playlist> playlists;
 
@@ -81,7 +96,8 @@ class LibraryScanner {
           dirs++;
           pending.add(entry);
         } else if (entry is File &&
-            audioExtensions.contains(p.extension(name).toLowerCase())) {
+            audioExtensions.contains(p.extension(name).toLowerCase()) &&
+            !isPartFile(name)) {
           found.add((Track(entry.path), entry.statSync().changed));
         } else {
           skipped.add('$name (${entry.runtimeType})');

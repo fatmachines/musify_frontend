@@ -49,6 +49,15 @@ void main() {
     expect(folder.tracks.map((t) => t.title), ['c', 'm', 'a']);
   });
 
+  test('a download not yet complete is no song', () async {
+    final song = File(p.join(root.path, 'Rock', 'Believer.m4a'));
+    final part = partFileFor(song);
+    expect(p.extension(part.path), '.m4a');
+    await part.create();
+    final playlists = (await LibraryScanner.scan(root.path)).playlists;
+    expect(playlists[1].tracks.map((t) => t.title), ['a', 'b']);
+  });
+
   test('unreadable root is reported instead of looking empty', () async {
     final result = await LibraryScanner.scan(p.join(root.path, 'missing'));
     expect(result.rootError, isNotNull);

@@ -10,6 +10,7 @@ import '../theme.dart';
 import 'add_to_playlist.dart';
 import 'covers.dart';
 import 'download_sheet.dart';
+import 'file_access.dart';
 import 'offline_badge.dart';
 import 'tag_sheet.dart';
 import 'toast.dart';
@@ -199,7 +200,11 @@ Future<void> _confirmDelete(BuildContext context, Track track) async {
       ],
     ),
   );
-  if (delete != true) return;
+  if (delete != true ||
+      !overlay.mounted ||
+      !await ensureCanChangeFiles(overlay.context)) {
+    return;
+  }
   final deleted = await Library.instance.deleteSong(track);
   showToastOn(overlay, deleted ? 'Deleted $name' : "Couldn't delete $name");
 }
@@ -213,7 +218,11 @@ Future<void> _move(BuildContext context, Track track) async {
     title: 'Move "$name" to',
     remember: false,
   );
-  if (folder == null) return;
+  if (folder == null ||
+      !overlay.mounted ||
+      !await ensureCanChangeFiles(overlay.context)) {
+    return;
+  }
   final moved = await Library.instance.moveSong(track, folder);
   showToastOn(
     overlay,
